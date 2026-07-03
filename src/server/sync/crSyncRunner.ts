@@ -102,8 +102,9 @@ export async function runCrSync(options: RunCrSyncOptions): Promise<RunCrSyncRes
         rowCount
       });
 
+      const scopedParentRequests = list.requests.filter((request) => isScopedParentRequest(request, owner));
       let systemRequestCount = 0;
-      for (const request of list.requests) {
+      for (const request of scopedParentRequests) {
         await upsertCrHeader(request, system.code, syncRunId);
         await insertCrStatusSnapshot(request, system.code, syncRunId);
         systemRequestCount += 1;
@@ -121,13 +122,15 @@ export async function runCrSync(options: RunCrSyncOptions): Promise<RunCrSyncRes
         await upsertCrCreationLogs(system.code, creationLogs);
       }
 
-      const requestHeaders = list.requests.filter((request) => !request.parentRequest);
-      for (const request of requestHeaders) {
+      for (const request of scopedParentRequests) {
         const signature = await getCachedCrRefreshSignature(system.code, request.trkorr);
         if (signature && !shouldRefreshDetail(signature, request)) {
           continue;
         }
         const detail = await readCrDetail(request.trkorr, system.code);
+        if (!isScopedParentRequest(detail.header, owner)) {
+          continue;
+        }
         if (detail.header) {
           await upsertCrHeader(detail.header, system.code, syncRunId);
           await insertCrStatusSnapshot(detail.header, system.code, syncRunId);
@@ -357,6 +360,23 @@ function dedupeByTrkorr<T extends { trkorr: string }>(rows: T[]) {
     result.push(row);
   }
   return result;
+}
+
+function isScopedParentRequest(
+  request:
+    | {
+        parentRequest?: string | null;
+        owner?: string | null;
+      }
+    | null
+    | undefined,
+  owner: string
+) {
+  return Boolean(
+    request &&
+      !request.parentRequest &&
+      String(request.owner || "").trim().toUpperCase() === owner
+  );
 }
 
 function shouldRefreshDetail(

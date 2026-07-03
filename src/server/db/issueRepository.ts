@@ -36,6 +36,18 @@ export type IssueSavePayload = {
   timeline?: Record<string, string | undefined>;
 };
 
+type IssuePersonCheck = {
+  name: string;
+  mode: "full_name" | "nickname";
+};
+
+type IssuePersonRegistration = {
+  fullName?: string;
+  nickname?: string;
+  department?: string;
+  email?: string;
+};
+
 export async function listIssues(filters: IssueFilters = {}) {
   const where: string[] = [];
   const params: unknown[] = [];
@@ -605,9 +617,67 @@ export async function searchIssueCrLinks(q = "") {
   return rows;
 }
 
+export async function validateIssuePeople(people: IssuePersonCheck[]) {
+  const normalized = normalizePeopleChecks(people);
+  const missing: IssuePersonCheck[] = [];
+  for (const person of normalized) {
+    const existing = await findPerson(pool, person.name, person.mode);
+    if (!existing) missing.push(person);
+  }
+  return { missing };
+}
+
+export async function registerIssuePeople(people: IssuePersonRegistration[]) {
+  const rows = [];
+  for (const person of people) {
+    const fullName = textOrNull(person.fullName);
+    const nickname = textOrNull(person.nickname);
+    const department = textOrNull(person.department);
+    if (!fullName || !nickname || !department) {
+      throw new Error("Full name, nickname, and department are required for every new person.");
+    }
+
+    const existing = await pool.query(`
+      SELECT id, full_name, nickname, email, department
+      FROM issue_people
+      WHERE lower(trim(full_name)) = lower(trim($1))
+         OR lower(trim(nickname)) = lower(trim($2))
+      ORDER BY CASE WHEN lower(trim(full_name)) = lower(trim($1)) THEN 0 ELSE 1 END
+      LIMIT 1
+    `, [fullName, nickname]);
+
+    if (existing.rows[0]) {
+      const updated = await pool.query(`
+        UPDATE issue_people
+        SET full_name = $2,
+            nickname = $3,
+            department = $4,
+            email = COALESCE($5, email),
+            updated_at = now()
+        WHERE id = $1
+        RETURNING id, full_name, nickname, email, department
+      `, [existing.rows[0].id, fullName, nickname, department, textOrNull(person.email)]);
+      rows.push(updated.rows[0]);
+      continue;
+    }
+
+    const inserted = await pool.query(`
+      INSERT INTO issue_people (full_name, nickname, department, email)
+      VALUES ($1, $2, $3, $4)
+      RETURNING id, full_name, nickname, email, department
+    `, [fullName, nickname, department, textOrNull(person.email)]);
+    rows.push(inserted.rows[0]);
+  }
+  return rows;
+}
+
 export async function saveIssue(payload: IssueSavePayload) {
   const issueName = textOrNull(payload.issueName);
   if (!issueName) throw new Error("Issue name is required.");
+  const peopleValidation = await validateIssuePeople(peopleChecksFromPayload(payload));
+  if (peopleValidation.missing.length) {
+    throw new Error(`Missing issue people: ${peopleValidation.missing.map((person) => person.name).join(", ")}`);
+  }
 
   const client = await pool.connect();
   try {
@@ -624,8 +694,8 @@ export async function saveIssue(payload: IssueSavePayload) {
 
     const requesterNames = splitNames(payload.requesterNames);
     const abaperNames = splitNames(payload.abaperNames);
-    const requesterPrimary = requesterNames[0] ? await upsertPerson(client, requesterNames[0], "full_name") : null;
-    const abaperPrimary = abaperNames[0] ? await upsertPerson(client, abaperNames[0], "full_name") : null;
+    const requesterPrimary = requesterNames[0] ? await findPerson(client, requesterNames[0], "full_name") : null;
+    const abaperPrimary = abaperNames[0] ? await findPerson(client, abaperNames[0], "full_name") : null;
     const sourceStatus = textOrNull(payload.sourceIssueStatus) || "open";
 
     const headerParams = [
@@ -787,7 +857,7 @@ async function nextSubIssueNo(client: Pick<typeof pool, "query">, issueNo: numbe
   return String(next).padStart(2, "0");
 }
 
-async function upsertPerson(client: Pick<typeof pool, "query">, rawName: string, mode: "full_name" | "nickname") {
+async function findPerson(client: Pick<typeof pool, "query">, rawName: string, mode: "full_name" | "nickname") {
   const name = textOrNull(rawName);
   if (!name) return null;
   const lookupColumn = mode === "full_name" ? "full_name" : "nickname";
@@ -795,23 +865,21 @@ async function upsertPerson(client: Pick<typeof pool, "query">, rawName: string,
     SELECT id, full_name, nickname
     FROM issue_people
     WHERE lower(trim(${lookupColumn})) = lower(trim($1))
+      AND NULLIF(trim(COALESCE(full_name, '')), '') IS NOT NULL
+      AND NULLIF(trim(COALESCE(nickname, '')), '') IS NOT NULL
     LIMIT 1
   `, [name]);
   if (existing.rows[0]) return existing.rows[0];
 
-  const insert = await client.query(`
-    INSERT INTO issue_people (full_name, nickname, department)
-    VALUES ($1, $2, 'IT')
-    ON CONFLICT DO NOTHING
-    RETURNING id, full_name, nickname
-  `, [mode === "full_name" ? name : null, mode === "nickname" ? name : null]);
-  if (insert.rows[0]) return insert.rows[0];
-
   const fallback = await client.query(`
     SELECT id, full_name, nickname
     FROM issue_people
-    WHERE lower(trim(coalesce(full_name, nickname))) = lower(trim($1))
-       OR lower(trim(coalesce(nickname, full_name))) = lower(trim($1))
+    WHERE (
+        lower(trim(COALESCE(full_name, ''))) = lower(trim($1))
+        OR lower(trim(COALESCE(nickname, ''))) = lower(trim($1))
+      )
+      AND NULLIF(trim(COALESCE(full_name, '')), '') IS NOT NULL
+      AND NULLIF(trim(COALESCE(nickname, '')), '') IS NOT NULL
     LIMIT 1
   `, [name]);
   return fallback.rows[0] || null;
@@ -887,7 +955,7 @@ async function insertParticipants(
   mode: "full_name" | "nickname"
 ) {
   for (const [index, name] of names.entries()) {
-    const person = await upsertPerson(client, name, mode);
+    const person = await findPerson(client, name, mode);
     await client.query(`
       INSERT INTO issue_participants (issue_id, person_id, person_name_snapshot, role, source_field, is_primary)
       VALUES ($1, $2, $3, $4, $5, $6)
@@ -959,8 +1027,34 @@ async function upsertTimelines(client: Pick<typeof pool, "query">, issueId: numb
 async function firstPerson(client: Pick<typeof pool, "query">, rawNames?: string) {
   const name = splitNames(rawNames)[0];
   if (!name) return null;
-  const person = await upsertPerson(client, name, "nickname");
+  const person = await findPerson(client, name, "nickname");
   return { id: person?.id || null, name: displayPersonName(person, name) };
+}
+
+function peopleChecksFromPayload(payload: IssueSavePayload) {
+  const checks: IssuePersonCheck[] = [
+    ...splitNames(payload.requesterNames).map((name) => ({ name, mode: "full_name" as const })),
+    ...splitNames(payload.abaperNames).map((name) => ({ name, mode: "full_name" as const }))
+  ];
+  for (const role of PARTICIPANT_ROLES) {
+    checks.push(...splitNames(payload.participants?.[role]).map((name) => ({ name, mode: "nickname" as const })));
+  }
+  return normalizePeopleChecks(checks);
+}
+
+function normalizePeopleChecks(people: IssuePersonCheck[]) {
+  const seen = new Set<string>();
+  const result: IssuePersonCheck[] = [];
+  for (const person of people) {
+    const name = textOrNull(person.name);
+    const mode = person.mode === "full_name" ? "full_name" : "nickname";
+    if (!name) continue;
+    const key = `${mode}:${name.toUpperCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({ name, mode });
+  }
+  return result;
 }
 
 function splitNames(value?: string) {

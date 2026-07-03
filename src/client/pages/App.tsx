@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
-import { AlertTriangle, BarChart3, CheckCircle2, ClipboardList, Database, FileSearch, RefreshCw, XCircle } from "lucide-react";
+import { AlertTriangle, BarChart3, CheckCircle2, ClipboardList, Database, FileSearch, PencilLine, RefreshCw, X, XCircle } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, fetchCrDetail, fetchCrList, fetchDashboard, fetchIssueDetail, fetchIssueList, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchValueHelp, saveIssue, syncCr, type CrFilters, type IssueFilters, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind } from "../api";
+import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, fetchCrDetail, fetchCrList, fetchDashboard, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind } from "../api";
 import type { CrDetail, CrRequest, DashboardData, IssueDetail, IssueRow, SapSystemConfig, StatusTrendData } from "../../shared/types";
 
 type View = "dashboard" | "report" | "issue-display" | "issue-create" | "issue-change";
@@ -28,6 +28,7 @@ export function App() {
   const [draftIssueFilters, setDraftIssueFilters] = useState<IssueFilters>({ status: "all", page: 1, pageSize: 25 });
   const [selectedIssueId, setSelectedIssueId] = useState<number | null>(null);
   const [issueDetail, setIssueDetail] = useState<IssueDetail | null>(null);
+  const [changeIssueInitialId, setChangeIssueInitialId] = useState<number | null>(null);
   const [syncSystems, setSyncSystems] = useState<string[]>(["DEV", "QA", "PRD"]);
   const [syncMode, setSyncMode] = useState<"incremental" | "full_period">("incremental");
   const [lookbackDays, setLookbackDays] = useState(3);
@@ -303,6 +304,7 @@ export function App() {
         <div className={`sidebar-group ${view.startsWith("issue-") ? "active" : ""}`}>
           <button className={view.startsWith("issue-") ? "active" : ""} onClick={() => {
             if (!navigateTo("issue-display")) return;
+            setChangeIssueInitialId(null);
             loadIssues(issueFilters).catch((err) => setError(err instanceof Error ? err.message : String(err)));
           }}>
             <ClipboardList size={18} /> Issue
@@ -310,13 +312,20 @@ export function App() {
           {view.startsWith("issue-") ? (
             <div className="sidebar-submenu">
               <button className={view === "issue-display" ? "active" : ""} onClick={() => {
+                setChangeIssueInitialId(null);
                 if (!navigateTo("issue-display")) return;
                 loadIssues(issueFilters).catch((err) => setError(err instanceof Error ? err.message : String(err)));
               }}>
                 Display
               </button>
-              <button className={view === "issue-create" ? "active" : ""} onClick={() => navigateTo("issue-create")}>Create</button>
-              <button className={view === "issue-change" ? "active" : ""} onClick={() => navigateTo("issue-change")}>Change</button>
+              <button className={view === "issue-create" ? "active" : ""} onClick={() => {
+                setChangeIssueInitialId(null);
+                navigateTo("issue-create");
+              }}>Create</button>
+              <button className={view === "issue-change" ? "active" : ""} onClick={() => {
+                setChangeIssueInitialId(null);
+                navigateTo("issue-change");
+              }}>Change</button>
             </div>
           ) : null}
         </div>
@@ -437,6 +446,10 @@ export function App() {
             onFilters={setDraftIssueFilters}
             onSelect={setSelectedIssueId}
             onCloseDetail={() => setSelectedIssueId(null)}
+            onChangeIssue={(issueId) => {
+              setChangeIssueInitialId(issueId);
+              navigateTo("issue-change");
+            }}
             onPage={(page) => {
               const nextFilters = { ...issueFilters, page };
               setIssueFilters(nextFilters);
@@ -472,6 +485,7 @@ export function App() {
           />
         ) : (
           <ChangeIssue
+            initialIssueId={changeIssueInitialId}
             onNotify={showToast}
             onDirtyChange={setIssueFormDirty}
             onSave={async (payload) => {
@@ -887,8 +901,8 @@ function Report({
           <h3>Lifecycle</h3>
           <div className="issue-timeline cr-lifecycle-timeline">
             {[
-              { label: "Created", value: formatDate(detail?.lifecycle.created_at), filled: Boolean(detail?.lifecycle.created_at) },
-              { label: "Released", value: formatDate(detail?.lifecycle.released_at), filled: Boolean(detail?.lifecycle.released_at) },
+              { label: "Created", value: formatIssueTimestamp(detail?.lifecycle.created_at), filled: Boolean(detail?.lifecycle.created_at) },
+              { label: "Released", value: formatIssueTimestamp(detail?.lifecycle.released_at), filled: Boolean(detail?.lifecycle.released_at) },
               { label: "In QA", value: lifecycleLabel(detail?.lifecycle.qa_status, detail?.lifecycle.qa_imported_at), filled: detail?.lifecycle.qa_status === "imported" },
               { label: "In PRD", value: lifecycleLabel(detail?.lifecycle.prd_status, detail?.lifecycle.prd_imported_at), filled: detail?.lifecycle.prd_status === "imported" }
             ].map((event) => (
@@ -949,6 +963,7 @@ function IssueDisplay({
   onFilters,
   onSelect,
   onCloseDetail,
+  onChangeIssue,
   onPage,
   onPageSize,
   onOpenCr
@@ -961,6 +976,7 @@ function IssueDisplay({
   onFilters: (filters: IssueFilters) => void;
   onSelect: (value: number) => void;
   onCloseDetail: () => void;
+  onChangeIssue: (id: number) => void;
   onPage: (page: number) => void;
   onPageSize: (pageSize: number) => void;
   onOpenCr: (link: { sap_system_code?: string; trkorr: string }) => void;
@@ -1067,13 +1083,22 @@ function IssueDisplay({
 
         {hasDetail ? (
         <section className="detail-panel report-detail-panel issue-detail-panel">
-          <button className="detail-close" type="button" onClick={onCloseDetail} aria-label="Close detail">×</button>
           <div className="detail-heading">
             <div>
               <h2>{selectedIssue?.issue_key || "Select Issue"}</h2>
               <p>{selectedIssue?.issue_name}</p>
             </div>
-            {selectedIssue ? <Status value={selectedIssue.issue_status} /> : null}
+            <div className="detail-header-actions">
+              {selectedIssue ? <Status value={selectedIssue.issue_status} /> : null}
+              {selectedIssue ? (
+                <button className="secondary detail-change-button" type="button" onClick={() => onChangeIssue(selectedIssue.id)}>
+                  <PencilLine size={16} /> Change Issue
+                </button>
+              ) : null}
+              <button className="detail-icon-close" type="button" onClick={onCloseDetail} aria-label="Close detail">
+                <X size={18} />
+              </button>
+            </div>
           </div>
 
           <div className="meta-grid">
@@ -1146,7 +1171,7 @@ function IssueDisplay({
             {detail && detail.participants.length === 0 ? <div className="empty">No participants cached.</div> : null}
           </div>
 
-          <h3>Timeline</h3>
+          <h3>Timeline Issue</h3>
           <div className="issue-timeline">
             {issueTimelineEvents(detail).map((event) => (
               <div className={`timeline-event ${event.date ? "filled" : "missing"}`} key={`${event.source}-${event.label}`}>
@@ -1154,6 +1179,19 @@ function IssueDisplay({
                 <div>
                   <small>{event.date ? formatIssueTimestamp(event.date, event.time) : "-"}</small>
                   <strong>{event.source} - {event.label}</strong>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <h3>Lifecycle CR</h3>
+          <div className="issue-timeline cr-lifecycle-timeline">
+            {issueCrLifecycleEvents(detail).map((event) => (
+              <div className={`timeline-event ${event.date ? "filled" : "missing"}`} key={`${event.source}-${event.label}`}>
+                <span className="timeline-dot" />
+                <div>
+                  <small>{event.date ? formatIssueTimestamp(event.date, event.time) : "-"}</small>
+                  <strong>{event.label}</strong>
                 </div>
               </div>
             ))}
@@ -1194,6 +1232,11 @@ function IssueEditor({
   const [showBaseIssueCandidates, setShowBaseIssueCandidates] = useState(false);
   const [crPreview, setCrPreview] = useState<Record<string, { description?: string; status?: string; system?: string }>>({});
   const [expandedPhases, setExpandedPhases] = useState({ dev: true, qa: false, prd: false });
+  const [templatePreview, setTemplatePreview] = useState<{ title: string; body: string; bodyHtml?: string } | null>(null);
+  const [templateBusy, setTemplateBusy] = useState<"" | "email" | "ticket">("");
+  const [missingPeople, setMissingPeople] = useState<IssuePersonCheck[]>([]);
+  const [newPeople, setNewPeople] = useState<IssuePersonRegistration[]>([]);
+  const [pendingSavePayload, setPendingSavePayload] = useState<IssueSavePayload | null>(null);
 
   useEffect(() => {
     const nextForm = issueFormFromDetail(detail);
@@ -1207,6 +1250,7 @@ function IssueEditor({
     setCancelReason(detail?.issue?.cancelled_reason || "");
     setDeleteConfirm("");
     setActionDialog("");
+    setTemplatePreview(null);
     onDirtyChange?.(false);
   }, [detail?.issue?.id, mode]);
 
@@ -1247,16 +1291,48 @@ function IssueEditor({
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (isCancelled) return;
+    const payload = {
+      ...form,
+      createMode: mode === "create" ? createMode : undefined,
+      issueNo: mode === "create" && createMode === "new" ? undefined : form.issueNo
+    };
     setSaving(true);
     try {
-      await onSave({
-        ...form,
-        createMode: mode === "create" ? createMode : undefined,
-        issueNo: mode === "create" && createMode === "new" ? undefined : form.issueNo
-      });
+      const validation = await validateIssuePeople(peopleChecksFromIssuePayload(payload));
+      if (validation.missing.length) {
+        setMissingPeople(validation.missing);
+        setNewPeople(validation.missing.map((person) => ({
+          fullName: person.mode === "full_name" ? person.name : "",
+          nickname: person.mode === "nickname" ? person.name : "",
+          department: "IT"
+        })));
+        setPendingSavePayload(payload);
+        return;
+      }
+      await onSave(payload);
     } finally {
       setSaving(false);
     }
+  }
+
+  async function registerMissingPeopleAndSave() {
+    if (!pendingSavePayload) return;
+    if (newPeople.some((person) => !person.fullName?.trim() || !person.nickname?.trim() || !person.department?.trim())) return;
+    setSaving(true);
+    try {
+      await registerIssuePeople(newPeople);
+      setMissingPeople([]);
+      setNewPeople([]);
+      const payload = pendingSavePayload;
+      setPendingSavePayload(null);
+      await onSave(payload);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function updateNewPerson(index: number, key: keyof IssuePersonRegistration, value: string) {
+    setNewPeople((current) => current.map((person, rowIndex) => rowIndex === index ? { ...person, [key]: value } : person));
   }
 
   async function selectBaseIssue(issue: IssueRow) {
@@ -1337,6 +1413,27 @@ function IssueEditor({
       setActionDialog("");
     } finally {
       setActionBusy("");
+    }
+  }
+
+  async function generateTemplate(kind: "email" | "ticket") {
+    if (!detail?.issue?.id) {
+      setTemplatePreview({
+        title: kind === "email" ? "Generate Email Template" : "Generate GLPI Ticket Template",
+        body: "Save issue terlebih dahulu sebelum generate template."
+      });
+      return;
+    }
+    setTemplateBusy(kind);
+    try {
+      setTemplatePreview(await fetchIssueTemplate(detail.issue.id, kind));
+    } catch (err) {
+      setTemplatePreview({
+        title: kind === "email" ? "Generate Email Template" : "Generate GLPI Ticket Template",
+        body: err instanceof Error ? err.message : String(err)
+      });
+    } finally {
+      setTemplateBusy("");
     }
   }
 
@@ -1468,10 +1565,10 @@ function IssueEditor({
               </div>
             ) : null}
             <div className="repeatable-row-field">
-              <MultiValueHelpField label="Requester" kind="people" value={form.requesterNames || ""} onChange={(value) => update("requesterNames", value)} placeholder="Full name" disabled={formDisabled} />
+              <MultiValueHelpField label="Requester" kind="people" personMode="full_name" value={form.requesterNames || ""} onChange={(value) => update("requesterNames", value)} placeholder="Full name" disabled={formDisabled} />
             </div>
             <div className="repeatable-row-field">
-              <MultiValueHelpField label="ABAPer" kind="people" value={form.abaperNames || ""} onChange={(value) => update("abaperNames", value)} placeholder="Full name" disabled={formDisabled} />
+              <MultiValueHelpField label="ABAPer" kind="people" personMode="full_name" value={form.abaperNames || ""} onChange={(value) => update("abaperNames", value)} placeholder="Full name" disabled={formDisabled} />
             </div>
             {isCancelled ? (
               <section className="issue-cancel-card">
@@ -1496,9 +1593,9 @@ function IssueEditor({
         </button>
         {expandedPhases.dev ? (
           <div className="phase-pair-grid">
-            <ValueHelpField label="DEV Tester" kind="people" value={form.participants?.dev_tester || ""} onChange={(value) => updateParticipant("dev_tester", value)} placeholder="Nickname; nickname" disabled={devDisabled} />
+            <ValueHelpField label="DEV Tester" kind="people" personMode="nickname" value={form.participants?.dev_tester || ""} onChange={(value) => updateParticipant("dev_tester", value)} placeholder="Nickname; nickname" disabled={devDisabled} />
             <label>Testing Date<input type="datetime-local" value={toDatetimeInput(form.timeline?.dev_tested_date)} onChange={(event) => updateTimeline("dev_tested_date", event.target.value)} disabled={devDisabled} /></label>
-            <ValueHelpField label="DEV Evaluator" kind="people" value={form.participants?.dev_evaluator || ""} onChange={(value) => updateParticipant("dev_evaluator", value)} placeholder="Nickname; nickname" disabled={devDisabled} />
+            <ValueHelpField label="DEV Evaluator" kind="people" personMode="nickname" value={form.participants?.dev_evaluator || ""} onChange={(value) => updateParticipant("dev_evaluator", value)} placeholder="Nickname; nickname" disabled={devDisabled} />
             <label>Evaluation Date<input type="datetime-local" value={toDatetimeInput(form.timeline?.dev_evaluated_date)} onChange={(event) => updateTimeline("dev_evaluated_date", event.target.value)} disabled={devDisabled} /></label>
           </div>
         ) : null}
@@ -1517,11 +1614,11 @@ function IssueEditor({
         </button>
         {expandedPhases.qa ? (
           <div className="phase-pair-grid">
-            <ValueHelpField label="QA Transporter" kind="people" value={form.participants?.qa_transporter || ""} onChange={(value) => updateParticipant("qa_transporter", value)} placeholder="Nickname; nickname" disabled={qaDisabled} />
+            <ValueHelpField label="QA Transporter" kind="people" personMode="nickname" value={form.participants?.qa_transporter || ""} onChange={(value) => updateParticipant("qa_transporter", value)} placeholder="Nickname; nickname" disabled={qaDisabled} />
             <label>Transport Date<input className="readonly-input" value={formatIssueTimestamp(primaryCr?.qa_import_date, primaryCr?.qa_import_time)} readOnly /></label>
-            <ValueHelpField label="QA Tester" kind="people" value={form.participants?.qa_tester || ""} onChange={(value) => updateParticipant("qa_tester", value)} placeholder="Nickname; nickname" disabled={qaDisabled} />
+            <ValueHelpField label="QA Tester" kind="people" personMode="nickname" value={form.participants?.qa_tester || ""} onChange={(value) => updateParticipant("qa_tester", value)} placeholder="Nickname; nickname" disabled={qaDisabled} />
             <label>Testing Date<input type="datetime-local" value={toDatetimeInput(form.timeline?.qa_tested_date)} onChange={(event) => updateTimeline("qa_tested_date", event.target.value)} disabled={qaDisabled} /></label>
-            <ValueHelpField label="QA Evaluator" kind="people" value={form.participants?.qa_evaluator || ""} onChange={(value) => updateParticipant("qa_evaluator", value)} placeholder="Nickname; nickname" disabled={qaDisabled} />
+            <ValueHelpField label="QA Evaluator" kind="people" personMode="nickname" value={form.participants?.qa_evaluator || ""} onChange={(value) => updateParticipant("qa_evaluator", value)} placeholder="Nickname; nickname" disabled={qaDisabled} />
             <label>Evaluation Date<input type="datetime-local" value={toDatetimeInput(form.timeline?.qa_evaluated_date)} onChange={(event) => updateTimeline("qa_evaluated_date", event.target.value)} disabled={qaDisabled} /></label>
           </div>
         ) : null}
@@ -1540,13 +1637,13 @@ function IssueEditor({
         </button>
         {expandedPhases.prd ? (
           <div className="phase-pair-grid">
-            <ValueHelpField label="PRD Requester" kind="people" value={form.participants?.prd_requester || ""} onChange={(value) => updateParticipant("prd_requester", value)} placeholder="Nickname; nickname" disabled={prdRequestDisabled} />
+            <ValueHelpField label="PRD Requester" kind="people" personMode="nickname" value={form.participants?.prd_requester || ""} onChange={(value) => updateParticipant("prd_requester", value)} placeholder="Nickname; nickname" disabled={prdRequestDisabled} />
             <label>Request Date<input type="datetime-local" value={toDatetimeInput(form.timeline?.prd_requested_date)} onChange={(event) => updateTimeline("prd_requested_date", event.target.value)} disabled={prdRequestDisabled} /></label>
-            <ValueHelpField label="PRD Evaluator" kind="people" value={form.participants?.prd_evaluator || ""} onChange={(value) => updateParticipant("prd_evaluator", value)} placeholder="Nickname; nickname" disabled={prdRequestDisabled} />
+            <ValueHelpField label="PRD Evaluator" kind="people" personMode="nickname" value={form.participants?.prd_evaluator || ""} onChange={(value) => updateParticipant("prd_evaluator", value)} placeholder="Nickname; nickname" disabled={prdRequestDisabled} />
             <label>Evaluation Date<input type="datetime-local" value={toDatetimeInput(form.timeline?.prd_evaluated_date)} onChange={(event) => updateTimeline("prd_evaluated_date", event.target.value)} disabled={prdRequestDisabled} /></label>
-            <ValueHelpField label="Approver" kind="people" value={form.participants?.approval || ""} onChange={(value) => updateParticipant("approval", value)} placeholder="Nickname; nickname" disabled={prdRequestDisabled} />
+            <ValueHelpField label="Approver" kind="people" personMode="nickname" value={form.participants?.approval || ""} onChange={(value) => updateParticipant("approval", value)} placeholder="Nickname; nickname" disabled={prdRequestDisabled} />
             <label>Approval Date<input type="datetime-local" value={toDatetimeInput(form.timeline?.approval_date)} onChange={(event) => updateTimeline("approval_date", event.target.value)} disabled={prdRequestDisabled} /></label>
-            <ValueHelpField label="PRD Transporter" kind="people" value={form.participants?.executor || ""} onChange={(value) => updateParticipant("executor", value)} placeholder="Nickname; nickname" disabled={prdTransportDisabled} />
+            <ValueHelpField label="PRD Transporter" kind="people" personMode="nickname" value={form.participants?.executor || ""} onChange={(value) => updateParticipant("executor", value)} placeholder="Nickname; nickname" disabled={prdTransportDisabled} />
             <label>Transport Date<input className="readonly-input" value={formatIssueTimestamp(primaryCr?.prd_import_date, primaryCr?.prd_import_time)} readOnly /></label>
           </div>
         ) : null}
@@ -1554,6 +1651,16 @@ function IssueEditor({
       <div className="issue-save-bar">
         <span>Actions</span>
         <div className="sticky-actions">
+          {mode === "change" ? (
+            <>
+              <button className="secondary" type="button" onClick={() => generateTemplate("email")} disabled={templateBusy !== "" || !detail?.issue?.id}>
+                {templateBusy === "email" ? "Generating" : "Generate Email Template"}
+              </button>
+              <button className="secondary" type="button" onClick={() => generateTemplate("ticket")} disabled={templateBusy !== "" || !detail?.issue?.id}>
+                {templateBusy === "ticket" ? "Generating" : "Generate GLPI Ticket Template"}
+              </button>
+            </>
+          ) : null}
           {mode === "change" && detail?.issue ? (
             <>
               {!isCancelled ? (
@@ -1567,6 +1674,21 @@ function IssueEditor({
           {!isCancelled ? <button className="primary" type="submit" disabled={saving}>{saving ? "Saving" : "Save"}</button> : null}
         </div>
       </div>
+      {templatePreview ? (
+        <div className="modal-backdrop" role="presentation">
+          <section className="modal-card template-preview-modal" role="dialog" aria-modal="true" aria-labelledby="template-preview-title">
+            <h2 id="template-preview-title">{templatePreview.title}</h2>
+            {templatePreview.bodyHtml ? (
+              <div className="template-preview-body" dangerouslySetInnerHTML={{ __html: templatePreview.bodyHtml }} />
+            ) : (
+              <pre>{templatePreview.body}</pre>
+            )}
+            <div className="modal-actions">
+              <button type="button" className="secondary" onClick={() => setTemplatePreview(null)}>Close</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
       {actionDialog ? (
         <div className="modal-backdrop" role="presentation">
           <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="issue-action-title">
@@ -1602,17 +1724,54 @@ function IssueEditor({
           </section>
         </div>
       ) : null}
+      {missingPeople.length ? (
+        <div className="modal-backdrop" role="presentation">
+          <section className="modal-card people-registration-modal" role="dialog" aria-modal="true" aria-labelledby="people-registration-title">
+            <h2 id="people-registration-title">Complete People Master Data</h2>
+            <p>Nama berikut belum ada lengkap di database. Isi master person terlebih dahulu sebelum Save.</p>
+            <div className="people-registration-list">
+              {missingPeople.map((person, index) => (
+                <div className="people-registration-row" key={`${person.mode}-${person.name}-${index}`}>
+                  <strong>{person.name}</strong>
+                  <small>{person.mode === "full_name" ? "Expected as full name" : "Expected as nickname"}</small>
+                  <label>Full Name
+                    <input value={newPeople[index]?.fullName || ""} onChange={(event) => updateNewPerson(index, "fullName", event.target.value)} required />
+                  </label>
+                  <label>Nickname
+                    <input value={newPeople[index]?.nickname || ""} onChange={(event) => updateNewPerson(index, "nickname", event.target.value)} required />
+                  </label>
+                  <label>Department
+                    <input value={newPeople[index]?.department || ""} onChange={(event) => updateNewPerson(index, "department", event.target.value)} required />
+                  </label>
+                </div>
+              ))}
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="secondary" onClick={() => {
+                setMissingPeople([]);
+                setNewPeople([]);
+                setPendingSavePayload(null);
+              }}>Cancel</button>
+              <button type="button" className="primary" disabled={saving || newPeople.some((person) => !person.fullName?.trim() || !person.nickname?.trim() || !person.department?.trim())} onClick={registerMissingPeopleAndSave}>
+                {saving ? "Saving" : "Save People and Issue"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </form>
   );
 }
 
 function ChangeIssue({
+  initialIssueId,
   onSave,
   onCancel,
   onDelete,
   onNotify,
   onDirtyChange
 }: {
+  initialIssueId?: number | null;
   onSave: (payload: IssueSavePayload) => Promise<void>;
   onCancel: (id: number, reason: string) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
@@ -1625,7 +1784,29 @@ function ChangeIssue({
   const [showCandidates, setShowCandidates] = useState(false);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
+  const loadedInitialIssueId = useRef<number | null>(null);
   const searchKey = `${selection.q.trim()}|${selection.glpi.trim()}|${selection.crHelpdesk.trim()}|${selection.cr.trim()}`;
+
+  useEffect(() => {
+    if (!initialIssueId || loadedInitialIssueId.current === initialIssueId) return;
+    loadedInitialIssueId.current = initialIssueId;
+    setSearching(true);
+    fetchIssueDetail(initialIssueId)
+      .then((nextDetail) => {
+        setChangeDetail(nextDetail);
+        setSelection({
+          q: nextDetail.issue?.issue_key || "",
+          glpi: nextDetail.issue?.primary_glpi_ticket ? String(nextDetail.issue.primary_glpi_ticket) : "",
+          crHelpdesk: nextDetail.issue?.primary_cr_helpdesk_no || "",
+          cr: nextDetail.issue?.primary_cr || ""
+        });
+        setCandidates([]);
+        setShowCandidates(false);
+        setSearched(false);
+      })
+      .catch((err) => onNotify("error", err instanceof Error ? err.message : String(err)))
+      .finally(() => setSearching(false));
+  }, [initialIssueId, onNotify]);
 
   useEffect(() => {
     if (!selection.q.trim() && !selection.glpi.trim() && !selection.crHelpdesk.trim() && !selection.cr.trim()) {
@@ -1746,10 +1927,12 @@ function ValueHelpField({
   onChange,
   placeholder,
   disabled = false,
-  onSelectRow
+  onSelectRow,
+  personMode = "full_name"
 }: {
   label: string;
   kind: ValueHelpKind;
+  personMode?: "full_name" | "nickname";
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
@@ -1773,7 +1956,7 @@ function ValueHelpField({
   }, [open, query, kind]);
 
   function choose(row: Record<string, unknown>) {
-    const selected = valueHelpValue(kind, row);
+    const selected = valueHelpValue(kind, row, personMode);
     onChange(appendToken(value, selected));
     onSelectRow?.(row);
     setOpen(false);
@@ -1812,7 +1995,7 @@ function ValueHelpField({
         <div className="value-help-menu">
           {rows.map((row, index) => (
             <button type="button" key={index} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(row)}>
-              <strong>{valueHelpValue(kind, row)}</strong>
+              <strong>{valueHelpValue(kind, row, personMode)}</strong>
               <small>{valueHelpDescription(kind, row)}</small>
             </button>
           ))}
@@ -1826,6 +2009,7 @@ function ValueHelpField({
 function MultiValueHelpField({
   label,
   kind,
+  personMode = "full_name",
   value,
   onChange,
   placeholder,
@@ -1833,6 +2017,7 @@ function MultiValueHelpField({
 }: {
   label: string;
   kind: ValueHelpKind;
+  personMode?: "full_name" | "nickname";
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
@@ -1870,6 +2055,7 @@ function MultiValueHelpField({
           <ValueHelpField
             label={`${label} ${index + 1}`}
             kind={kind}
+            personMode={personMode}
             value={rowValue}
             onChange={(nextValue) => updateRow(index, nextValue)}
             placeholder={placeholder}
@@ -1928,7 +2114,7 @@ function formatDate(value?: string) {
 }
 
 function lifecycleLabel(status?: string, value?: string) {
-  if (status === "imported") return formatDate(value);
+  if (status === "imported") return formatIssueTimestamp(value);
   if (status === "failed") return "Failed";
   return "-";
 }
@@ -2154,11 +2340,11 @@ function issueFormFromDetail(detail: IssueDetail | null): IssueSavePayload {
   };
 }
 
-function valueHelpValue(kind: ValueHelpKind, row: Record<string, unknown>) {
+function valueHelpValue(kind: ValueHelpKind, row: Record<string, unknown>, personMode: "full_name" | "nickname" = "full_name") {
   if (kind === "glpi") return String(row.ticket_number || "");
   if (kind === "cr-helpdesk") return String(row.cr_helpdesk_no || "");
   if (kind === "cr") return String(row.trkorr || "");
-  return String(row.full_name || row.nickname || "");
+  return String(personMode === "nickname" ? row.nickname || row.full_name || "" : row.full_name || row.nickname || "");
 }
 
 function valueHelpDescription(kind: ValueHelpKind, row: Record<string, unknown>) {
@@ -2173,6 +2359,26 @@ function splitTokenValues(value?: string) {
     .split(/[;,]/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function peopleChecksFromIssuePayload(payload: IssueSavePayload): IssuePersonCheck[] {
+  const checks: IssuePersonCheck[] = [
+    ...splitTokenValues(payload.requesterNames).map((name) => ({ name, mode: "full_name" as const })),
+    ...splitTokenValues(payload.abaperNames).map((name) => ({ name, mode: "full_name" as const }))
+  ];
+  for (const group of PARTICIPANT_GROUPS) {
+    for (const role of group.roles) {
+      if (role === "requester" || role === "abaper") continue;
+      checks.push(...splitTokenValues(payload.participants?.[role]).map((name) => ({ name, mode: "nickname" as const })));
+    }
+  }
+  const seen = new Set<string>();
+  return checks.filter((person) => {
+    const key = `${person.mode}:${person.name.toUpperCase()}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function lastToken(value: string) {
@@ -2295,10 +2501,9 @@ function missingIssueData(detail: IssueDetail) {
 }
 
 function issueTimelineEvents(detail: IssueDetail | null) {
-  const primaryCr = detail?.crLinks.find((link) => link.is_primary) || detail?.crLinks[0];
   if (detail?.issue?.issue_status === "cancelled") {
     const cancelDate = detail.issue.cancelled_date || latestActivityDate(detail) || detail.issue.create_issue_date;
-    const lastActivity = latestActivityBefore(detail, cancelDate, ["Issue Created", "Issue Cancelled"]);
+    const lastActivity = latestIssueActivityBefore(detail, cancelDate, ["Issue Created", "Issue Cancelled"]);
     const events: IssueTimelineEvent[] = [
       { source: "Issue", label: "Issue Created", date: detail.issue.create_issue_date, order: 2 }
     ];
@@ -2309,17 +2514,23 @@ function issueTimelineEvents(detail: IssueDetail | null) {
     return events;
   }
   return [
-    { source: "CR", label: "CR Created", date: timelineDate(primaryCr?.sap_created_at), time: timelineClock(primaryCr?.sap_created_at), order: 1 },
     { source: "Issue", label: "Issue Created", date: detail?.issue?.create_issue_date, order: 2 },
     { source: "Issue", label: "DEV Tested", date: readTimelineDate(detail?.devTimeline, "dev_tested_date"), order: 3 },
     { source: "Issue", label: "DEV Evaluated", date: readTimelineDate(detail?.devTimeline, "dev_evaluated_date"), order: 4 },
-    { source: "CR", label: "CR Released", date: timelineDate(primaryCr?.sap_released_at), time: timelineClock(primaryCr?.sap_released_at), order: 5 },
-    { source: "CR", label: "In QA", date: primaryCr?.qa_import_date, time: primaryCr?.qa_import_time, order: 6 },
     { source: "Issue", label: "QA Tested", date: readTimelineDate(detail?.qaTimeline, "qa_tested_date"), order: 7 },
     { source: "Issue", label: "QA Evaluated", date: readTimelineDate(detail?.qaTimeline, "qa_evaluated_date"), order: 8 },
     { source: "Issue", label: "PRD Requested", date: readTimelineDate(detail?.prdTimeline, "prd_requested_date"), order: 9 },
     { source: "Issue", label: "PRD Evaluated", date: readTimelineDate(detail?.prdTimeline, "prd_evaluated_date"), order: 10 },
-    { source: "Issue", label: "Approval", date: readTimelineDate(detail?.prdTimeline, "approval_date"), order: 11 },
+    { source: "Issue", label: "Approval", date: readTimelineDate(detail?.prdTimeline, "approval_date"), order: 11 }
+  ];
+}
+
+function issueCrLifecycleEvents(detail: IssueDetail | null) {
+  const primaryCr = detail?.crLinks.find((link) => link.is_primary) || detail?.crLinks[0];
+  return [
+    { source: "CR", label: "Created", date: timelineDate(primaryCr?.sap_created_at), time: timelineClock(primaryCr?.sap_created_at), order: 1 },
+    { source: "CR", label: "Released", date: timelineDate(primaryCr?.sap_released_at), time: timelineClock(primaryCr?.sap_released_at), order: 5 },
+    { source: "CR", label: "In QA", date: primaryCr?.qa_import_date, time: primaryCr?.qa_import_time, order: 6 },
     { source: "CR", label: "In PRD", date: primaryCr?.prd_import_date, time: primaryCr?.prd_import_time, order: 12 }
   ];
 }
@@ -2331,6 +2542,14 @@ function latestActivityDate(detail: IssueDetail) {
 function latestActivityBefore(detail: IssueDetail, maxDate?: string, excludeLabels: string[] = []) {
   const maxTime = maxDate ? new Date(maxDate).getTime() : Number.POSITIVE_INFINITY;
   return latestDatedEvent(allIssueActivityEvents(detail).filter((event) => {
+    if (!event.date || excludeLabels.includes(event.label)) return false;
+    return new Date(event.date).getTime() <= maxTime;
+  }));
+}
+
+function latestIssueActivityBefore(detail: IssueDetail, maxDate?: string, excludeLabels: string[] = []) {
+  const maxTime = maxDate ? new Date(maxDate).getTime() : Number.POSITIVE_INFINITY;
+  return latestDatedEvent(issueOnlyActivityEvents(detail).filter((event) => {
     if (!event.date || excludeLabels.includes(event.label)) return false;
     return new Date(event.date).getTime() <= maxTime;
   }));
@@ -2357,6 +2576,20 @@ function allIssueActivityEvents(detail: IssueDetail) {
     { source: "Issue", label: "PRD Evaluated", date: readTimelineDate(detail.prdTimeline, "prd_evaluated_date"), order: 10 },
     { source: "Issue", label: "Approval", date: readTimelineDate(detail.prdTimeline, "approval_date"), order: 11 },
     { source: "CR", label: "In PRD", date: primaryCr?.prd_import_date, time: primaryCr?.prd_import_time, order: 12 },
+    { source: "Issue", label: "Issue Cancelled", date: detail.issue?.cancelled_date, order: 99 }
+  ];
+}
+
+function issueOnlyActivityEvents(detail: IssueDetail) {
+  return [
+    { source: "Issue", label: "Issue Created", date: detail.issue?.create_issue_date, order: 2 },
+    { source: "Issue", label: "DEV Tested", date: readTimelineDate(detail.devTimeline, "dev_tested_date"), order: 3 },
+    { source: "Issue", label: "DEV Evaluated", date: readTimelineDate(detail.devTimeline, "dev_evaluated_date"), order: 4 },
+    { source: "Issue", label: "QA Tested", date: readTimelineDate(detail.qaTimeline, "qa_tested_date"), order: 7 },
+    { source: "Issue", label: "QA Evaluated", date: readTimelineDate(detail.qaTimeline, "qa_evaluated_date"), order: 8 },
+    { source: "Issue", label: "PRD Requested", date: readTimelineDate(detail.prdTimeline, "prd_requested_date"), order: 9 },
+    { source: "Issue", label: "PRD Evaluated", date: readTimelineDate(detail.prdTimeline, "prd_evaluated_date"), order: 10 },
+    { source: "Issue", label: "Approval", date: readTimelineDate(detail.prdTimeline, "approval_date"), order: 11 },
     { source: "Issue", label: "Issue Cancelled", date: detail.issue?.cancelled_date, order: 99 }
   ];
 }

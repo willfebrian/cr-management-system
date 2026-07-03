@@ -87,6 +87,16 @@ export async function fetchIssueDetail(id: number): Promise<IssueDetail> {
   return fetchJson(`/api/issues/${id}`);
 }
 
+export async function fetchIssueTemplate(id: number, kind: "email" | "ticket"): Promise<{
+  kind: "email" | "ticket";
+  title: string;
+  templatePath: string;
+  body: string;
+  bodyHtml?: string;
+}> {
+  return fetchJson(`/api/issues/${id}/templates/${kind}`);
+}
+
 export type IssueSavePayload = {
   id?: number;
   createMode?: "new" | "sub";
@@ -149,6 +159,34 @@ export async function fetchValueHelp(kind: ValueHelpKind, q = ""): Promise<{ row
   const params = new URLSearchParams();
   if (q) params.set("q", q);
   return fetchJson(`/api/value-help/${kind}${params.toString() ? `?${params}` : ""}`);
+}
+
+export type IssuePersonCheck = {
+  name: string;
+  mode: "full_name" | "nickname";
+};
+
+export type IssuePersonRegistration = {
+  fullName: string;
+  nickname: string;
+  department: string;
+  email?: string;
+};
+
+export async function validateIssuePeople(people: IssuePersonCheck[]): Promise<{ missing: IssuePersonCheck[] }> {
+  return fetchJson("/api/value-help/people/validate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ people })
+  });
+}
+
+export async function registerIssuePeople(people: IssuePersonRegistration[]): Promise<{ rows: Array<Record<string, unknown>> }> {
+  return fetchJson("/api/value-help/people", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ people })
+  });
 }
 
 export type SyncCrOptions = {

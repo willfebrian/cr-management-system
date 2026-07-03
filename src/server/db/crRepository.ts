@@ -57,17 +57,27 @@ export async function getDashboard() {
       ),
       qa AS (
         SELECT COUNT(*)::int AS value
-        FROM cr_transport_lifecycle
-        WHERE source_system_code = 'DEV'
-          AND target_system_code = 'QA'
-          AND transport_status = 'imported'
+        FROM cr_transport_lifecycle lifecycle
+        JOIN cr_requests dev
+          ON dev.sap_system_code = lifecycle.source_system_code
+          AND dev.trkorr = lifecycle.trkorr
+          AND dev.parent_request IS NULL
+          AND upper(dev.owner) = 'TRSTDEV'
+        WHERE lifecycle.source_system_code = 'DEV'
+          AND lifecycle.target_system_code = 'QA'
+          AND lifecycle.transport_status = 'imported'
       ),
       prd AS (
         SELECT COUNT(*)::int AS value
-        FROM cr_transport_lifecycle
-        WHERE source_system_code = 'DEV'
-          AND target_system_code = 'PRD'
-          AND transport_status = 'imported'
+        FROM cr_transport_lifecycle lifecycle
+        JOIN cr_requests dev
+          ON dev.sap_system_code = lifecycle.source_system_code
+          AND dev.trkorr = lifecycle.trkorr
+          AND dev.parent_request IS NULL
+          AND upper(dev.owner) = 'TRSTDEV'
+        WHERE lifecycle.source_system_code = 'DEV'
+          AND lifecycle.target_system_code = 'PRD'
+          AND lifecycle.transport_status = 'imported'
       )
       SELECT 'Released DEV' AS label, value FROM released
       UNION ALL SELECT 'In QA', value FROM qa
@@ -142,6 +152,7 @@ export async function getDashboardStatusTrend({
       FROM cr_requests
       WHERE sap_system_code = 'DEV'
         AND parent_request IS NULL
+        AND upper(owner) = 'TRSTDEV'
         AND changed_date >= to_date($1, 'YYYY-MM')
         AND changed_date < (to_date($2, 'YYYY-MM') + interval '1 month')
       GROUP BY date_trunc('month', changed_date)::date, status_group
@@ -735,8 +746,22 @@ export async function upsertCrHeader(header: CrHeader, sapSystemCode: string, sy
         owner = EXCLUDED.owner,
         changed_date = EXCLUDED.changed_date,
         changed_time = EXCLUDED.changed_time,
-        sap_released_at = COALESCE(cr_requests.sap_released_at, EXCLUDED.sap_released_at),
-        sap_released_source = COALESCE(cr_requests.sap_released_source, EXCLUDED.sap_released_source),
+        sap_released_at = CASE
+          WHEN EXCLUDED.sap_released_at IS NULL THEN cr_requests.sap_released_at
+          WHEN cr_requests.sap_released_at IS NULL
+            OR cr_requests.sap_released_source IS DISTINCT FROM 'sap_e070_released'
+            OR cr_requests.sap_released_at IS DISTINCT FROM EXCLUDED.sap_released_at
+            THEN EXCLUDED.sap_released_at
+          ELSE cr_requests.sap_released_at
+        END,
+        sap_released_source = CASE
+          WHEN EXCLUDED.sap_released_at IS NULL THEN cr_requests.sap_released_source
+          WHEN cr_requests.sap_released_at IS NULL
+            OR cr_requests.sap_released_source IS DISTINCT FROM 'sap_e070_released'
+            OR cr_requests.sap_released_at IS DISTINCT FROM EXCLUDED.sap_released_at
+            THEN EXCLUDED.sap_released_source
+          ELSE cr_requests.sap_released_source
+        END,
         first_seen_at = COALESCE(cr_requests.first_seen_at, EXCLUDED.first_seen_at),
         last_sync_run_id = EXCLUDED.last_sync_run_id,
         updated_at = now()
@@ -771,7 +796,11 @@ export async function upsertCrCreationLogs(sapSystemCode: string, rows: CrCreati
       WHERE sap_system_code = $1
         AND trkorr = $4
         AND parent_request IS NULL
-        AND sap_created_at IS NULL
+        AND (
+          sap_created_at IS NULL
+          OR sap_created_source IS DISTINCT FROM 'sap_e070create'
+          OR sap_created_at IS DISTINCT FROM (to_date(NULLIF($2, ''), 'YYYYMMDD')::text || ' ' || COALESCE(to_timestamp(NULLIF($3, ''), 'HH24MISS')::time::text, '08:00:00') || '+07')::timestamptz
+        )
         AND NULLIF($2, '') IS NOT NULL
     `, [sapSystemCode, row.createdDate || "", row.createdTime || "", row.trkorr]);
     updated += result.rowCount || 0;

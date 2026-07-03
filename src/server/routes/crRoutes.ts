@@ -6,9 +6,10 @@ import {
   getDashboardStatusTrend,
   listCrRequests,
 } from "../db/crRepository.js";
-import { cancelIssue, deleteIssue, getIssueDetail, getIssueStatusOptions, getNextIssueNumber, getNextSubIssueNumber, listIssues, saveIssue, searchIssueCrHelpdesk, searchIssueCrLinks, searchIssueGlpi, searchIssuePeople } from "../db/issueRepository.js";
+import { cancelIssue, deleteIssue, getIssueDetail, getIssueStatusOptions, getNextIssueNumber, getNextSubIssueNumber, listIssues, registerIssuePeople, saveIssue, searchIssueCrHelpdesk, searchIssueCrLinks, searchIssueGlpi, searchIssuePeople, validateIssuePeople } from "../db/issueRepository.js";
 import { getSapCrSystem, listSapCrSystems } from "../config.js";
 import { normalizeLookbackDays, normalizeSyncMode, normalizeSystemCodes, runCrSync } from "../sync/crSyncRunner.js";
+import { buildIssueTemplatePreview, type IssueTemplateKind } from "../templates/issueTemplateService.js";
 
 export const crRoutes = Router();
 
@@ -129,6 +130,24 @@ crRoutes.get("/value-help/people", async (req, res, next) => {
   }
 });
 
+crRoutes.post("/value-help/people/validate", async (req, res, next) => {
+  try {
+    await assertDatabaseConfigured();
+    res.json(await validateIssuePeople(req.body?.people || []));
+  } catch (error) {
+    next(error);
+  }
+});
+
+crRoutes.post("/value-help/people", async (req, res, next) => {
+  try {
+    await assertDatabaseConfigured();
+    res.json({ rows: await registerIssuePeople(req.body?.people || []) });
+  } catch (error) {
+    next(error);
+  }
+});
+
 crRoutes.get("/value-help/glpi", async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
@@ -160,6 +179,20 @@ crRoutes.get("/issues/:id", async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     res.json(await getIssueDetail(numberQuery(req.params.id, 0)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+crRoutes.get("/issues/:id/templates/:kind", async (req, res, next) => {
+  try {
+    await assertDatabaseConfigured();
+    const kind = stringQuery(req.params.kind);
+    if (kind !== "email" && kind !== "ticket") {
+      res.status(400).json({ ok: false, message: "Template kind must be email or ticket." });
+      return;
+    }
+    res.json(await buildIssueTemplatePreview(numberQuery(req.params.id, 0), kind as IssueTemplateKind));
   } catch (error) {
     next(error);
   }
