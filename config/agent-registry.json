@@ -1,0 +1,485 @@
+﻿{
+    "version":  "0.1.0",
+    "defaultMode":  "CONFIRMED_ACTION_CAPABLE",
+    "conditionalMutationPolicy":  "config/abap-backup-change-policy.json",
+    "sourceRules":  {
+                        "repositoryInventory":  "SAP_QA",
+                        "businessData":  "SAP_QA",
+                        "ddicMetadata":  "SAP_QA",
+                        "abapSource":  "SAP_DEV_AIX",
+                        "abapSourceFunction":  "ZRFC_READ_REPORT"
+                    },
+    "canonicalAgents":  [
+                            "sap_orchestrator",
+                            "sap_technical_agent",
+                            "sap_functional_agent",
+                            "sap_security_agent",
+                            "sap_knowledge_agent",
+                            "sap_documentation_agent"
+                        ],
+    "legacyAliases":  {
+                          "sap_abap_technical_agent":  "sap_technical_agent",
+                          "sap_data_dictionary_agent":  "sap_knowledge_agent",
+                          "sap_mm_agent":  "sap_functional_agent",
+                          "sap_pp_pro_agent":  "sap_functional_agent",
+                          "sap_qm_agent":  "sap_functional_agent",
+                          "sap_fi_co_agent":  "sap_functional_agent",
+                          "sap_sd_agent":  "sap_functional_agent",
+                          "sap_classification_agent":  "sap_functional_agent",
+                          "sap_cross_module_agent":  "sap_functional_agent",
+                          "sap_documentation_ricefw_agent":  "sap_documentation_agent"
+                      },
+    "agents":  {
+                   "sap_orchestrator":  {
+                                            "displayName":  "SAP Orchestrator",
+                                            "roleFile":  "agents/sap-orchestrator.md",
+                                            "server":  "LOCAL_OR_SAP_QA",
+                                            "purpose":  "Classify user intent, select minimal agents/tools, enforce bounded retrieval, and reconcile final answers.",
+                                            "allowedEvidence":  [
+                                                                    "agent_outputs",
+                                                                    "retrieval_manifest",
+                                                                    "workflow_context"
+                                                                ],
+                                            "outputSchema":  "orchestrationEvidence",
+                                            "hardDenies":  [
+                                                               "sap_mutation",
+                                                               "unbounded_generated_artifact_scan"
+                                                           ]
+                                        },
+                   "sap_technical_agent":  {
+                                               "displayName":  "SAP Technical Agent",
+                                               "roleFile":  "agents/sap-technical-agent.md",
+                                               "server":  "SAP_DEV_AIX",
+                                               "purpose":  "Analyze ABAP source, includes, functions, classes, enhancements, SmartForms, dependency chains, and technical risk.",
+                                               "allowedEvidence":  [
+                                                                       "deep_abap_summary",
+                                                                       "deep_abap_detail",
+                                                                       "repository_metadata",
+                                                                       "passive_kb_summary"
+                                                                   ],
+                                               "outputSchema":  "abapTechnicalEvidence",
+                                               "conditionalPermissions":  [
+                                                                              "read_only_abap_source"
+                                                                          ],
+                                               "legacyAgents":  [
+                                                                    "sap_abap_technical_agent"
+                                                                ],
+                                               "hardDenies":  [
+                                                                  "sap_qa_prd_abap_maintenance",
+                                                                  "transport_change",
+                                                                  "request_or_cr_creation",
+                                                                  "non_local_abap_object_change",
+                                                                  "unconfirmed_mutation",
+                                                                  "mutation_for_other_agent"
+                                                              ]
+                                           },
+                   "sap_functional_agent":  {
+                                                "displayName":  "SAP Functional Agent",
+                                                "roleFile":  "agents/sap-functional-agent.md",
+                                                "server":  "SAP_QA",
+                                                "purpose":  "Interpret FI/MM/SD/PP/QM/WM/PM, batch, material, classification, procurement, sales, production, quality, and finance process evidence.",
+                                                "allowedEvidence":  [
+                                                                        "deep_abap_summary",
+                                                                        "module_table_mapping",
+                                                                        "business_data_read",
+                                                                        "passive_kb_summary"
+                                                                    ],
+                                                "outputSchema":  "moduleEvidence",
+                                                "legacyAgents":  [
+                                                                     "sap_mm_agent",
+                                                                     "sap_pp_pro_agent",
+                                                                     "sap_qm_agent",
+                                                                     "sap_fi_co_agent",
+                                                                     "sap_sd_agent",
+                                                                     "sap_classification_agent",
+                                                                     "sap_cross_module_agent"
+                                                                 ],
+                                                "functionalLenses":  [
+                                                                         "FI",
+                                                                         "CO",
+                                                                         "MM",
+                                                                         "SD",
+                                                                         "PP",
+                                                                         "QM",
+                                                                         "WM",
+                                                                         "PM",
+                                                                         "CA-CL",
+                                                                         "LO-BM"
+                                                                     ],
+                                                "primaryTables":  [
+                                                                      "BKPF",
+                                                                      "BSEG",
+                                                                      "COBK",
+                                                                      "COEP",
+                                                                      "MARA",
+                                                                      "MARC",
+                                                                      "MCH1",
+                                                                      "MCHB",
+                                                                      "MKPF",
+                                                                      "MSEG",
+                                                                      "EKKO",
+                                                                      "EKPO",
+                                                                      "VBAK",
+                                                                      "VBAP",
+                                                                      "VBPA",
+                                                                      "LIKP",
+                                                                      "LIPS",
+                                                                      "VBRK",
+                                                                      "VBRP",
+                                                                      "AUFK",
+                                                                      "AFKO",
+                                                                      "AFPO",
+                                                                      "AFVC",
+                                                                      "RESB",
+                                                                      "QALS",
+                                                                      "QAVE",
+                                                                      "QAMR",
+                                                                      "QASE",
+                                                                      "QMEL",
+                                                                      "AUSP",
+                                                                      "CABN",
+                                                                      "KLAH",
+                                                                      "KSSK"
+                                                                  ]
+                                            },
+                   "sap_security_agent":  {
+                                              "displayName":  "SAP Security Agent",
+                                              "roleFile":  "agents/sap-security-agent.md",
+                                              "server":  "SAP_QA",
+                                              "purpose":  "Review authorization, sensitive data, auditability, read-only boundaries, and mutation risk.",
+                                              "allowedEvidence":  [
+                                                                      "authorization_metadata",
+                                                                      "policy_config",
+                                                                      "audit_metadata",
+                                                                      "passive_kb_summary"
+                                                                  ],
+                                              "outputSchema":  "securityEvidence",
+                                              "hardDenies":  [
+                                                                 "role_change",
+                                                                 "profile_change",
+                                                                 "user_change",
+                                                                 "authorization_mutation",
+                                                                 "policy_weakening"
+                                                             ]
+                                          },
+                   "sap_knowledge_agent":  {
+                                               "displayName":  "SAP Knowledge Agent",
+                                               "roleFile":  "agents/sap-knowledge-agent.md",
+                                               "server":  "SAP_QA",
+                                               "purpose":  "Resolve DDIC, repository metadata, table relationships, domains, semantic layer, standard functions, and SAP object mappings.",
+                                               "allowedEvidence":  [
+                                                                       "ddic_metadata",
+                                                                       "repository_metadata",
+                                                                       "table_read_limited",
+                                                                       "semantic_layer",
+                                                                       "passive_kb_summary"
+                                                                   ],
+                                               "outputSchema":  "ddicEvidence",
+                                               "legacyAgents":  [
+                                                                    "sap_data_dictionary_agent"
+                                                                ],
+                                               "hardDenies":  [
+                                                                  "database_write",
+                                                                  "customizing_change",
+                                                                  "unbounded_generated_artifact_scan"
+                                                              ]
+                                           },
+                   "sap_documentation_agent":  {
+                                                   "displayName":  "SAP Documentation Agent",
+                                                   "roleFile":  "agents/sap-documentation-agent.md",
+                                                   "server":  "LOCAL_ONLY",
+                                                   "purpose":  "Generate auditable RICEFW, SAP as-is, and technical specification drafts from aggregated evidence.",
+                                                   "allowedEvidence":  [
+                                                                           "agent_outputs",
+                                                                           "aggregated_evidence"
+                                                                       ],
+                                                   "outputSchema":  "documentationEvidence",
+                                                   "legacyAgents":  [
+                                                                        "sap_documentation_ricefw_agent"
+                                                                    ],
+                                                   "hardDenies":  [
+                                                                      "sap_call"
+                                                                  ]
+                                               },
+                   "sap_abap_technical_agent":  {
+                                                    "displayName":  "SAP ABAP Technical Agent",
+                                                    "canonicalAgent":  "sap_technical_agent",
+                                                    "roleFile":  "agents/sap-abap-technical-agent.md",
+                                                    "server":  "SAP_DEV_AIX",
+                                                    "purpose":  "Read and analyze ABAP source; when explicitly confirmed by the user, maintain and test ABAP objects only on SAP_DEV_AIX.",
+                                                    "allowedEvidence":  [
+                                                                            "deep_abap_summary",
+                                                                            "deep_abap_detail",
+                                                                            "repository_metadata"
+                                                                        ],
+                                                    "outputSchema":  "abapTechnicalEvidence",
+                                                    "conditionalPermissions":  [
+                                                                                   "edit_abap_source",
+                                                                                   "activate_abap_program",
+                                                                                   "execute_abap_report",
+                                                                                   "execute_transaction"
+                                                                               ],
+                                                    "hardDenies":  [
+                                                                       "sap_qa_prd_abap_maintenance",
+                                                                       "transport_change",
+                                                                       "request_or_cr_creation",
+                                                                       "non_local_abap_object_change",
+                                                                       "unconfirmed_mutation",
+                                                                       "mutation_for_other_agent"
+                                                                   ],
+                                                    "editRequirements":  {
+                                                                             "package":  "$TMP",
+                                                                             "cancelIfRequestOrCrPrompted":  true
+                                                                         }
+                                                },
+                   "sap_data_dictionary_agent":  {
+                                                     "displayName":  "SAP Data Dictionary Agent",
+                                                     "canonicalAgent":  "sap_knowledge_agent",
+                                                     "roleFile":  "agents/sap-data-dictionary-agent.md",
+                                                     "server":  "SAP_QA",
+                                                     "purpose":  "Resolve DDIC table and field evidence for SAP/custom tables used by the analyzed object.",
+                                                     "allowedEvidence":  [
+                                                                             "ddic_metadata",
+                                                                             "repository_metadata",
+                                                                             "table_read_limited"
+                                                                         ],
+                                                     "outputSchema":  "ddicEvidence",
+                                                     "hardDenies":  [
+                                                                        "database_write",
+                                                                        "customizing_change"
+                                                                    ]
+                                                 },
+                   "sap_mm_agent":  {
+                                        "displayName":  "SAP MM Agent",
+                                        "canonicalAgent":  "sap_functional_agent",
+                                        "roleFile":  "agents/sap-mm-agent.md",
+                                        "server":  "SAP_QA",
+                                        "purpose":  "Interpret material master, batch stock, inventory, goods movement, procurement, and returnable-pallet evidence.",
+                                        "allowedEvidence":  [
+                                                                "deep_abap_summary",
+                                                                "module_table_mapping",
+                                                                "business_data_read"
+                                                            ],
+                                        "outputSchema":  "moduleEvidence",
+                                        "primaryTables":  [
+                                                              "MARA",
+                                                              "MARC",
+                                                              "MAKT",
+                                                              "MARD",
+                                                              "MCH1",
+                                                              "MCHB",
+                                                              "MKPF",
+                                                              "MSEG",
+                                                              "EKKO",
+                                                              "EKPO"
+                                                          ]
+                                    },
+                   "sap_pp_pro_agent":  {
+                                            "displayName":  "SAP PP/PRO Agent",
+                                            "canonicalAgent":  "sap_functional_agent",
+                                            "roleFile":  "agents/sap-pp-pro-agent.md",
+                                            "server":  "SAP_QA",
+                                            "purpose":  "Interpret production/process-order, BOM, component, operation, and PRO-related evidence.",
+                                            "allowedEvidence":  [
+                                                                    "deep_abap_summary",
+                                                                    "module_table_mapping",
+                                                                    "business_data_read"
+                                                                ],
+                                            "outputSchema":  "moduleEvidence",
+                                            "primaryTables":  [
+                                                                  "AUFK",
+                                                                  "AFKO",
+                                                                  "AFPO",
+                                                                  "AFVC",
+                                                                  "RESB",
+                                                                  "JEST",
+                                                                  "CRHD",
+                                                                  "STKO",
+                                                                  "STPO"
+                                                              ]
+                                        },
+                   "sap_qm_agent":  {
+                                        "displayName":  "SAP QM Agent",
+                                        "canonicalAgent":  "sap_functional_agent",
+                                        "roleFile":  "agents/sap-qm-agent.md",
+                                        "server":  "SAP_QA",
+                                        "purpose":  "Interpret inspection lot, usage decision, inspection result, and quality notification evidence.",
+                                        "allowedEvidence":  [
+                                                                "deep_abap_summary",
+                                                                "module_table_mapping",
+                                                                "business_data_read"
+                                                            ],
+                                        "outputSchema":  "moduleEvidence",
+                                        "primaryTables":  [
+                                                              "QALS",
+                                                              "QAVE",
+                                                              "QAMR",
+                                                              "QASE",
+                                                              "QMEL"
+                                                          ]
+                                    },
+                   "sap_fi_co_agent":  {
+                                           "displayName":  "SAP FI/CO Agent",
+                                           "canonicalAgent":  "sap_functional_agent",
+                                           "roleFile":  "agents/sap-fi-co-agent.md",
+                                           "server":  "SAP_QA",
+                                           "purpose":  "Interpret FI/CO, accounting, controlling, cost center, profit center, and settlement evidence.",
+                                           "allowedEvidence":  [
+                                                                   "deep_abap_summary",
+                                                                   "module_table_mapping",
+                                                                   "business_data_read"
+                                                               ],
+                                           "outputSchema":  "moduleEvidence",
+                                           "primaryTables":  [
+                                                                 "BKPF",
+                                                                 "BSEG",
+                                                                 "ACDOCA",
+                                                                 "COEP",
+                                                                 "COBK",
+                                                                 "CSKS",
+                                                                 "CEPC"
+                                                             ]
+                                       },
+                   "sap_sd_agent":  {
+                                        "displayName":  "SAP SD Agent",
+                                        "canonicalAgent":  "sap_functional_agent",
+                                        "roleFile":  "agents/sap-sd-agent.md",
+                                        "server":  "SAP_QA",
+                                        "purpose":  "Interpret sales order, delivery, billing, partner, and customer evidence.",
+                                        "allowedEvidence":  [
+                                                                "deep_abap_summary",
+                                                                "module_table_mapping",
+                                                                "business_data_read"
+                                                            ],
+                                        "outputSchema":  "moduleEvidence",
+                                        "primaryTables":  [
+                                                              "VBAK",
+                                                              "VBAP",
+                                                              "VBPA",
+                                                              "LIKP",
+                                                              "LIPS",
+                                                              "VBRK",
+                                                              "VBRP",
+                                                              "KNA1"
+                                                          ]
+                                    },
+                   "sap_classification_agent":  {
+                                                    "displayName":  "SAP Classification Agent",
+                                                    "canonicalAgent":  "sap_functional_agent",
+                                                    "roleFile":  "agents/sap-classification-agent.md",
+                                                    "server":  "SAP_QA",
+                                                    "purpose":  "Interpret material, batch, class, and characteristic evidence.",
+                                                    "allowedEvidence":  [
+                                                                            "deep_abap_summary",
+                                                                            "module_table_mapping",
+                                                                            "business_data_read"
+                                                                        ],
+                                                    "outputSchema":  "moduleEvidence",
+                                                    "primaryTables":  [
+                                                                          "AUSP",
+                                                                          "CABN",
+                                                                          "CABNT",
+                                                                          "CAWN",
+                                                                          "CAWNT",
+                                                                          "INOB",
+                                                                          "KSSK",
+                                                                          "KLAH",
+                                                                          "MCHA",
+                                                                          "MCH1"
+                                                                      ]
+                                                },
+                   "sap_cross_module_agent":  {
+                                                  "displayName":  "SAP Cross Module Agent",
+                                                  "canonicalAgent":  "sap_functional_agent",
+                                                  "roleFile":  "agents/sap-cross-module-agent.md",
+                                                  "server":  "SAP_QA",
+                                                  "purpose":  "Reconcile cross-module process meaning and conflicts between specialist agents.",
+                                                  "allowedEvidence":  [
+                                                                          "agent_outputs",
+                                                                          "deep_abap_summary",
+                                                                          "module_table_mapping"
+                                                                      ],
+                                                  "outputSchema":  "crossModuleEvidence"
+                                              },
+                   "sap_documentation_ricefw_agent":  {
+                                                          "displayName":  "SAP Documentation/RICEFW Agent",
+                                                          "canonicalAgent":  "sap_documentation_agent",
+                                                          "roleFile":  null,
+                                                          "server":  "LOCAL_ONLY",
+                                                          "purpose":  "Generate auditable RICEFW and SAP as-is Technical Specification drafts from aggregated evidence.",
+                                                          "allowedEvidence":  [
+                                                                                  "agent_outputs",
+                                                                                  "aggregated_evidence"
+                                                                              ],
+                                                          "outputSchema":  "documentationEvidence",
+                                                          "hardDenies":  [
+                                                                             "sap_call"
+                                                                         ]
+                                                      }
+               },
+    "workflows":  {
+                      "z-tcode-doc":  {
+                                          "description":  "Analyze one Z tcode/program and prepare auditable evidence plus RICEFW/Technical Specification drafts.",
+                                          "requiredAgents":  [
+                                                                 "sap_technical_agent",
+                                                                 "sap_knowledge_agent",
+                                                                 "sap_functional_agent",
+                                                                 "sap_documentation_agent"
+                                                             ],
+                                          "legacyRequiredAgents":  [
+                                                                       "sap_abap_technical_agent",
+                                                                       "sap_data_dictionary_agent",
+                                                                       "sap_cross_module_agent",
+                                                                       "sap_documentation_ricefw_agent"
+                                                                   ],
+                                          "moduleAgents":  {
+                                                               "MM":  "sap_functional_agent",
+                                                               "PP":  "sap_functional_agent",
+                                                               "QM":  "sap_functional_agent",
+                                                               "FI":  "sap_functional_agent",
+                                                               "CO":  "sap_functional_agent",
+                                                               "SD":  "sap_functional_agent",
+                                                               "CA-CL":  "sap_functional_agent",
+                                                               "LO-BM":  "sap_functional_agent"
+                                                           }
+                                      }
+                  },
+    "landscapeServers":  {
+                             "SAP_QA":  {
+                                            "enabled":  true,
+                                            "status":  "active",
+                                            "role":  "primary",
+                                            "compatibilityAliases":  [
+                                                                         "SAP_QA"
+                                                                     ]
+                                        },
+                             "SAP_PRD":  {
+                                             "enabled":  false,
+                                             "status":  "reserved",
+                                             "role":  "primary",
+                                             "compatibilityAliases":  [
+
+                                                                      ]
+                                         },
+                             "SAP_DEV_AIX":  {
+                                                 "enabled":  true,
+                                                 "status":  "active",
+                                                 "role":  "dev_superuser",
+                                                 "compatibilityAliases":  [
+                                                                              "SAP_DEV_AIX"
+                                                                          ],
+                                                 "primaryLikeCapabilities":  true
+                                             },
+                             "SAP_DEV_NC":  {
+                                                "enabled":  false,
+                                                "status":  "reserved",
+                                                "role":  "dev_superuser",
+                                                "compatibilityAliases":  [
+
+                                                                         ],
+                                                "primaryLikeCapabilities":  true
+                                            }
+                         }
+}
+
+

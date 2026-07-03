@@ -1,0 +1,307 @@
+project:
+  name: SAP Agent Discovery Platform
+  default_mode: CONFIRMED_ACTION_CAPABLE
+  canonical_agent_model:
+    - sap_orchestrator
+    - sap_technical_agent
+    - sap_functional_agent
+    - sap_security_agent
+    - sap_knowledge_agent
+    - sap_documentation_agent
+  legacy_agent_files_remain_as_functional_lenses: true
+
+sap_servers:
+  primary:
+    name: SAP_QA
+    purpose: Business data, transaction data, customizing read, module analysis, DDIC metadata, and authoritative repository inventory
+    mode: CONFIRMED_ACTION_CAPABLE
+    allowed_agents:
+      - sap_orchestrator
+      - sap_functional_agent
+      - sap_knowledge_agent
+      - sap_security_agent
+      - sap_basis_metadata_agent
+      - sap_data_dictionary_agent
+      - sap_fi_co_agent
+      - sap_mm_agent
+      - sap_sd_agent
+      - sap_pp_agent
+      - sap_pp_pro_agent
+      - sap_pm_agent
+      - sap_qm_agent
+      - sap_classification_agent
+      - sap_wm_ewm_agent
+      - sap_hcm_agent
+      - sap_cross_module_agent
+      - sap_authorization_security_agent
+
+  abap:
+    name: SAP_DEV_AIX
+    purpose: ABAP source code and ABAP-only technical configuration reads
+    mode: CONFIRMED_ACTION_CAPABLE_WITH_RESTRICTED_ABAP_MAINTENANCE
+    allowed_agents:
+      - sap_technical_agent
+      - sap_data_dictionary_agent
+      - sap_abap_technical_agent
+    special_functions:
+      - ZRFC_READ_REPORT
+
+agents:
+  sap_functional_agent:
+    role: >
+      Canonical functional analysis agent for FI/MM/SD/PP/QM/WM/PM, batch, material,
+      classification, procurement, sales, production, quality, and financial-impact evidence.
+    mode: CONFIRMED_ACTION_CAPABLE
+    server: SAP_QA
+    replaces:
+      - sap_fi_co_agent
+      - sap_mm_agent
+      - sap_sd_agent
+      - sap_pp_pro_agent
+      - sap_qm_agent
+      - sap_classification_agent
+      - sap_cross_module_agent
+
+  sap_knowledge_agent:
+    role: >
+      Canonical metadata and knowledge agent for DDIC, repository lookup, semantic layer,
+      table relationships, domains, data elements, and SAP object mapping.
+    mode: CONFIRMED_ACTION_CAPABLE
+    server: SAP_QA
+    replaces:
+      - sap_data_dictionary_agent
+
+  sap_technical_agent:
+    role: >
+      Canonical technical agent for ABAP source, includes, functions, classes,
+      enhancements, SmartForms, dependency chains, and technical risk.
+    mode: CONFIRMED_ACTION_CAPABLE_WITH_RESTRICTED_ABAP_MAINTENANCE
+    server: SAP_DEV_AIX
+    replaces:
+      - sap_abap_technical_agent
+
+  sap_security_agent:
+    role: >
+      Canonical security agent for authorization, sensitive data, auditability,
+      read-only boundaries, and mutation risk.
+    mode: CONFIRMED_ACTION_CAPABLE
+    server: SAP_QA
+
+  sap_documentation_agent:
+    role: >
+      Canonical local-only documentation agent for RICEFW, as-is, and technical
+      specification drafts from aggregated evidence.
+    mode: LOCAL_ONLY
+
+  sap_orchestrator:
+    role: >
+      Receives user questions, determines SAP domains involved, delegates to relevant sub-agents,
+      reconciles findings, and returns a final answer with business and technical context.
+    mode: CONFIRMED_ACTION_CAPABLE
+    may_delegate_only: true
+    can_delegate_to:
+      - sap_data_dictionary_agent
+      - sap_abap_technical_agent
+      - sap_fi_co_agent
+      - sap_mm_agent
+      - sap_sd_agent
+      - sap_pp_agent
+      - sap_pp_pro_agent
+      - sap_pm_agent
+      - sap_qm_agent
+      - sap_classification_agent
+      - sap_cross_module_agent
+
+  sap_data_dictionary_agent:
+    role: >
+      Reads SAP DDIC and authoritative repository metadata from SAP_QA, including
+      table definitions, fields, domains, data elements, foreign keys, search helps, structures,
+      custom Z objects, and technical relationships.
+    mode: CONFIRMED_ACTION_CAPABLE
+    servers:
+      - SAP_QA
+    tools:
+      - sap_table_metadata
+      - sap_field_metadata
+      - sap_domain_values
+      - sap_data_element_metadata
+      - sap_foreign_keys
+      - sap_search_help_metadata
+      - sap_structure_metadata
+      - sap_custom_table_discovery
+      - sap_repository_lookup
+    can_delegate_to:
+      - sap_abap_technical_agent
+
+  sap_abap_technical_agent:
+    role: >
+      Reads ABAP source code from SAP_DEV_AIX via ZRFC_READ_REPORT and reads ABAP-only
+      technical configuration when required. Repository inventory remains authoritative on SAP_QA.
+    mode: CONFIRMED_ACTION_CAPABLE_WITH_RESTRICTED_ABAP_MAINTENANCE
+    server: SAP_DEV_AIX
+    tools:
+      - z_read_abap_report
+      - z_read_abap_include
+      - z_read_function_module
+      - z_read_class
+      - z_search_abap_source
+      - sap_repository_lookup
+      - confirmed_abap_backup_action
+    conditional_actions:
+      server: SAP_DEV_AIX
+      require_signed_one_time_confirmation: true
+      allowed:
+        - edit_abap_source
+        - activate_abap_program
+        - execute_abap_report
+        - execute_transaction
+      denied:
+        - SAP_QA_mutation
+        - transport_change
+        - request_or_cr_creation
+        - non_local_abap_object_change
+        - generic_rfc_mutation
+      edit_requirements:
+        package: "$TMP"
+        cancel_if_request_or_cr_prompted: true
+
+  sap_fi_co_agent:
+    role: >
+      Analyzes SAP FI-CO objects, accounting documents, GL, vendor/customer accounting, cost
+      center, profit center, asset accounting, and controlling flows.
+    mode: CONFIRMED_ACTION_CAPABLE
+    server: SAP_QA
+    primary_tables:
+      - BKPF
+      - BSEG
+      - ACDOCA
+      - SKA1
+      - SKB1
+      - LFA1
+      - KNA1
+      - CSKS
+      - CEPC
+
+  sap_mm_agent:
+    role: >
+      Analyzes procurement, inventory, material master, purchase orders, goods movement, and
+      invoice verification.
+    mode: CONFIRMED_ACTION_CAPABLE
+    server: SAP_QA
+    primary_tables:
+      - MARA
+      - MARC
+      - MAKT
+      - EKKO
+      - EKPO
+      - MKPF
+      - MSEG
+      - MARD
+      - LFA1
+
+  sap_sd_agent:
+    role: >
+      Analyzes sales order, delivery, billing, customer master, pricing, and SD document flow.
+    mode: CONFIRMED_ACTION_CAPABLE
+    server: SAP_QA
+    primary_tables:
+      - VBAK
+      - VBAP
+      - LIKP
+      - LIPS
+      - VBRK
+      - VBRP
+      - VBFA
+      - KNA1
+      - PRCD_ELEMENTS
+
+  sap_cross_module_agent:
+    role: >
+      Analyzes end-to-end process flow across modules, such as procure-to-pay, order-to-cash,
+      inventory-to-FI, and production-to-settlement.
+    mode: CONFIRMED_ACTION_CAPABLE
+    server: SAP_QA
+    can_delegate_to:
+      - sap_fi_co_agent
+      - sap_mm_agent
+      - sap_sd_agent
+      - sap_pp_pro_agent
+      - sap_qm_agent
+      - sap_classification_agent
+      - sap_data_dictionary_agent
+      - sap_abap_technical_agent
+
+  sap_pp_pro_agent:
+    role: >
+      Analyzes production and process-order flows, prioritizing PRO/process orders, production
+      versions, BOM, routing, work centers, components, status, and production characteristic
+      context.
+    mode: CONFIRMED_ACTION_CAPABLE
+    server: SAP_QA
+    primary_tables:
+      - AUFK
+      - AFKO
+      - AFPO
+      - AFVC
+      - AFVV
+      - RESB
+      - JEST
+      - JCDS
+      - MKAL
+      - MAST
+      - STKO
+      - STPO
+      - PLKO
+      - PLPO
+      - PLAS
+      - PLMZ
+      - CRHD
+    can_delegate_to:
+      - sap_data_dictionary_agent
+      - sap_abap_technical_agent
+      - sap_classification_agent
+      - sap_qm_agent
+      - sap_fi_co_agent
+
+  sap_qm_agent:
+    role: >
+      Analyzes inspection lots, usage decisions, inspection characteristic results, sample
+      results, and quality notifications.
+    mode: CONFIRMED_ACTION_CAPABLE
+    server: SAP_QA
+    primary_tables:
+      - QALS
+      - QAVE
+      - QAMR
+      - QASE
+      - QMEL
+    can_delegate_to:
+      - sap_data_dictionary_agent
+      - sap_abap_technical_agent
+      - sap_classification_agent
+      - sap_pp_pro_agent
+
+  sap_classification_agent:
+    role: >
+      Analyzes material, batch, class, and characteristic assignments, including characteristic
+      definitions, allowed values, object-class links, and batch/material characteristic values.
+    mode: CONFIRMED_ACTION_CAPABLE
+    server: SAP_QA
+    primary_tables:
+      - AUSP
+      - CABN
+      - CABNT
+      - CAWN
+      - CAWNT
+      - INOB
+      - KSSK
+      - KLAH
+      - KSML
+      - MCHA
+      - MCH1
+    can_delegate_to:
+      - sap_data_dictionary_agent
+      - sap_abap_technical_agent
+      - sap_pp_pro_agent
+      - sap_qm_agent
+

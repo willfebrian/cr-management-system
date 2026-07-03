@@ -1,0 +1,171 @@
+global_sap_safety_policy:
+  mode: CONFIRMED_ACTION_CAPABLE
+  applies_to:
+    - all_agents
+    - all_servers
+    - all_tools
+  default_requires_confirmation_for:
+    - open_transaction
+    - execute_program_or_report
+    - save
+    - post
+    - create
+    - change
+    - delete
+    - release
+    - execute_update
+    - commit_work
+  prd_production_guard:
+    server: SAP_PRD
+    allowed: smoke_and_read_only
+    confirmed_actions: prohibited
+  default_authoritative_primary_server: SAP_QA
+  explicit_dev_primary_override_allowed:
+    - SAP_DEV_AIX
+    - SAP_DEV_NC
+  abap_maintenance_exception:
+    agents:
+      - sap_abap_technical_agent
+    servers:
+      - SAP_DEV_NC
+      - SAP_DEV_AIX
+    guard: abap_dev_confirmed_action
+    require_signed_one_time_confirmation: true
+    bind_confirmation_to:
+      - agent
+      - server
+      - action
+      - object
+      - parameter_hash
+    allowed_actions:
+      - edit_abap_source
+      - check_abap_program
+      - activate_abap_program
+      - execute_abap_report
+      - execute_transaction
+    hard_denies:
+      - generic_rfc_mutation
+      - transport_change
+      - request_or_cr_creation
+      - non_local_abap_object_change
+      - unconfirmed_action
+    edit_requirements:
+      package: "$TMP"
+      cancel_if_request_or_cr_prompted: true
+
+sap_tool_policy:
+  default: deny
+  allowed_tool_categories:
+    - metadata_read
+    - table_read_limited
+    - source_read
+    - repository_lookup
+    - document_flow_read
+    - customizing_read
+  conditional_tool_categories:
+    confirmed_sap_action_all_servers:
+      - confirmed_open_transaction
+      - confirmed_execute_program
+      - confirmed_press_mutating_gui_action
+    sap_abap_technical_agent_on_dev_servers:
+      - confirmed_abap_dev_action
+
+rfc_guardrails:
+  default_policy: deny
+  allowlist_only: true
+  allowed_rfc:
+    SAP_QA:
+      - RFC_READ_TABLE
+      - DDIF_FIELDINFO_GET
+      - DDIF_TABL_GET
+      - DD_DOMVALUES_GET
+      - RFC_GET_FUNCTION_INTERFACE
+    SAP_PRD:
+      - RFC_READ_TABLE
+      - DDIF_FIELDINFO_GET
+      - DDIF_TABL_GET
+      - DD_DOMVALUES_GET
+      - RFC_GET_FUNCTION_INTERFACE
+    SAP_DEV_AIX:
+      - RFC_READ_TABLE
+      - DDIF_FIELDINFO_GET
+      - DDIF_TABL_GET
+      - DD_DOMVALUES_GET
+      - ZRFC_READ_REPORT
+      - ZRFC_SMARTFORM_GRAPHICS_READ
+      - RFC_GET_FUNCTION_INTERFACE
+      - TR_READ_COMM
+      - TR_READ_GLOBAL_INFO_OF_REQUEST
+      - TMS_MGR_READ_TRANSPORT_REQUEST
+    SAP_DEV_NC:
+      - RFC_READ_TABLE
+      - DDIF_FIELDINFO_GET
+      - DDIF_TABL_GET
+      - DD_DOMVALUES_GET
+      - ZRFC_READ_REPORT
+      - ZRFC_SMARTFORM_GRAPHICS_READ
+      - RFC_GET_FUNCTION_INTERFACE
+    SAP_DEV_AIX_MAINT:
+      - RFC_READ_TABLE
+      - ZRFC_SMARTFORM_GRAPHICS_READ
+    SAP_DEV_NC_MAINT:
+      - RFC_READ_TABLE
+      - ZRFC_SMARTFORM_GRAPHICS_READ
+  aliases:
+    SAP_PRIMARY: SAP_QA
+    SAP_ABAP_SOURCE: SAP_DEV_AIX
+    SAP_ABAP_MAINTENANCE: SAP_DEV_AIX_MAINT
+  abap_source_rfc_read_table_allowlist:
+    - E070
+    - E070CREATE
+    - E07T
+    - E071
+    - E071K
+    - TPALOG
+    - ZMAP_INDICATOR
+    - ZMAP_TYPE
+  blocked_rfc_patterns:
+    - BAPI_*_CREATE*
+    - BAPI_*_CHANGE*
+    - BAPI_*_DELETE*
+    - BAPI_*_POST*
+    - BAPI_*_RELEASE*
+    - BAPI_*_CANCEL*
+    - BAPI_TRANSACTION_COMMIT
+    - BAPI_TRANSACTION_ROLLBACK
+    - RFC_ABAP_INSTALL_AND_RUN
+    - SXPG_COMMAND_EXECUTE
+    - JOB_OPEN
+    - JOB_SUBMIT
+    - JOB_CLOSE
+
+query_limits:
+  default_row_limit: 500
+  max_row_limit: 5000
+  require_where_clause_for_large_tables: true
+  deny_full_extract_by_default: true
+
+transport_request_read_scope:
+  initial_default_server: SAP_DEV_AIX
+  initial_default_owner: TRSTDEV
+  allowed_tables:
+    - E070
+    - E070CREATE
+    - E07T
+    - E071
+    - E071K
+    - TPALOG
+  restrictions:
+    - read_only
+    - require_where_clause
+    - bounded_row_count
+    - no_release_or_transport_mutation
+
+audit_and_observability:
+  log_every_sap_call: true
+  alert_on:
+    - denied_mutation_attempt
+    - query_without_limit
+    - access_to_sensitive_table
+    - unusually_large_extract
+

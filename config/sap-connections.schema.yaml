@@ -1,0 +1,149 @@
+connection_schema:
+  common_required:
+    - CLIENT
+    - USER
+    - PASSWORD
+    - LANG
+  direct_application_server:
+    required:
+      - ASHOST
+      - SYSNR
+      - CLIENT
+      - USER
+      - PASSWORD
+      - LANG
+  load_balanced:
+    required:
+      - MSHOST
+      - R3NAME
+      - GROUP
+      - CLIENT
+      - USER
+      - PASSWORD
+      - LANG
+
+connections:
+  SAP_QA:
+    enabled: true
+    status: active
+    env_prefix: SAP_QA
+    compatibility_env_prefixes:
+      - SAP_PRIMARY
+    description: Active primary connection for business data, DDIC metadata, module analysis, repository inventory, and confirmed SAP GUI/program actions.
+    accepted_connection_modes:
+      - direct_application_server
+      - load_balanced
+    recommended_user: AI_READ_QA
+    may_be_used_by:
+      - sap_orchestrator
+      - sap_functional_agent
+      - sap_knowledge_agent
+      - sap_security_agent
+      - sap_data_dictionary_agent
+      - module_agents
+
+  SAP_PRD:
+    enabled: true
+    status: active
+    env_prefix: SAP_PRD
+    description: Live production connection. Use only for smoke/read-only access; confirmed actions and ABAP object maintenance are prohibited.
+    accepted_connection_modes:
+      - direct_application_server
+      - load_balanced
+    recommended_user: AI_READ_PRD
+    may_be_used_by:
+      - sap_orchestrator
+      - sap_functional_agent
+      - sap_knowledge_agent
+      - sap_security_agent
+
+  SAP_DEV_AIX:
+    enabled: true
+    status: active
+    env_prefix: SAP_DEV_AIX
+    compatibility_env_prefixes:
+      - SAP_ABAP
+    description: Active DEV superuser-capable server for ABAP/source/technical, business/DDIC/repository reads by explicit override, and confirmed actions. ABAP maintenance is allowed only with signed one-time confirmation and local object policy.
+    accepted_connection_modes:
+      - direct_application_server
+      - load_balanced
+    recommended_user: AI_READ_DEV_AIX
+    may_be_used_by:
+      - sap_technical_agent
+      - sap_abap_technical_agent
+    required_custom_functions:
+      - ZRFC_READ_REPORT
+
+  SAP_DEV_AIX_MAINT:
+    enabled: true
+    status: active
+    env_prefix: SAP_DEV_AIX_MAINT
+    fallback_env_prefixes:
+      - SAP_ABAP_MAINT
+      - SAP_DEV_AIX
+      - SAP_ABAP
+    description: Dedicated DEV AIX maintenance profile for confirmed ABAP actions. If missing, guarded fallback may use SAP_DEV_AIX only after user approval and guard validation.
+    accepted_connection_modes:
+      - direct_application_server
+      - load_balanced
+    recommended_user: AI_MAINT_DEV_AIX
+    restricted_to_server_role: SAP_DEV_AIX
+    may_be_used_by:
+      - sap_abap_technical_agent
+    requires_signed_one_time_confirmation: true
+    transport_authorization_prohibited: true
+    local_object_only: true
+    required_package: "$TMP"
+    request_or_cr_creation_prohibited: true
+
+  SAP_DEV_NC:
+    enabled: true
+    status: active
+    env_prefix: SAP_DEV_NC
+    description: Reserved DEV superuser-capable server for ABAP/source/maintenance plus business/DDIC/repository reads after credentials and enablement are provided.
+    accepted_connection_modes:
+      - direct_application_server
+      - load_balanced
+    recommended_user: AI_READ_DEV_NC
+    may_be_used_by:
+      - sap_technical_agent
+      - sap_abap_technical_agent
+    required_custom_functions:
+      - ZRFC_READ_REPORT
+
+  SAP_DEV_NC_MAINT:
+    enabled: true
+    status: active
+    env_prefix: SAP_DEV_NC_MAINT
+    fallback_env_prefixes:
+      - SAP_DEV_NC
+    description: Reserved DEV NC maintenance profile until credentials are provided.
+    accepted_connection_modes:
+      - direct_application_server
+      - load_balanced
+    recommended_user: AI_MAINT_DEV_NC
+    restricted_to_server_role: SAP_DEV_NC
+    requires_signed_one_time_confirmation: true
+    transport_authorization_prohibited: true
+    local_object_only: true
+    required_package: "$TMP"
+    request_or_cr_creation_prohibited: true
+
+aliases:
+  SAP_PRIMARY: SAP_QA
+  SAP_ABAP_SOURCE: SAP_DEV_AIX
+  SAP_ABAP_MAINTENANCE: SAP_DEV_AIX_MAINT
+
+validation_rules:
+  - name: reserved_servers_inactive
+    requirement: SAP_DEV_NC is active after credential validation. SAP_PRD is active for smoke/read-only access only; confirmed actions and ABAP maintenance are prohibited.
+  - name: confirmed_actions_required
+    requirement: Save, Post, Create, Change, Delete, Release, Execute Update, and similar SAP GUI/program actions require one-time explicit confirmation on allowed non-PRD servers; SAP_PRD confirmed actions are prohibited.
+  - name: abap_maintenance_dev_only
+    requirement: ABAP edit/check/activate is allowed only on SAP_DEV_NC and SAP_DEV_AIX, never on SAP_QA or SAP_PRD.
+  - name: local_object_only_abap_changes
+    requirement: Every changed ABAP object must remain a Local Object ($TMP); cancel if SAP requests, assigns, or would create a Request or CR.
+  - name: no_password_commit
+    requirement: Real passwords must only exist in local .env or secret storage, never in committed config files.
+
+

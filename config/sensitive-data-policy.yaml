@@ -1,0 +1,42 @@
+sensitive_policy:
+  default_action: allow_with_trace
+
+  denied_tables:
+    - PA0002
+    - PA0006
+    - PA0008
+    - PCL1
+    - PCL2
+    - USR02
+    - USR21
+
+  restricted_tables:
+    - KNA1
+    - LFA1
+    - ADRC
+    - ADR6
+    - BNKA
+    - T012K
+    - KONV
+    - PRCD_ELEMENTS
+
+  sensitive_field_patterns:
+    - BANK
+    - IBAN
+    - STCD
+    - TAX
+    - TEL
+    - SMTP
+    - EMAIL
+    - PERNR
+    - SSN
+    - PASS
+    - PWD
+
+  requirements_for_restricted_access:
+    - explicit_business_purpose
+    - narrow_where_clause
+    - row_limit
+    - audit_log
+    - no_mass_extract
+

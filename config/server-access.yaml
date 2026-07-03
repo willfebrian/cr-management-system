@@ -1,0 +1,223 @@
+servers:
+  SAP_QA:
+    enabled: true
+    status: active
+    connection_env_prefix: SAP_QA
+    compatibility_aliases:
+      - SAP_PRIMARY
+    mode: CONFIRMED_ACTION_CAPABLE
+    purpose:
+      - business_data
+      - transaction_data
+      - master_data
+      - customizing_read
+      - ddic_metadata
+      - module_analysis
+      - authoritative_repository_inventory
+    agents:
+      - sap_orchestrator
+      - sap_functional_agent
+      - sap_knowledge_agent
+      - sap_security_agent
+      - sap_basis_metadata_agent
+      - sap_data_dictionary_agent
+      - sap_fi_co_agent
+      - sap_mm_agent
+      - sap_sd_agent
+      - sap_pp_agent
+      - sap_pp_pro_agent
+      - sap_pm_agent
+      - sap_qm_agent
+      - sap_classification_agent
+      - sap_wm_ewm_agent
+      - sap_hcm_agent
+      - sap_cross_module_agent
+      - sap_authorization_security_agent
+    allowed_operations:
+      - read_table_limited
+      - read_metadata
+      - read_customizing
+      - read_document_flow
+      - lookup_repository
+      - confirmed_open_transaction
+      - confirmed_execute_program
+      - confirmed_press_mutating_gui_action
+
+  SAP_PRD:
+    enabled: true
+    status: active
+    connection_env_prefix: SAP_PRD
+    mode: READ_ONLY_PRODUCTION
+    purpose:
+      - business_data
+      - transaction_data
+      - master_data
+      - customizing_read
+      - ddic_metadata
+      - module_analysis
+      - authoritative_repository_inventory
+      - production_smoke_read_only
+    allowed_operations:
+      - read_table_limited
+      - read_metadata
+      - read_customizing
+      - lookup_repository
+    denied_operations:
+      - confirmed_open_transaction
+      - confirmed_execute_program
+      - confirmed_press_mutating_gui_action
+      - save
+      - post
+      - create
+      - change
+      - delete
+      - release
+      - execute_update
+      - edit_abap_source
+      - check_abap_program
+      - activate_abap_program
+
+  SAP_DEV_AIX:
+    enabled: true
+    status: active
+    connection_env_prefix: SAP_DEV_AIX
+    maintenance_connection_env_prefix: SAP_DEV_AIX_MAINT
+    compatibility_aliases:
+      - SAP_ABAP_SOURCE
+      - SAP_ABAP_MAINTENANCE via SAP_DEV_AIX_MAINT
+    mode: CONFIRMED_ACTION_CAPABLE_WITH_RESTRICTED_ABAP_MAINTENANCE
+    purpose:
+      - abap_source_read
+      - abap_only_technical_configuration_read
+      - confirmed_abap_maintenance
+      - confirmed_dev_transactions
+    agents:
+      - sap_technical_agent
+      - sap_abap_technical_agent
+    allowed_operations:
+      - read_abap_source
+      - read_abap_only_technical_configuration
+      - confirmed_edit_abap_source
+      - confirmed_check_abap_program
+      - confirmed_activate_abap_program
+      - confirmed_execute_abap_report
+      - confirmed_execute_transaction
+      - confirmed_press_mutating_gui_action
+    conditional_action_policy:
+      agent: sap_abap_technical_agent
+      require_signed_one_time_confirmation: true
+      transport_allowed: false
+      local_object_only: true
+      required_package: "$TMP"
+      request_or_cr_creation_allowed: false
+      generic_rfc_mutation_allowed: false
+
+  SAP_DEV_NC:
+    enabled: true
+    status: active
+    connection_env_prefix: SAP_DEV_NC
+    maintenance_connection_env_prefix: SAP_DEV_NC_MAINT
+    mode: CONFIRMED_ACTION_CAPABLE_WITH_RESTRICTED_ABAP_MAINTENANCE_WHEN_ENABLED
+    purpose:
+      - abap_source_read
+      - abap_only_technical_configuration_read
+      - confirmed_abap_maintenance
+      - confirmed_dev_transactions
+    allowed_operations:
+      - read_abap_source_when_enabled
+      - confirmed_edit_abap_source_when_enabled
+      - confirmed_check_abap_program_when_enabled
+      - confirmed_activate_abap_program_when_enabled
+      - confirmed_execute_abap_report_when_enabled
+      - confirmed_execute_transaction_when_enabled
+    conditional_action_policy:
+      agent: sap_abap_technical_agent
+      require_signed_one_time_confirmation: true
+      transport_allowed: false
+      local_object_only: true
+      required_package: "$TMP"
+      request_or_cr_creation_allowed: false
+      generic_rfc_mutation_allowed: false
+
+confirmed_sap_action_policy:
+  default_requires_confirmation: true
+  confirmation_scope: one_time_exact_action
+  applies_to:
+    - all_enabled_servers
+    - opening_or_running_any_tcode
+    - executing_any_program_or_report
+    - pressing_save_post_create_change_delete_release_execute_update_or_similar
+  required_confirmation_fields:
+    - server
+    - client
+    - tcode_or_program
+    - screen_or_context
+    - exact_button_or_action
+    - intended_business_or_technical_effect
+  still_forbidden_without_separate_abap_maintenance_policy:
+    - transport_or_cr_creation
+    - generic_mutating_rfc_or_bapi
+    - background_job_creation
+  abap_maintenance_policy_reference: SAP_DEV_AIX.conditional_action_policy / SAP_DEV_NC.conditional_action_policy
+
+aliases:
+  SAP_PRIMARY: SAP_QA
+  SAP_ABAP_SOURCE: SAP_DEV_AIX
+  SAP_ABAP_MAINTENANCE: SAP_DEV_AIX_MAINT
+
+agent_server_rules:
+  sap_orchestrator:
+    direct_server_access:
+      - SAP_QA
+    delegate_for_abap_source: sap_technical_agent
+
+  sap_functional_agent:
+    direct_server_access:
+      - SAP_QA
+    delegate_for_metadata: sap_knowledge_agent
+    delegate_for_source_code: sap_technical_agent
+
+  sap_knowledge_agent:
+    direct_server_access:
+      - SAP_QA
+    source_code_access: false
+    delegate_for_source_code: sap_technical_agent
+
+  sap_security_agent:
+    direct_server_access:
+      - SAP_QA
+    source_code_access: false
+    delegate_for_source_code: sap_technical_agent
+
+  sap_technical_agent:
+    direct_server_access:
+      - SAP_QA
+      - SAP_DEV_AIX
+    source_code_access: true
+    metadata_inventory_server: SAP_QA
+    abap_source_server: SAP_DEV_AIX
+
+  sap_data_dictionary_agent:
+    direct_server_access:
+      - SAP_QA
+    source_code_access: false
+    delegate_for_source_code: sap_abap_technical_agent
+
+  sap_abap_technical_agent:
+    direct_server_access:
+      - SAP_QA
+      - SAP_DEV_AIX
+    source_code_access: true
+    metadata_inventory_server: SAP_QA
+    abap_source_server: SAP_DEV_AIX
+    conditional_action_server: SAP_DEV_AIX
+    confirmation_required_for_every_action: true
+    changed_objects_must_be_local: true
+    cancel_if_request_or_cr_prompted: true
+
+  module_agents:
+    direct_server_access:
+      - SAP_QA
+    delegate_for_metadata: sap_data_dictionary_agent
+    delegate_for_source_code: sap_abap_technical_agent
+

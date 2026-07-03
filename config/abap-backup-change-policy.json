@@ -1,0 +1,46 @@
+{
+  "version": "2.0.0",
+  "enabled": true,
+  "agent": "sap_abap_technical_agent",
+  "allowedServers": [
+    "SAP_DEV_AIX",
+    "SAP_DEV_AIX_MAINT",
+    "SAP_DEV_NC",
+    "SAP_DEV_NC_MAINT"
+  ],
+  "reservedServersInitiallyDisabled": [
+    "SAP_DEV_NC",
+    "SAP_DEV_NC_MAINT"
+  ],
+  "qaAndPrdAbapMaintenanceAllowed": false,
+  "requireExplicitUserConfirmation": true,
+  "requireConfirmationId": true,
+  "signedConfirmationRequired": true,
+  "oneTimeConfirmationRequired": true,
+  "bindConfirmationToParameterHash": true,
+  "maxConfirmationAgeMinutes": 30,
+  "allowedActions": [
+    "edit_abap_source",
+    "check_abap_program",
+    "activate_abap_program",
+    "execute_abap_report",
+    "execute_transaction"
+  ],
+  "genericRfcMutationAllowed": false,
+  "transportAllowed": false,
+  "localObjectOnly": true,
+  "requiredLocalPackage": "$TMP",
+  "requestOrCrCreationAllowed": false,
+  "restrictions": [
+    "Never perform ABAP edit/check/activate on SAP_QA or SAP_PRD.",
+    "Never perform an action for another agent.",
+    "Never reuse confirmation for a different object or action.",
+    "Save every changed ABAP object as Local Object ($TMP).",
+    "Cancel the action if SAP requests, assigns, or would create a transport Request or CR.",
+    "Never create, assign, release, or transport a Request or CR.",
+    "Preflight and post-verify authoritative SAP object state before reporting a repository change as successful.",
+    "Business-data transactions on any enabled server still require explicit one-time confirmation through the SAP action confirmation guard.",
+    "Always record the confirmed action, target object, server, timestamp, and result in the audit trail."
+  ]
+}
+

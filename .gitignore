@@ -1,0 +1,32 @@
+node_modules/
+dist/
+.vite/
+.env
+.env.*
+!.env.example
+npm-debug.log*
+
+# Runtime logs and local outputs
+logs/
+*.log
+_noderfc.log
+dev_rfc.log
+outputs/
+
+# Local spreadsheet/source-data files
+*.xls
+*.xlsx
+*.xlsm
+*.csv
+
+# Local Codex/agent metadata
+.agents/
+.codex/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+
+# Accidental shell scratch files
+console.log(JSON.stringify(m.listSapCrSystems()
+[{]console.error(e.message)

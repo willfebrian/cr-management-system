@@ -1,0 +1,72 @@
+{
+  "version": "0.1.0",
+  "schemas": {
+    "abapTechnicalEvidence": {
+      "required": ["agent", "object", "mapping", "programs", "tableReads", "databaseWrites", "bapiCalls", "standardFunctionCalls", "risk"],
+      "properties": {
+        "agent": "string",
+        "object": "string",
+        "mapping": "object",
+        "programs": "array",
+        "includes": "array",
+        "submitPrograms": "array",
+        "callTransactions": "array",
+        "explicitTcodes": "array",
+        "bapiCalls": "array",
+        "standardFunctionCalls": "array",
+        "zFunctionCalls": "array",
+        "tableReads": "array",
+        "databaseWrites": "array",
+        "transactionSignals": "array",
+        "risk": "object",
+        "sourceFiles": "array"
+      }
+    },
+    "ddicEvidence": {
+      "required": ["agent", "object", "tables", "openItems"],
+      "properties": {
+        "agent": "string",
+        "object": "string",
+        "tables": "array",
+        "openItems": "array",
+        "sourceFiles": "array"
+      }
+    },
+    "moduleEvidence": {
+      "required": ["agent", "object", "module", "confidence", "rationale"],
+      "properties": {
+        "agent": "string",
+        "object": "string",
+        "module": "string",
+        "confidence": "string",
+        "rationale": "array",
+        "standardTcodeEquivalents": "array",
+        "tablesUsed": "array",
+        "openItems": "array",
+        "sourceFiles": "array"
+      }
+    },
+    "crossModuleEvidence": {
+      "required": ["agent", "object", "modules", "primaryModule", "rationale"],
+      "properties": {
+        "agent": "string",
+        "object": "string",
+        "modules": "array",
+        "primaryModule": "string",
+        "rationale": "array",
+        "conflicts": "array",
+        "sourceFiles": "array"
+      }
+    },
+    "documentationEvidence": {
+      "required": ["agent", "object", "recommendedDocuments", "classification"],
+      "properties": {
+        "agent": "string",
+        "object": "string",
+        "recommendedDocuments": "array",
+        "classification": "object",
+        "sourceFiles": "array"
+      }
+    }
+  }
+}

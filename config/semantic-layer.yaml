@@ -1,0 +1,278 @@
+modules:
+  FI:
+    description: Financial accounting metadata and document discovery.
+    tables:
+      BKPF:
+        role: accounting_document_header
+        large_table: true
+        key_fields:
+          - MANDT
+          - BUKRS
+          - BELNR
+          - GJAHR
+        mandatory_filters_any:
+          - [BUKRS, BELNR, GJAHR]
+          - [BUKRS, GJAHR, BUDAT]
+        required_context:
+          - company_code
+          - fiscal_year
+      BSEG:
+        role: accounting_document_line_item
+        large_table: true
+        key_fields:
+          - MANDT
+          - BUKRS
+          - BELNR
+          - GJAHR
+          - BUZEI
+        mandatory_filters_any:
+          - [BUKRS, BELNR, GJAHR]
+        required_context:
+          - company_code
+          - fiscal_year
+    join_rules:
+      - from: BKPF
+        to: BSEG
+        keys:
+          - MANDT
+          - BUKRS
+          - BELNR
+          - GJAHR
+
+  MM:
+    description: Materials management metadata and procurement/inventory discovery.
+    tables:
+      EKKO:
+        role: purchase_order_header
+        large_table: true
+        key_fields:
+          - MANDT
+          - EBELN
+        mandatory_filters_any:
+          - [EBELN]
+          - [BUKRS, BEDAT]
+          - [EKORG, BEDAT]
+      EKPO:
+        role: purchase_order_item
+        large_table: true
+        key_fields:
+          - MANDT
+          - EBELN
+          - EBELP
+        mandatory_filters_any:
+          - [EBELN]
+      MARA:
+        role: material_master_general
+        large_table: true
+        key_fields:
+          - MANDT
+          - MATNR
+        mandatory_filters_any:
+          - [MATNR]
+          - [MTART]
+      MSEG:
+        role: material_document_item
+        large_table: true
+        key_fields:
+          - MANDT
+          - MBLNR
+          - MJAHR
+          - ZEILE
+        mandatory_filters_any:
+          - [MBLNR, MJAHR]
+          - [MATNR, WERKS]
+    join_rules:
+      - from: EKKO
+        to: EKPO
+        keys:
+          - MANDT
+          - EBELN
+
+  SD:
+    description: Sales and distribution metadata and order-to-cash discovery.
+    tables:
+      VBAK:
+        role: sales_document_header
+        large_table: true
+        key_fields:
+          - MANDT
+          - VBELN
+        mandatory_filters_any:
+          - [VBELN]
+          - [VKORG, ERDAT]
+      VBAP:
+        role: sales_document_item
+        large_table: true
+        key_fields:
+          - MANDT
+          - VBELN
+          - POSNR
+        mandatory_filters_any:
+          - [VBELN]
+      VBRK:
+        role: billing_document_header
+        large_table: true
+        key_fields:
+          - MANDT
+          - VBELN
+        mandatory_filters_any:
+          - [VBELN]
+          - [VKORG, FKDAT]
+      VBRP:
+        role: billing_document_item
+        large_table: true
+        key_fields:
+          - MANDT
+          - VBELN
+          - POSNR
+        mandatory_filters_any:
+          - [VBELN]
+    join_rules:
+      - from: VBAK
+        to: VBAP
+        keys:
+          - MANDT
+          - VBELN
+      - from: VBRK
+        to: VBRP
+        keys:
+          - MANDT
+          - VBELN
+
+  PP:
+    description: Production planning metadata for production orders, BOMs, routings, and work centers.
+    tables:
+      AFKO:
+        role: production_order_header
+        large_table: true
+        key_fields: [MANDT, AUFNR]
+        mandatory_filters_any:
+          - [AUFNR]
+          - [DISPO, GSTRP]
+      AFPO:
+        role: production_order_item
+        large_table: true
+        key_fields: [MANDT, AUFNR, POSNR]
+        mandatory_filters_any:
+          - [AUFNR]
+          - [MATNR, DWERK]
+      MAST:
+        role: material_to_bom_link
+        large_table: true
+        key_fields: [MANDT, MATNR, WERKS, STLAN, STLNR]
+        mandatory_filters_any:
+          - [MATNR, WERKS]
+          - [STLNR]
+      STKO:
+        role: bom_header
+        large_table: true
+        key_fields: [MANDT, STLTY, STLNR, STLAL, STKOZ]
+        mandatory_filters_any:
+          - [STLTY, STLNR]
+      STPO:
+        role: bom_item
+        large_table: true
+        key_fields: [MANDT, STLTY, STLNR, STLKN, STPOZ]
+        mandatory_filters_any:
+          - [STLTY, STLNR]
+      PLKO:
+        role: routing_header
+        large_table: true
+        key_fields: [MANDT, PLNTY, PLNNR, PLNAL, ZAEHL]
+        mandatory_filters_any:
+          - [PLNTY, PLNNR]
+      PLPO:
+        role: routing_operation
+        large_table: true
+        key_fields: [MANDT, PLNTY, PLNNR, PLNKN, ZAEHL]
+        mandatory_filters_any:
+          - [PLNTY, PLNNR]
+      CRHD:
+        role: work_center_header
+        large_table: true
+        key_fields: [MANDT, OBJTY, OBJID]
+        mandatory_filters_any:
+          - [OBJTY, OBJID]
+          - [ARBPL, WERKS]
+
+  QM:
+    description: Quality management metadata for inspection lots, usage decisions, results, and notifications.
+    tables:
+      QALS:
+        role: inspection_lot_record
+        large_table: true
+        key_fields: [PRUEFLOS]
+        mandatory_filters_any:
+          - [PRUEFLOS]
+          - [MATNR, WERK]
+      QAVE:
+        role: usage_decision
+        large_table: true
+        key_fields: [PRUEFLOS]
+        mandatory_filters_any:
+          - [PRUEFLOS]
+      QAMR:
+        role: inspection_characteristic_results
+        large_table: true
+        key_fields: [PRUEFLOS, VORGLFNR, MERKNR]
+        mandatory_filters_any:
+          - [PRUEFLOS]
+      QASE:
+        role: sample_results
+        large_table: true
+        key_fields: [PRUEFLOS, VORGLFNR, MERKNR, PROBENR]
+        mandatory_filters_any:
+          - [PRUEFLOS]
+      QMEL:
+        role: quality_notification
+        large_table: true
+        key_fields: [MANDT, QMNUM]
+        mandatory_filters_any:
+          - [QMNUM]
+          - [QMART, ERDAT]
+
+  CO:
+    description: Controlling metadata for CO documents, cost centers, and profit centers.
+    tables:
+      COBK:
+        role: co_document_header
+        large_table: true
+        key_fields: [MANDT, KOKRS, BELNR]
+        mandatory_filters_any:
+          - [KOKRS, BELNR]
+          - [KOKRS, BUDAT]
+      COEP:
+        role: co_line_item_actual
+        large_table: true
+        key_fields: [MANDT, KOKRS, BELNR, BUZEI]
+        mandatory_filters_any:
+          - [KOKRS, BELNR]
+          - [KOKRS, OBJNR]
+      CSKS:
+        role: cost_center_master
+        large_table: true
+        key_fields: [MANDT, KOKRS, KOSTL, DATBI]
+        mandatory_filters_any:
+          - [KOKRS, KOSTL]
+          - [KOKRS]
+      CSKT:
+        role: cost_center_text
+        large_table: true
+        key_fields: [MANDT, SPRAS, KOKRS, KOSTL, DATBI]
+        mandatory_filters_any:
+          - [KOKRS, KOSTL]
+          - [KOKRS, SPRAS]
+      CEPC:
+        role: profit_center_master
+        large_table: true
+        key_fields: [MANDT, PRCTR, DATBI, KOKRS]
+        mandatory_filters_any:
+          - [KOKRS, PRCTR]
+          - [KOKRS]
+      CEPCT:
+        role: profit_center_text
+        large_table: true
+        key_fields: [MANDT, SPRAS, PRCTR, DATBI, KOKRS]
+        mandatory_filters_any:
+          - [KOKRS, PRCTR]
+          - [KOKRS, SPRAS]

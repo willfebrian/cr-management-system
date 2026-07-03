@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "requestId",
+    "agent",
+    "object",
+    "phase",
+    "status",
+    "summary",
+    "findings",
+    "classification",
+    "risks",
+    "openItems",
+    "sourceFiles",
+    "safetyAttestation",
+    "inputManifestHash"
+  ],
+  "properties": {
+    "requestId": { "type": "string" },
+    "agent": { "type": "string" },
+    "object": { "type": "string" },
+    "phase": {
+      "type": "string",
+      "enum": ["specialist", "reconciliation", "documentation"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ok", "needs_review", "insufficient_evidence", "failed"]
+    },
+    "summary": { "type": "string" },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["claim", "evidence", "confidence"],
+        "properties": {
+          "claim": { "type": "string" },
+          "evidence": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["high", "medium", "low"]
+          }
+        }
+      }
+    },
+    "classification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "modules",
+        "primaryModule",
+        "ricefwCode",
+        "ricefwDescription",
+        "applicationType",
+        "applicationRole",
+        "standardTcodeEquivalents"
+      ],
+      "properties": {
+        "modules": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "primaryModule": { "type": "string" },
+        "ricefwCode": { "type": "string" },
+        "ricefwDescription": { "type": "string" },
+        "applicationType": { "type": "string" },
+        "applicationRole": { "type": "string" },
+        "standardTcodeEquivalents": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "openItems": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "sourceFiles": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "safetyAttestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["readOnly", "noSapCredentials", "noSapCalls", "noFileEdits"],
+      "properties": {
+        "readOnly": { "type": "boolean" },
+        "noSapCredentials": { "type": "boolean" },
+        "noSapCalls": { "type": "boolean" },
+        "noFileEdits": { "type": "boolean" }
+      }
+    },
+    "inputManifestHash": {
+      "type": "string"
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "name": "cr-management-system",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "tsx watch src/server/index.ts",
+    "dev:client": "vite --host 127.0.0.1 --port 5173",
+    "build": "tsc --noEmit && vite build",
+    "start": "tsx src/server/index.ts",
+    "serve": "npm run build && npm run start",
+    "db:schema": "node scripts/apply-schema.mjs",
+    "db:migrate-schema": "node scripts/migrate-to-app-schema.mjs",
+    "db:migrate-source-aware": "node scripts/migrate-source-aware-keys.mjs",
+    "db:refresh-lifecycle-cache": "node scripts/refresh-lifecycle-cache.mjs",
+    "sap:refresh-transport-logs": "node scripts/refresh-transport-logs.mjs",
+    "db:check": "node scripts/check-db.mjs",
+    "sync:summary": "node scripts/sync-summary.mjs",
+    "issue:import-excel": "node scripts/import-issue-excel.mjs",
+    "issue:stage-excel-2023": "node scripts/stage-issue-excel-2023.mjs",
+    "issue:commit-excel-2023": "node scripts/commit-corrected-issue-2023.mjs",
+    "issue:normalize-people": "node scripts/normalize-issue-people.mjs",
+    "windows:install-startup": "powershell -ExecutionPolicy Bypass -File scripts/install-windows-startup-task.ps1",
+    "windows:install-startup-shortcut": "powershell -ExecutionPolicy Bypass -File scripts/install-windows-startup-shortcut.ps1"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "lucide-react": "^0.468.0",
+    "node-rfc": "^3.3.1",
+    "pg": "^8.13.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "recharts": "^3.9.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.10",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2"
+  }
+}
