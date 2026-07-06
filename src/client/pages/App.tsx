@@ -890,7 +890,12 @@ function Report({
               <h2>{displayRequest?.trkorr || "Select CR"}</h2>
               <p>{displayRequest?.description}</p>
             </div>
-            {displayRequest ? <Status value={displayLifecycleStatusFromDetail(detail, displayRequest.lifecycle_status || displayRequest.status_group)} /> : null}
+            <div className="detail-header-actions">
+              {displayRequest ? <Status value={displayLifecycleStatusFromDetail(detail, displayRequest.lifecycle_status || displayRequest.status_group)} /> : null}
+              <button className="detail-icon-close" type="button" onClick={onCloseDetail} aria-label="Close detail">
+                <X size={18} />
+              </button>
+            </div>
           </div>
           <div className="meta-grid">
             <span>Owner<strong>{displayRequest?.owner || "-"}</strong></span>
@@ -1083,22 +1088,24 @@ function IssueDisplay({
 
         {hasDetail ? (
         <section className="detail-panel report-detail-panel issue-detail-panel">
-          <div className="detail-heading">
-            <div>
-              <h2>{selectedIssue?.issue_key || "Select Issue"}</h2>
-              <p>{selectedIssue?.issue_name}</p>
-            </div>
-            <div className="detail-header-actions">
-              {selectedIssue ? <Status value={selectedIssue.issue_status} /> : null}
-              {selectedIssue ? (
-                <button className="secondary detail-change-button" type="button" onClick={() => onChangeIssue(selectedIssue.id)}>
-                  <PencilLine size={16} /> Change Issue
+          <div className="detail-heading issue-summary-heading">
+            <div className="issue-summary-toprow">
+              <div className="issue-summary-topline">
+                <h2>{selectedIssue?.issue_key || "Select Issue"}</h2>
+                {selectedIssue ? <Status value={selectedIssue.issue_status} /> : null}
+              </div>
+              <div className="detail-header-actions">
+                {selectedIssue ? (
+                  <button className="secondary detail-change-button" type="button" onClick={() => onChangeIssue(selectedIssue.id)}>
+                    <PencilLine size={16} /> Change Issue
+                  </button>
+                ) : null}
+                <button className="detail-icon-close" type="button" onClick={onCloseDetail} aria-label="Close detail">
+                  <X size={18} />
                 </button>
-              ) : null}
-              <button className="detail-icon-close" type="button" onClick={onCloseDetail} aria-label="Close detail">
-                <X size={18} />
-              </button>
+              </div>
             </div>
+            <p className="issue-summary-description">{selectedIssue?.issue_name}</p>
           </div>
 
           <div className="meta-grid">

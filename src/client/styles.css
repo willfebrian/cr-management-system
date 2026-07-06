@@ -1038,18 +1038,30 @@ button {
   text-decoration: underline;
 }
 
+.template-paragraph-list,
 .template-object-list,
 .template-object-list ul {
-  margin: 2px 0 0 20px;
-  padding: 0;
+  margin: 3px 0 3px 20px;
+  padding-left: 18px;
 }
 
-.template-object-list > li {
+.template-paragraph-list.level-1,
+.template-object-list ul {
+  margin-left: 18px;
+}
+
+.template-paragraph-list.level-2,
+.template-object-list ul ul {
+  margin-left: 26px;
+}
+
+.template-paragraph-list li,
+.template-object-list li {
   margin: 2px 0;
 }
 
-.template-object-list ul li {
-  margin: 1px 0;
+.template-object-list strong {
+  font-weight: 700;
 }
 
 .template-list-line {
@@ -1088,6 +1100,23 @@ button {
   content: counter(templateOrdered) ".";
   position: absolute;
   left: 0;
+}
+
+.template-preview-body .template-list-line.bulleted::before {
+  content: "\2022";
+}
+
+.template-preview-body .template-list-line.level-1.bulleted::before,
+.template-preview-body .template-list-line.level-2.bulleted::before {
+  content: "\25E6";
+}
+
+.template-object-group {
+  margin-top: 4px;
+}
+
+.template-object-item {
+  line-height: 1.35;
 }
 
 .phase-title {
@@ -1533,8 +1562,10 @@ button {
 }
 
 .issue-detail-panel .detail-heading {
-  padding-right: 0;
+  padding: 0 0 16px;
+  margin-bottom: 14px;
   align-items: flex-start;
+  border-bottom: 1px solid #e3eaf2;
 }
 
 .issue-detail-panel .detail-heading > div:first-child {
@@ -1544,7 +1575,60 @@ button {
 
 .issue-detail-panel .detail-heading p {
   max-width: none;
-  margin-bottom: 22px;
+  margin-bottom: 0;
+}
+
+.issue-summary-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.issue-summary-toprow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  width: 100%;
+}
+
+.issue-summary-topline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.issue-summary-topline h2 {
+  margin: 0;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.issue-summary-topline .status {
+  flex: 0 0 auto;
+}
+
+.issue-summary-description {
+  width: 100%;
+  margin-top: 0;
+  color: #0b1725;
+  font-size: 18px;
+  line-height: 1.35;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+@media (max-width: 1100px) {
+  .issue-summary-toprow {
+    flex-direction: column;
+  }
+
+  .issue-summary-heading .detail-header-actions {
+    justify-content: flex-start;
+  }
 }
 
 .detail-header-actions {
@@ -1559,18 +1643,18 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 32px;
-  padding: 0 12px;
+  height: 36px;
+  padding: 0 14px;
   white-space: nowrap;
 }
 
 .detail-icon-close {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   border: 1px solid #d8e0ea;
-  border-radius: 999px;
+  border-radius: 8px;
   background: #fff;
   color: #526783;
   cursor: pointer;
@@ -1583,7 +1667,6 @@ button {
 }
 
 .detail-heading {
-  padding-right: 34px;
   display: flex;
   justify-content: space-between;
   gap: 12px;
@@ -1591,22 +1674,7 @@ button {
 }
 
 .detail-close {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  float: right;
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  margin: -4px -8px 0 8px;
-  border: 1px solid #d8e0ea;
-  border-radius: 999px;
-  background: #fff;
-  color: #526783;
-  font-size: 20px;
-  line-height: 1;
-  cursor: pointer;
+  display: none;
 }
 
 .detail-close:hover {
@@ -1616,12 +1684,12 @@ button {
 
 .detail-heading h2 {
   font-size: 25px;
-  margin-bottom: 24px;
+  margin-bottom: 12px;
 }
 
 .detail-heading p {
-  margin: 0 0 22px;
-  max-width: 430px;
+  margin: 0 0 16px;
+  max-width: min(100%, 560px);
   line-height: 1.35;
 }
 
@@ -1831,7 +1899,7 @@ th {
 .resizable-header > span {
   display: block;
   overflow: hidden;
-  padding-right: 8px;
+  padding-right: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1839,9 +1907,9 @@ th {
 .column-resize-handle {
   position: absolute;
   top: 0;
-  right: -4px;
+  right: -6px;
   z-index: 3;
-  width: 8px;
+  width: 12px;
   height: 100%;
   border: 0;
   border-radius: 0;
@@ -1854,10 +1922,10 @@ th {
   position: absolute;
   top: 8px;
   bottom: 8px;
-  left: 3px;
+  left: 5px;
   width: 2px;
   border-radius: 999px;
-  background: transparent;
+  background: #dbe3ec;
 }
 
 .column-resize-handle:hover::after,
