@@ -284,6 +284,52 @@ button {
   background: #0f766e;
 }
 
+.funnel-item i.warning-bar {
+  background: #e0a11b;
+}
+
+.funnel-item i.danger-bar {
+  background: #b91c1c;
+}
+
+.dashboard-section-title {
+  grid-column: 1 / -1;
+  margin: 8px 0 -4px;
+  font-size: 20px;
+}
+
+.issue-insight-panel {
+  min-height: 260px;
+}
+
+.issue-insight-panel h2 {
+  margin: 0 0 14px;
+  font-size: 18px;
+}
+
+.insight-list {
+  display: grid;
+  gap: 8px;
+}
+
+.insight-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border-bottom: 1px solid #eef2f6;
+  padding: 8px 0;
+}
+
+.insight-row span {
+  color: #52647a;
+}
+
+.insight-row strong {
+  color: #0f172a;
+  font-size: 18px;
+}
+
 .wide {
   grid-column: 1 / -1;
 }

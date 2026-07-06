@@ -137,6 +137,16 @@ export function App() {
     loadReport(nextFilters).catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }
 
+  function openIssueFromTrend(status: string, monthStart: string) {
+    if (!navigateTo("issue-display")) return;
+    const fromDate = monthStart;
+    const toDate = endOfMonth(monthStart);
+    const nextFilters = { ...issueFilters, status, fromDate, toDate, page: 1, pageSize: issuePagination.pageSize };
+    setIssueFilters(nextFilters);
+    setDraftIssueFilters(nextFilters);
+    loadIssues(nextFilters).catch((err) => setError(err instanceof Error ? err.message : String(err)));
+  }
+
   function openReportFromCrLink(link: { sap_system_code?: string; trkorr: string }) {
     if (!navigateTo("report")) return;
     const sapSystemCode = link.sap_system_code || "DEV";
@@ -412,6 +422,7 @@ export function App() {
             onTrendFilters={setTrendFilters}
             onApplyTrend={() => load()}
             onTrendClick={openReportFromTrend}
+            onIssueTrendClick={openIssueFromTrend}
           />
         ) : view === "report" ? (
           <Report
@@ -601,7 +612,8 @@ function Dashboard({
   trendFilters,
   onTrendFilters,
   onApplyTrend,
-  onTrendClick
+  onTrendClick,
+  onIssueTrendClick
 }: {
   dashboard: DashboardData | null;
   requests: CrRequest[];
@@ -610,9 +622,13 @@ function Dashboard({
   onTrendFilters: (filters: { fromPeriod: string; toPeriod: string }) => void;
   onApplyTrend: () => void;
   onTrendClick: (status: string, monthStart: string) => void;
+  onIssueTrendClick: (status: string, monthStart: string) => void;
 }) {
   const outstanding = dashboard?.byStatus.find((row) => row.status_group === "outstanding")?.count || 0;
   const released = dashboard?.byStatus.find((row) => row.status_group === "released")?.count || 0;
+  const issueInsights = dashboard?.issueInsights;
+  const issueStatusCount = (status: string) => issueInsights?.byStatus.find((row) => row.issue_status === status)?.count || 0;
+  const issueLifecycleCount = (status: string) => issueInsights?.byLifecycle.find((row) => row.lifecycle_status === status)?.count || 0;
   return (
     <div className="dashboard-grid">
       <Metric label="Outstanding" value={outstanding} />
@@ -665,6 +681,81 @@ function Dashboard({
               <Bar dataKey="released" fill="#0f766e" name="Released" radius={[4, 4, 0, 0]} onClick={(data) => onTrendClick("released", data.payload.month_start)} />
             </BarChart>
           </ResponsiveContainer>
+        </div>
+      </section>
+      <h2 className="dashboard-section-title">Issue Overview</h2>
+      <Metric label="Open Issues" value={issueStatusCount("open")} />
+      <Metric label="In Progress Issues" value={issueStatusCount("in_progress")} />
+      <Metric label="OK Issues" value={issueStatusCount("ok")} />
+      <Metric label="Cancelled Issues" value={issueStatusCount("cancelled")} />
+      <Metric label="Incomplete Active Issues" value={issueInsights?.completion?.incomplete || 0} />
+      <section className="panel lifecycle-panel">
+        <h2>Issue Completion</h2>
+        <div className="funnel-list">
+          <div className="funnel-item">
+            <span>Complete</span>
+            <strong>{issueInsights?.completion?.complete || 0}</strong>
+            <div><i style={{ width: `${completionWidth(issueInsights?.completion?.complete || 0, issueInsights?.completion?.active || 0)}%` }} /></div>
+            <small>Active issues with complete data</small>
+          </div>
+          <div className="funnel-item">
+            <span>Incomplete</span>
+            <strong>{issueInsights?.completion?.incomplete || 0}</strong>
+            <div><i className="warning-bar" style={{ width: `${completionWidth(issueInsights?.completion?.incomplete || 0, issueInsights?.completion?.active || 0)}%` }} /></div>
+            <small>Active issues still need data</small>
+          </div>
+          <div className="funnel-item">
+            <span>Cancelled</span>
+            <strong>{issueInsights?.completion?.cancelled || 0}</strong>
+            <div><i className="danger-bar" style={{ width: `${completionWidth(issueInsights?.completion?.cancelled || 0, issueInsights?.completion?.total || 0)}%` }} /></div>
+            <small>Excluded from completeness</small>
+          </div>
+        </div>
+      </section>
+      <section className="panel chart-panel">
+        <div className="panel-heading">
+          <div>
+            <h2>Issue Status Trend</h2>
+            <p>Last 6 months by issue created timestamp</p>
+          </div>
+        </div>
+        <div className="chart-wrap">
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={issueInsights?.trend || []}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="month_label" />
+              <YAxis allowDecimals={false} />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="open" fill="#93c5fd" name="Open" radius={[4, 4, 0, 0]} onClick={(data) => onIssueTrendClick("open", data.payload.month_start)} />
+              <Bar dataKey="in_progress" fill="#e0a11b" name="In Progress" radius={[4, 4, 0, 0]} onClick={(data) => onIssueTrendClick("in_progress", data.payload.month_start)} />
+              <Bar dataKey="ok" fill="#0f766e" name="OK" radius={[4, 4, 0, 0]} onClick={(data) => onIssueTrendClick("ok", data.payload.month_start)} />
+              <Bar dataKey="cancelled" fill="#b91c1c" name="Cancelled" radius={[4, 4, 0, 0]} onClick={(data) => onIssueTrendClick("cancelled", data.payload.month_start)} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </section>
+      <section className="panel issue-insight-panel">
+        <h2>Pending Data Breakdown</h2>
+        <div className="insight-list">
+          {(issueInsights?.missingBreakdown || []).map((item) => (
+            <div className="insight-row" key={item.label}>
+              <span>{item.label}</span>
+              <strong>{item.count}</strong>
+            </div>
+          ))}
+          {issueInsights && issueInsights.missingBreakdown.length === 0 ? <div className="empty">No incomplete active issue data.</div> : null}
+        </div>
+      </section>
+      <section className="panel issue-insight-panel">
+        <h2>Issue by CR Lifecycle</h2>
+        <div className="insight-list">
+          {["no_cr", "created", "released", "in_qa", "in_prd", "cancelled", "unknown"].map((status) => (
+            <div className="insight-row" key={status}>
+              <span>{issueLifecycleLabel(status)}</span>
+              <strong>{issueLifecycleCount(status)}</strong>
+            </div>
+          ))}
         </div>
       </section>
       <section className="panel wide">
@@ -1360,6 +1451,7 @@ function IssueEditor({
 
   const primaryCr = detail?.crLinks[0];
   const crTokens = splitTokenValues(form.crLinks);
+  const hasGlpiNo = splitTokenValues(form.glpiTickets).length > 0;
   const hasCrAssigned = crTokens.length > 0;
   const primaryLifecycle = primaryCr?.lifecycle_status;
   const qaReady = Boolean(primaryCr?.qa_import_date || ["in_qa", "pending_prd", "in_prd"].includes(primaryLifecycle || ""));
@@ -1660,12 +1752,14 @@ function IssueEditor({
         <div className="sticky-actions">
           {mode === "change" ? (
             <>
-              <button className="secondary" type="button" onClick={() => generateTemplate("email")} disabled={templateBusy !== "" || !detail?.issue?.id}>
-                {templateBusy === "email" ? "Generating" : "Generate Email Template"}
-              </button>
               <button className="secondary" type="button" onClick={() => generateTemplate("ticket")} disabled={templateBusy !== "" || !detail?.issue?.id}>
                 {templateBusy === "ticket" ? "Generating" : "Generate GLPI Ticket Template"}
               </button>
+              {hasGlpiNo ? (
+                <button className="secondary" type="button" onClick={() => generateTemplate("email")} disabled={templateBusy !== "" || !detail?.issue?.id}>
+                  {templateBusy === "email" ? "Generating" : "Generate Email Template"}
+                </button>
+              ) : null}
             </>
           ) : null}
           {mode === "change" && detail?.issue ? (
@@ -2715,6 +2809,30 @@ function formatMonthValue(value: string) {
 function funnelWidth(value: number, max: number) {
   if (!max) return 0;
   return Math.max(6, Math.round((value / max) * 100));
+}
+
+function completionWidth(value: number, total: number) {
+  if (!total || value <= 0) return 0;
+  return Math.max(6, Math.round((value / total) * 100));
+}
+
+function issueLifecycleLabel(value: string) {
+  switch (value) {
+    case "no_cr":
+      return "No CR assigned";
+    case "created":
+      return "Created";
+    case "released":
+      return "Released";
+    case "in_qa":
+      return "In QA";
+    case "in_prd":
+      return "In PRD";
+    case "cancelled":
+      return "Cancelled";
+    default:
+      return "Unknown";
+  }
 }
 
 function dropOffText(current: number, next: number) {

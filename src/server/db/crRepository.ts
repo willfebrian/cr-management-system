@@ -376,7 +376,7 @@ export async function getCrDetailForSystem(trkorr: string, sapSystemCode: string
 async function getCrLifecycle(trkorr: string) {
   const [{ rows }, { rows: transportRows }] = await Promise.all([
     pool.query(`
-    SELECT sap_system_code, status_group, changed_date::text AS changed_date,
+    SELECT sap_system_code, status_group, changed_date::text AS changed_date, changed_time::text AS changed_time,
            sap_created_at, sap_released_at
     FROM cr_requests
     WHERE trkorr = $1
@@ -399,10 +399,10 @@ async function getCrLifecycle(trkorr: string) {
   const qa = byTarget.QA;
   const prd = byTarget.PRD;
   return {
-    created_at: dev?.sap_created_at || dev?.changed_date || undefined,
-    released_at: dev?.sap_released_at || (dev?.status_group === "released" ? dev.changed_date : undefined),
-    qa_imported_at: qa?.imported_at || qa?.import_date || undefined,
-    prd_imported_at: prd?.imported_at || prd?.import_date || undefined,
+    created_at: dev?.sap_created_at || combineDateAndTime(dev?.changed_date, dev?.changed_time) || dev?.changed_date || undefined,
+    released_at: dev?.sap_released_at || (dev?.status_group === "released" ? combineDateAndTime(dev?.changed_date, dev?.changed_time) || dev.changed_date : undefined),
+    qa_imported_at: qa?.imported_at || combineDateAndTime(qa?.import_date, qa?.import_time) || qa?.import_date || undefined,
+    prd_imported_at: prd?.imported_at || combineDateAndTime(prd?.import_date, prd?.import_time) || prd?.import_date || undefined,
     qa_status: qa?.transport_status || (dev ? "pending" : "unknown"),
     prd_status: prd?.transport_status || (dev ? "pending" : "unknown"),
     qa_evidence_source: qa?.evidence_source || "unknown",
@@ -410,6 +410,16 @@ async function getCrLifecycle(trkorr: string) {
     qa_return_code: qa?.return_code || undefined,
     prd_return_code: prd?.return_code || undefined
   };
+}
+
+function combineDateAndTime(date?: string, time?: string) {
+  if (!date || !time) return null;
+  const normalizedDate = String(date).slice(0, 10);
+  const normalizedTime = String(time).slice(0, 8);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate) || !/^\d{2}:\d{2}:\d{2}$/.test(normalizedTime)) {
+    return null;
+  }
+  return `${normalizedDate}T${normalizedTime}+07:00`;
 }
 
 export async function refreshTransportLifecycleFromCache(sourceSystemCode = "DEV") {
@@ -524,6 +534,36 @@ export async function upsertConfirmedTransportLogs(targetSystemCode: string, log
     }
   }
   return { processed, orphanLogs };
+}
+
+export async function listImportedLifecycleNeedingConfirmation(targetSystemCode: string, limit = 50) {
+  const { rows } = await pool.query<{
+    trkorr: string;
+    import_date: string | null;
+    import_time: string | null;
+    evidence_source: string | null;
+  }>(`
+    SELECT lifecycle.trkorr,
+           lifecycle.import_date::text AS import_date,
+           lifecycle.import_time::text AS import_time,
+           lifecycle.evidence_source
+    FROM cr_transport_lifecycle lifecycle
+    JOIN cr_requests dev
+      ON dev.sap_system_code = lifecycle.source_system_code
+      AND dev.trkorr = lifecycle.trkorr
+      AND dev.parent_request IS NULL
+      AND upper(dev.owner) = 'TRSTDEV'
+    WHERE lifecycle.source_system_code = 'DEV'
+      AND lifecycle.target_system_code = $1
+      AND lifecycle.transport_status = 'imported'
+      AND COALESCE(lifecycle.evidence_source, '') <> 'confirmed'
+    ORDER BY lifecycle.last_checked_at NULLS FIRST,
+             lifecycle.import_date DESC NULLS LAST,
+             lifecycle.import_time DESC NULLS LAST,
+             lifecycle.trkorr
+    LIMIT $2
+  `, [targetSystemCode, limit]);
+  return rows;
 }
 
 export async function hasDevParentCr(trkorr: string) {

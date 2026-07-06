@@ -298,6 +298,222 @@ async function getSyncHealthRows() {
   return rows;
 }
 
+export async function getIssueDashboardInsights() {
+  const baseSql = `
+    WITH raw_rows AS (
+      SELECT
+        h.id,
+        h.create_issue_date,
+        CASE
+          WHEN lower(coalesce(h.issue_status, '')) = 'cancelled' THEN 'cancelled'
+          WHEN primary_cr.trkorr IS NULL THEN 'open'
+          WHEN primary_cr.lifecycle_status = 'in_prd' THEN 'ok'
+          ELSE 'in_progress'
+        END AS issue_status,
+        CASE
+          WHEN lower(coalesce(h.issue_status, '')) = 'cancelled' THEN 'cancelled'
+          ELSE coalesce(primary_cr.lifecycle_status, 'no_cr')
+        END AS lifecycle_status,
+        (nullif(trim(coalesce(h.issue_name, '')), '') IS NULL) AS missing_issue_name,
+        (nullif(trim(coalesce(h.requester_name_snapshot, '')), '') IS NULL) AS missing_requester_snapshot,
+        (nullif(trim(coalesce(h.abaper_name_snapshot, '')), '') IS NULL) AS missing_abaper_snapshot,
+        (h.create_issue_date IS NULL) AS missing_created_date,
+        (primary_glpi.ticket_number IS NULL) AS missing_glpi,
+        (primary_cr.trkorr IS NULL) AS missing_cr,
+        NOT EXISTS (SELECT 1 FROM issue_participants p WHERE p.issue_id = h.id AND p.role = 'requester') AS missing_requester,
+        NOT EXISTS (SELECT 1 FROM issue_participants p WHERE p.issue_id = h.id AND p.role = 'abaper') AS missing_abaper,
+        NOT EXISTS (SELECT 1 FROM issue_participants p WHERE p.issue_id = h.id AND p.role = 'dev_tester') AS missing_dev_tester,
+        NOT EXISTS (SELECT 1 FROM issue_participants p WHERE p.issue_id = h.id AND p.role = 'dev_evaluator') AS missing_dev_evaluator,
+        NOT EXISTS (SELECT 1 FROM issue_participants p WHERE p.issue_id = h.id AND p.role = 'qa_transporter') AS missing_qa_transporter,
+        NOT EXISTS (SELECT 1 FROM issue_participants p WHERE p.issue_id = h.id AND p.role = 'qa_tester') AS missing_qa_tester,
+        NOT EXISTS (SELECT 1 FROM issue_participants p WHERE p.issue_id = h.id AND p.role = 'qa_evaluator') AS missing_qa_evaluator,
+        NOT EXISTS (SELECT 1 FROM issue_participants p WHERE p.issue_id = h.id AND p.role = 'prd_requester') AS missing_prd_requester,
+        NOT EXISTS (SELECT 1 FROM issue_participants p WHERE p.issue_id = h.id AND p.role = 'prd_evaluator') AS missing_prd_evaluator,
+        NOT EXISTS (SELECT 1 FROM issue_participants p WHERE p.issue_id = h.id AND p.role = 'approval') AS missing_approval,
+        NOT EXISTS (SELECT 1 FROM issue_participants p WHERE p.issue_id = h.id AND p.role = 'executor') AS missing_prd_transporter,
+        (dev.dev_tested_date IS NULL) AS missing_dev_tested_date,
+        (dev.dev_evaluated_date IS NULL) AS missing_dev_evaluated_date,
+        (qa.qa_tested_date IS NULL) AS missing_qa_tested_date,
+        (qa.qa_evaluated_date IS NULL) AS missing_qa_evaluated_date,
+        (prd.prd_requested_date IS NULL) AS missing_prd_requested_date,
+        (prd.prd_evaluated_date IS NULL) AS missing_prd_evaluated_date,
+        (prd.approval_date IS NULL) AS missing_approval_date
+      FROM issue_headers h
+      LEFT JOIN LATERAL (
+        SELECT ticket_number
+        FROM issue_glpi_tickets
+        WHERE issue_id = h.id
+        ORDER BY is_primary DESC, ticket_number
+        LIMIT 1
+      ) primary_glpi ON true
+      LEFT JOIN LATERAL (
+        SELECT
+          link.trkorr,
+          coalesce(cr.lifecycle_status, 'unknown') AS lifecycle_status
+        FROM issue_cr_links link
+        LEFT JOIN LATERAL (
+          SELECT
+            CASE
+              WHEN lifecycle_req.status_group <> 'released' THEN 'created'
+              WHEN EXISTS (
+                SELECT 1 FROM cr_transport_lifecycle prd_life
+                WHERE prd_life.source_system_code = 'DEV'
+                  AND prd_life.target_system_code = 'PRD'
+                  AND prd_life.trkorr = lifecycle_req.trkorr
+                  AND prd_life.transport_status = 'imported'
+              ) THEN 'in_prd'
+              WHEN EXISTS (
+                SELECT 1 FROM cr_transport_lifecycle qa_life
+                WHERE qa_life.source_system_code = 'DEV'
+                  AND qa_life.target_system_code = 'QA'
+                  AND qa_life.trkorr = lifecycle_req.trkorr
+                  AND qa_life.transport_status = 'imported'
+              ) THEN 'in_qa'
+              WHEN lifecycle_req.sap_system_code = 'DEV' AND lifecycle_req.status_group = 'released' THEN 'released'
+              ELSE 'unknown'
+            END AS lifecycle_status
+          FROM cr_requests req
+          LEFT JOIN cr_requests parent_req
+            ON parent_req.sap_system_code = req.sap_system_code
+           AND parent_req.trkorr = req.parent_request
+          CROSS JOIN LATERAL (
+            SELECT COALESCE(parent_req.sap_system_code, req.sap_system_code) AS sap_system_code,
+                   COALESCE(parent_req.trkorr, req.trkorr) AS trkorr,
+                   COALESCE(parent_req.status_group, req.status_group) AS status_group
+          ) lifecycle_req
+          WHERE req.sap_system_code = link.sap_system_code
+            AND req.trkorr = link.trkorr
+          LIMIT 1
+        ) cr ON true
+        WHERE link.issue_id = h.id
+        ORDER BY link.is_primary DESC, link.trkorr
+        LIMIT 1
+      ) primary_cr ON true
+      LEFT JOIN issue_dev_timeline dev ON dev.issue_id = h.id
+      LEFT JOIN issue_qa_timeline qa ON qa.issue_id = h.id
+      LEFT JOIN issue_prd_timeline prd ON prd.issue_id = h.id
+    ),
+    issue_rows AS (
+      SELECT
+        *,
+        (
+          missing_issue_name::int +
+          missing_requester_snapshot::int +
+          missing_abaper_snapshot::int +
+          missing_created_date::int +
+          missing_glpi::int +
+          missing_cr::int +
+          missing_requester::int +
+          missing_abaper::int +
+          missing_dev_tester::int +
+          missing_dev_evaluator::int +
+          missing_qa_transporter::int +
+          missing_qa_tester::int +
+          missing_qa_evaluator::int +
+          missing_prd_requester::int +
+          missing_prd_evaluator::int +
+          missing_approval::int +
+          missing_prd_transporter::int +
+          missing_dev_tested_date::int +
+          missing_dev_evaluated_date::int +
+          missing_qa_tested_date::int +
+          missing_qa_evaluated_date::int +
+          missing_prd_requested_date::int +
+          missing_prd_evaluated_date::int +
+          missing_approval_date::int
+        )::int AS missing_data_count
+      FROM raw_rows
+    )
+  `;
+
+  const [statusResult, completionResult, lifecycleResult, missingResult, trendResult] = await Promise.all([
+    pool.query(`
+      ${baseSql}
+      SELECT issue_status, COUNT(*)::int AS count
+      FROM issue_rows
+      GROUP BY issue_status
+      ORDER BY issue_status
+    `),
+    pool.query(`
+      ${baseSql}
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE issue_status <> 'cancelled')::int AS active,
+        COUNT(*) FILTER (WHERE issue_status <> 'cancelled' AND missing_data_count = 0)::int AS complete,
+        COUNT(*) FILTER (WHERE issue_status <> 'cancelled' AND missing_data_count > 0)::int AS incomplete,
+        COUNT(*) FILTER (WHERE issue_status = 'cancelled')::int AS cancelled
+      FROM issue_rows
+    `),
+    pool.query(`
+      ${baseSql}
+      SELECT lifecycle_status, COUNT(*)::int AS count
+      FROM issue_rows
+      GROUP BY lifecycle_status
+      ORDER BY lifecycle_status
+    `),
+    pool.query(`
+      ${baseSql}
+      SELECT label, COUNT(*)::int AS count
+      FROM (
+        SELECT 'GLPI No.' AS label FROM issue_rows WHERE issue_status <> 'cancelled' AND missing_glpi
+        UNION ALL SELECT 'CR SAP No.' FROM issue_rows WHERE issue_status <> 'cancelled' AND missing_cr
+        UNION ALL SELECT 'Requester' FROM issue_rows WHERE issue_status <> 'cancelled' AND missing_requester
+        UNION ALL SELECT 'ABAPer' FROM issue_rows WHERE issue_status <> 'cancelled' AND missing_abaper
+        UNION ALL SELECT 'DEV Tester' FROM issue_rows WHERE issue_status <> 'cancelled' AND missing_dev_tester
+        UNION ALL SELECT 'DEV Evaluator' FROM issue_rows WHERE issue_status <> 'cancelled' AND missing_dev_evaluator
+        UNION ALL SELECT 'QA Transporter' FROM issue_rows WHERE issue_status <> 'cancelled' AND missing_qa_transporter
+        UNION ALL SELECT 'QA Tester' FROM issue_rows WHERE issue_status <> 'cancelled' AND missing_qa_tester
+        UNION ALL SELECT 'QA Evaluator' FROM issue_rows WHERE issue_status <> 'cancelled' AND missing_qa_evaluator
+        UNION ALL SELECT 'PRD Requester' FROM issue_rows WHERE issue_status <> 'cancelled' AND missing_prd_requester
+        UNION ALL SELECT 'PRD Evaluator' FROM issue_rows WHERE issue_status <> 'cancelled' AND missing_prd_evaluator
+        UNION ALL SELECT 'Approval' FROM issue_rows WHERE issue_status <> 'cancelled' AND missing_approval
+        UNION ALL SELECT 'PRD Transporter' FROM issue_rows WHERE issue_status <> 'cancelled' AND missing_prd_transporter
+        UNION ALL SELECT 'Date of Testing DEV' FROM issue_rows WHERE issue_status <> 'cancelled' AND missing_dev_tested_date
+        UNION ALL SELECT 'Date of Evaluation DEV' FROM issue_rows WHERE issue_status <> 'cancelled' AND missing_dev_evaluated_date
+        UNION ALL SELECT 'Date of Testing QA' FROM issue_rows WHERE issue_status <> 'cancelled' AND missing_qa_tested_date
+        UNION ALL SELECT 'Date of Evaluation QA' FROM issue_rows WHERE issue_status <> 'cancelled' AND missing_qa_evaluated_date
+        UNION ALL SELECT 'Date of Request PRD' FROM issue_rows WHERE issue_status <> 'cancelled' AND missing_prd_requested_date
+        UNION ALL SELECT 'Date of Evaluation PRD' FROM issue_rows WHERE issue_status <> 'cancelled' AND missing_prd_evaluated_date
+        UNION ALL SELECT 'Approval Date' FROM issue_rows WHERE issue_status <> 'cancelled' AND missing_approval_date
+      ) missing
+      GROUP BY label
+      ORDER BY count DESC, label
+      LIMIT 10
+    `),
+    pool.query(`
+      ${baseSql},
+      months AS (
+        SELECT generate_series(
+          date_trunc('month', current_date)::date - interval '5 months',
+          date_trunc('month', current_date)::date,
+          interval '1 month'
+        )::date AS month_start
+      )
+      SELECT
+        to_char(months.month_start, 'Mon YYYY') AS month_label,
+        months.month_start::text AS month_start,
+        COUNT(issue_rows.id) FILTER (WHERE issue_rows.issue_status = 'open')::int AS open,
+        COUNT(issue_rows.id) FILTER (WHERE issue_rows.issue_status = 'in_progress')::int AS in_progress,
+        COUNT(issue_rows.id) FILTER (WHERE issue_rows.issue_status = 'ok')::int AS ok,
+        COUNT(issue_rows.id) FILTER (WHERE issue_rows.issue_status = 'cancelled')::int AS cancelled
+      FROM months
+      LEFT JOIN issue_rows
+        ON issue_rows.create_issue_date >= months.month_start
+       AND issue_rows.create_issue_date < (months.month_start + interval '1 month')
+      GROUP BY months.month_start
+      ORDER BY months.month_start
+    `)
+  ]);
+
+  return {
+    byStatus: statusResult.rows,
+    completion: completionResult.rows[0] || { total: 0, active: 0, complete: 0, incomplete: 0, cancelled: 0 },
+    byLifecycle: lifecycleResult.rows,
+    missingBreakdown: missingResult.rows,
+    trend: trendResult.rows
+  };
+}
+
 export async function getIssueDetail(id: number) {
   const [
     issue,

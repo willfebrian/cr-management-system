@@ -5,6 +5,7 @@ import {
   getLastSuccessfulSyncRun,
   hasDevParentCr,
   insertCrStatusSnapshot,
+  listImportedLifecycleNeedingConfirmation,
   markOrphanTransportRecoveryFailed,
   refreshTransportLifecycleFromCache,
   replaceCrObjects,
@@ -13,7 +14,7 @@ import {
   upsertCrHeader
 } from "../db/crRepository.js";
 import { config, getSapCrSystem } from "../config.js";
-import { readCrCreationLogs, readCrDetail, readCrList, readTransportImportLogs } from "../sap/crExtractor.js";
+import { readCrCreationLogs, readCrDetail, readCrList, readTransportImportLogs, readTransportImportLogsByRequest } from "../sap/crExtractor.js";
 
 export type SyncMode = "incremental" | "full_period";
 
@@ -53,6 +54,7 @@ export type RunCrSyncResult = {
     orphanImportsFound?: number;
     orphanImportsRecovered?: number;
     orphanImportsFailed?: number;
+    confirmationCandidates?: number;
     message?: string;
     period?: SyncPeriod;
   }>;
@@ -122,9 +124,10 @@ export async function runCrSync(options: RunCrSyncOptions): Promise<RunCrSyncRes
         await upsertCrCreationLogs(system.code, creationLogs);
       }
 
+      const forceDetailRefresh = syncMode === "full_period";
       for (const request of scopedParentRequests) {
-        const signature = await getCachedCrRefreshSignature(system.code, request.trkorr);
-        if (signature && !shouldRefreshDetail(signature, request)) {
+        const signature = forceDetailRefresh ? null : await getCachedCrRefreshSignature(system.code, request.trkorr);
+        if (!forceDetailRefresh && signature && !shouldRefreshDetail(signature, request)) {
           continue;
         }
         const detail = await readCrDetail(request.trkorr, system.code);
@@ -212,6 +215,9 @@ export async function runCrSync(options: RunCrSyncOptions): Promise<RunCrSyncRes
   }
 
   await refreshTransportLifecycleFromCache("DEV");
+  if (syncMode === "full_period") {
+    lifecycleResults.push(...await reconfirmInferredLifecycleFromSap(systemCodes));
+  }
 
   return {
     ok: results.some((result) => result.status === "success"),
@@ -222,6 +228,46 @@ export async function runCrSync(options: RunCrSyncOptions): Promise<RunCrSyncRes
     orphanImportsRecovered,
     orphanImportsFailed
   };
+}
+
+async function reconfirmInferredLifecycleFromSap(systemCodes: string[]) {
+  const results: RunCrSyncResult["lifecycleResults"] = [];
+  const maxPerTarget = Math.max(0, Number(config.orphanRecovery.maxPerSync || 50));
+  if (!maxPerTarget) return results;
+
+  for (const targetSystemCode of ["QA", "PRD"]) {
+    if (!systemCodes.includes(targetSystemCode)) continue;
+    const candidates = await listImportedLifecycleNeedingConfirmation(targetSystemCode, Math.min(maxPerTarget, 200));
+    if (!candidates.length) continue;
+
+    let confirmed = 0;
+    let failed = 0;
+    for (const candidate of candidates) {
+      try {
+        const logs = await readTransportImportLogsByRequest({
+          targetSystemCode,
+          trkorr: candidate.trkorr,
+          rowCount: 50
+        });
+        if (!logs.length) continue;
+        const upsert = await upsertConfirmedTransportLogs(targetSystemCode, logs);
+        confirmed += upsert.processed;
+      } catch {
+        failed += 1;
+      }
+    }
+
+    results.push({
+      targetSystemCode,
+      evidenceSource: "confirmed",
+      logCount: confirmed,
+      confirmationCandidates: candidates.length,
+      orphanImportsFailed: failed,
+      message: `Reconfirmed ${confirmed} of ${candidates.length} inferred lifecycle record(s) from SAP TPALOG.`
+    });
+  }
+
+  return results;
 }
 
 export function normalizeSystemCodes(value: unknown) {

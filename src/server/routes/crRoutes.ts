@@ -6,7 +6,7 @@ import {
   getDashboardStatusTrend,
   listCrRequests,
 } from "../db/crRepository.js";
-import { cancelIssue, deleteIssue, getIssueDetail, getIssueStatusOptions, getNextIssueNumber, getNextSubIssueNumber, listIssues, registerIssuePeople, saveIssue, searchIssueCrHelpdesk, searchIssueCrLinks, searchIssueGlpi, searchIssuePeople, validateIssuePeople } from "../db/issueRepository.js";
+import { cancelIssue, deleteIssue, getIssueDashboardInsights, getIssueDetail, getIssueStatusOptions, getNextIssueNumber, getNextSubIssueNumber, listIssues, registerIssuePeople, saveIssue, searchIssueCrHelpdesk, searchIssueCrLinks, searchIssueGlpi, searchIssuePeople, validateIssuePeople } from "../db/issueRepository.js";
 import { getSapCrSystem, listSapCrSystems } from "../config.js";
 import { normalizeLookbackDays, normalizeSyncMode, normalizeSystemCodes, runCrSync } from "../sync/crSyncRunner.js";
 import { buildIssueTemplatePreview, type IssueTemplateKind } from "../templates/issueTemplateService.js";
@@ -24,7 +24,11 @@ crRoutes.get("/systems", (_req, res) => {
 crRoutes.get("/dashboard", async (_req, res, next) => {
   try {
     await assertDatabaseConfigured();
-    res.json(await getDashboard());
+    const [dashboard, issueInsights] = await Promise.all([
+      getDashboard(),
+      getIssueDashboardInsights()
+    ]);
+    res.json({ ...dashboard, issueInsights });
   } catch (error) {
     next(error);
   }

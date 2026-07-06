@@ -163,6 +163,45 @@ export async function readTransportImportLogs(options: {
   })) satisfies TransportImportLog[];
 }
 
+export async function readTransportImportLogsByRequest(options: {
+  targetSystemCode: string;
+  trkorr: string;
+  rowCount?: number;
+}) {
+  const system = getSapCrSystem(options.targetSystemCode);
+  const trkorr = options.trkorr.replaceAll("'", "''");
+  const result = await runSapDiscovery<{
+    ok: boolean;
+    result: {
+      rows: Array<Record<string, string>>;
+    };
+  }>([
+    "table",
+    "TPALOG",
+    "--server",
+    system.server,
+    "--fields",
+    "TRTIME,TRKORR,TARSYSTEM,TRSTEP,TRUSER,RETCODE,HOST",
+    "--where",
+    `TRKORR = '${trkorr}'`,
+    "--where",
+    "AND TRSTEP = 'I'",
+    "--row-count",
+    String(options.rowCount || 50),
+    "--compact"
+  ]);
+
+  return (result.result?.rows || []).map((row) => ({
+    trkorr: row.TRKORR,
+    targetSystem: row.TARSYSTEM,
+    timestamp: row.TRTIME,
+    returnCode: row.RETCODE,
+    step: row.TRSTEP,
+    user: row.TRUSER,
+    host: row.HOST
+  })) satisfies TransportImportLog[];
+}
+
 export async function readCrCreationLogs(options: {
   systemCode?: string;
   fromDate: string;

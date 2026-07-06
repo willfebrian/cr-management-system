@@ -1,5 +1,25 @@
 export type DashboardData = {
   byStatus: Array<{ status_group: string; count: number }>;
+  issueInsights?: {
+    byStatus: Array<{ issue_status: string; count: number }>;
+    completion: {
+      total: number;
+      active: number;
+      complete: number;
+      incomplete: number;
+      cancelled: number;
+    };
+    byLifecycle: Array<{ lifecycle_status: string; count: number }>;
+    missingBreakdown: Array<{ label: string; count: number }>;
+    trend: Array<{
+      month_label: string;
+      month_start: string;
+      open: number;
+      in_progress: number;
+      ok: number;
+      cancelled: number;
+    }>;
+  };
   aging: {
     older_than_14_days: number;
     outstanding: number;
