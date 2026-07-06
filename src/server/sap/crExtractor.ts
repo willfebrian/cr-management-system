@@ -145,6 +145,8 @@ export async function readTransportImportLogs(options: {
     "TRTIME,TRKORR,TARSYSTEM,TRSTEP,TRUSER,RETCODE,HOST",
     "--where",
     `TRTIME >= '${fromStamp}' AND TRTIME <= '${toStamp}'`,
+    "--where",
+    "AND TRSTEP = 'I'",
     "--row-count",
     String(options.rowCount || 5000),
     "--compact"

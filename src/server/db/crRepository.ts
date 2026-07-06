@@ -889,14 +889,23 @@ async function insertObjectKey(key: CrObjectKey, sapSystemCode: string) {
 }
 
 function dedupeLatestTransportLogs(logs: TransportImportLog[]) {
-  const byRequest = new Map<string, TransportImportLog>();
+  const grouped = new Map<string, TransportImportLog[]>();
   for (const log of logs.filter((item) => isTransportRequestId(item.trkorr))) {
-    const current = byRequest.get(log.trkorr);
-    if (!current || String(log.timestamp || "") >= String(current.timestamp || "")) {
-      byRequest.set(log.trkorr, log);
-    }
+    const key = String(log.trkorr || "").trim().toUpperCase();
+    grouped.set(key, [...(grouped.get(key) || []), log]);
   }
-  return [...byRequest.values()];
+
+  return [...grouped.values()].map((requestLogs) => {
+    const importStepLogs = requestLogs.filter((log) => String(log.step || "").trim().toUpperCase() === "I");
+    return latestTransportLog(importStepLogs.length ? importStepLogs : requestLogs);
+  }).filter(Boolean) as TransportImportLog[];
+}
+
+function latestTransportLog(logs: TransportImportLog[]) {
+  return logs.reduce<TransportImportLog | null>((latest, log) => {
+    if (!latest || String(log.timestamp || "") >= String(latest.timestamp || "")) return log;
+    return latest;
+  }, null);
 }
 
 function isTransportRequestId(value?: string) {
