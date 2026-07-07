@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
-import { AlertTriangle, BarChart3, CheckCircle2, ClipboardList, Database, FileSearch, PencilLine, RefreshCw, X, XCircle } from "lucide-react";
+import { AlertTriangle, BarChart3, CheckCircle2, ClipboardList, Database, FileSearch, MoreVertical, PencilLine, RefreshCw, X, XCircle } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, fetchCrDetail, fetchCrList, fetchDashboard, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind } from "../api";
+import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchCrDetail, fetchCrList, fetchDashboard, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind } from "../api";
 import type { CrDetail, CrRequest, DashboardData, IssueDetail, IssueRow, SapSystemConfig, StatusTrendData } from "../../shared/types";
 
 type View = "dashboard" | "report" | "issue-display" | "issue-create" | "issue-change";
@@ -29,6 +29,8 @@ export function App() {
   const [selectedIssueId, setSelectedIssueId] = useState<number | null>(null);
   const [issueDetail, setIssueDetail] = useState<IssueDetail | null>(null);
   const [changeIssueInitialId, setChangeIssueInitialId] = useState<number | null>(null);
+  const [changeIssueInitialAction, setChangeIssueInitialAction] = useState<"" | "cancel" | "delete">("");
+  const [issueSidebarExpanded, setIssueSidebarExpanded] = useState(false);
   const [syncSystems, setSyncSystems] = useState<string[]>(["DEV", "QA", "PRD"]);
   const [syncMode, setSyncMode] = useState<"incremental" | "full_period">("incremental");
   const [lookbackDays, setLookbackDays] = useState(3);
@@ -45,6 +47,7 @@ export function App() {
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [syncResult, setSyncResult] = useState<SyncCrResult | null>(null);
   const [runningSyncSystems, setRunningSyncSystems] = useState<string[]>([]);
+  const [syncRefreshToken, setSyncRefreshToken] = useState(0);
   const [loading, setLoading] = useState(false);
   const [issueFormDirty, setIssueFormDirty] = useState(false);
   const reportRequestId = useRef(0);
@@ -119,6 +122,15 @@ export function App() {
       setFilters(resetFilters);
       setDraftFilters(resetFilters);
       await load(resetFilters);
+      await loadIssues(issueFilters);
+      if (selected) {
+        const key = parseRequestKey(selected);
+        await fetchCrDetail(key.trkorr, key.sapSystemCode).then(setDetail);
+      }
+      if (selectedIssueId) {
+        await fetchIssueDetail(selectedIssueId).then(setIssueDetail);
+      }
+      setSyncRefreshToken((current) => current + 1);
     } catch (err) {
       showToast("error", err instanceof Error ? err.message : String(err));
     } finally {
@@ -309,20 +321,19 @@ export function App() {
           <BarChart3 size={18} /> Dashboard
         </button>
         <button className={view === "report" ? "active" : ""} onClick={() => navigateTo("report")}>
-          <FileSearch size={18} /> Report
+          <FileSearch size={18} /> CR Report
         </button>
         <div className={`sidebar-group ${view.startsWith("issue-") ? "active" : ""}`}>
           <button className={view.startsWith("issue-") ? "active" : ""} onClick={() => {
-            if (!navigateTo("issue-display")) return;
-            setChangeIssueInitialId(null);
-            loadIssues(issueFilters).catch((err) => setError(err instanceof Error ? err.message : String(err)));
+            setIssueSidebarExpanded((current) => !current);
           }}>
             <ClipboardList size={18} /> Issue
           </button>
-          {view.startsWith("issue-") ? (
+          {issueSidebarExpanded ? (
             <div className="sidebar-submenu">
               <button className={view === "issue-display" ? "active" : ""} onClick={() => {
                 setChangeIssueInitialId(null);
+                setChangeIssueInitialAction("");
                 if (!navigateTo("issue-display")) return;
                 loadIssues(issueFilters).catch((err) => setError(err instanceof Error ? err.message : String(err)));
               }}>
@@ -330,10 +341,12 @@ export function App() {
               </button>
               <button className={view === "issue-create" ? "active" : ""} onClick={() => {
                 setChangeIssueInitialId(null);
+                setChangeIssueInitialAction("");
                 navigateTo("issue-create");
               }}>Create</button>
               <button className={view === "issue-change" ? "active" : ""} onClick={() => {
                 setChangeIssueInitialId(null);
+                setChangeIssueInitialAction("");
                 navigateTo("issue-change");
               }}>Change</button>
             </div>
@@ -459,6 +472,12 @@ export function App() {
             onCloseDetail={() => setSelectedIssueId(null)}
             onChangeIssue={(issueId) => {
               setChangeIssueInitialId(issueId);
+              setChangeIssueInitialAction("");
+              navigateTo("issue-change");
+            }}
+            onIssueAction={(issueId, action) => {
+              setChangeIssueInitialId(issueId);
+              setChangeIssueInitialAction(action);
               navigateTo("issue-change");
             }}
             onPage={(page) => {
@@ -497,6 +516,8 @@ export function App() {
         ) : (
           <ChangeIssue
             initialIssueId={changeIssueInitialId}
+            initialAction={changeIssueInitialAction}
+            refreshToken={syncRefreshToken}
             onNotify={showToast}
             onDirtyChange={setIssueFormDirty}
             onSave={async (payload) => {
@@ -1060,6 +1081,7 @@ function IssueDisplay({
   onSelect,
   onCloseDetail,
   onChangeIssue,
+  onIssueAction,
   onPage,
   onPageSize,
   onOpenCr
@@ -1073,10 +1095,12 @@ function IssueDisplay({
   onSelect: (value: number) => void;
   onCloseDetail: () => void;
   onChangeIssue: (id: number) => void;
+  onIssueAction: (id: number, action: "cancel" | "delete") => void;
   onPage: (page: number) => void;
   onPageSize: (pageSize: number) => void;
   onOpenCr: (link: { sap_system_code?: string; trkorr: string }) => void;
 }) {
+  const [detailMenuOpen, setDetailMenuOpen] = useState(false);
   const selectedIssue = issues.find((issue) => issue.id === selectedId) || detail?.issue || null;
   const hasDetail = Boolean(selectedId && selectedIssue);
   const issueColumns = useResizableColumns("issue-report-columns", {
@@ -1187,9 +1211,33 @@ function IssueDisplay({
               </div>
               <div className="detail-header-actions">
                 {selectedIssue ? (
-                  <button className="secondary detail-change-button" type="button" onClick={() => onChangeIssue(selectedIssue.id)}>
-                    <PencilLine size={16} /> Change Issue
-                  </button>
+                  <div className="detail-action-menu">
+                    <button className="detail-icon-action" type="button" onClick={() => setDetailMenuOpen((current) => !current)} aria-label="Issue actions">
+                      <MoreVertical size={18} />
+                    </button>
+                    {detailMenuOpen ? (
+                      <div className="detail-action-menu-list">
+                        <button type="button" onClick={() => {
+                          setDetailMenuOpen(false);
+                          onChangeIssue(selectedIssue.id);
+                        }}>
+                          <PencilLine size={15} /> Change
+                        </button>
+                        <button type="button" disabled={selectedIssue.issue_status === "cancelled"} onClick={() => {
+                          setDetailMenuOpen(false);
+                          onIssueAction(selectedIssue.id, "cancel");
+                        }}>
+                          <XCircle size={15} /> Cancel
+                        </button>
+                        <button type="button" className="danger-menu-item" onClick={() => {
+                          setDetailMenuOpen(false);
+                          onIssueAction(selectedIssue.id, "delete");
+                        }}>
+                          <X size={15} /> Delete
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
                 ) : null}
                 <button className="detail-icon-close" type="button" onClick={onCloseDetail} aria-label="Close detail">
                   <X size={18} />
@@ -1304,6 +1352,7 @@ function IssueDisplay({
 function IssueEditor({
   mode,
   detail,
+  initialAction = "",
   onSave,
   onCancel,
   onDelete,
@@ -1311,6 +1360,7 @@ function IssueEditor({
 }: {
   mode: "create" | "change";
   detail: IssueDetail | null;
+  initialAction?: "" | "cancel" | "delete";
   onSave: (payload: IssueSavePayload) => Promise<void>;
   onCancel?: (id: number, reason: string) => Promise<void>;
   onDelete?: (id: number) => Promise<void>;
@@ -1331,7 +1381,7 @@ function IssueEditor({
   const [crPreview, setCrPreview] = useState<Record<string, { description?: string; status?: string; system?: string }>>({});
   const [expandedPhases, setExpandedPhases] = useState({ dev: true, qa: false, prd: false });
   const [templatePreview, setTemplatePreview] = useState<{ title: string; body: string; bodyHtml?: string } | null>(null);
-  const [templateBusy, setTemplateBusy] = useState<"" | "email" | "ticket">("");
+  const [templateBusy, setTemplateBusy] = useState<"" | "email" | "ticket" | "cr-transport">("");
   const [missingPeople, setMissingPeople] = useState<IssuePersonCheck[]>([]);
   const [newPeople, setNewPeople] = useState<IssuePersonRegistration[]>([]);
   const [pendingSavePayload, setPendingSavePayload] = useState<IssueSavePayload | null>(null);
@@ -1351,6 +1401,10 @@ function IssueEditor({
     setTemplatePreview(null);
     onDirtyChange?.(false);
   }, [detail?.issue?.id, mode]);
+
+  useEffect(() => {
+    if (mode === "change" && detail?.issue && initialAction) setActionDialog(initialAction);
+  }, [mode, detail?.issue?.id, initialAction]);
 
   useEffect(() => {
     onDirtyChange?.(JSON.stringify(form) !== JSON.stringify(initialFormRef.current));
@@ -1529,6 +1583,27 @@ function IssueEditor({
     } catch (err) {
       setTemplatePreview({
         title: kind === "email" ? "Generate Email Template" : "Generate GLPI Ticket Template",
+        body: err instanceof Error ? err.message : String(err)
+      });
+    } finally {
+      setTemplateBusy("");
+    }
+  }
+
+  async function generateCrTransportTemplate() {
+    if (!detail?.issue?.id) {
+      setTemplatePreview({
+        title: "Generate CR Transport",
+        body: "Save issue terlebih dahulu sebelum generate CR Transport."
+      });
+      return;
+    }
+    setTemplateBusy("cr-transport");
+    try {
+      await downloadCrTransportTemplate(detail.issue.id);
+    } catch (err) {
+      setTemplatePreview({
+        title: "Generate CR Transport",
         body: err instanceof Error ? err.message : String(err)
       });
     } finally {
@@ -1760,6 +1835,9 @@ function IssueEditor({
                   {templateBusy === "email" ? "Generating" : "Generate Email Template"}
                 </button>
               ) : null}
+              <button className="secondary" type="button" onClick={generateCrTransportTemplate} disabled={templateBusy !== "" || !detail?.issue?.id}>
+                {templateBusy === "cr-transport" ? "Generating" : "Generate CR Transport"}
+              </button>
             </>
           ) : null}
           {mode === "change" && detail?.issue ? (
@@ -1866,6 +1944,8 @@ function IssueEditor({
 
 function ChangeIssue({
   initialIssueId,
+  initialAction = "",
+  refreshToken = 0,
   onSave,
   onCancel,
   onDelete,
@@ -1873,6 +1953,8 @@ function ChangeIssue({
   onDirtyChange
 }: {
   initialIssueId?: number | null;
+  initialAction?: "" | "cancel" | "delete";
+  refreshToken?: number;
   onSave: (payload: IssueSavePayload) => Promise<void>;
   onCancel: (id: number, reason: string) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
@@ -1908,6 +1990,13 @@ function ChangeIssue({
       .catch((err) => onNotify("error", err instanceof Error ? err.message : String(err)))
       .finally(() => setSearching(false));
   }, [initialIssueId, onNotify]);
+
+  useEffect(() => {
+    if (!refreshToken || !changeDetail?.issue?.id) return;
+    fetchIssueDetail(changeDetail.issue.id)
+      .then(setChangeDetail)
+      .catch((err) => onNotify("error", err instanceof Error ? err.message : String(err)));
+  }, [refreshToken]);
 
   useEffect(() => {
     if (!selection.q.trim() && !selection.glpi.trim() && !selection.crHelpdesk.trim() && !selection.cr.trim()) {
@@ -2016,7 +2105,7 @@ function ChangeIssue({
         </section>
       ) : null}
 
-      {changeDetail ? <IssueEditor mode="change" detail={changeDetail} onSave={onSave} onCancel={onCancel} onDelete={onDelete} onDirtyChange={onDirtyChange} /> : null}
+      {changeDetail ? <IssueEditor mode="change" detail={changeDetail} initialAction={initialAction} onSave={onSave} onCancel={onCancel} onDelete={onDelete} onDirtyChange={onDirtyChange} /> : null}
     </div>
   );
 }
@@ -2286,7 +2375,7 @@ function groupObjectsBySe03Label(objects: CrDetail["objects"]) {
   const groups = new Map<string, { key: string; label: string; objects: CrDetail["objects"] }>();
   for (const object of objects) {
     const key = `${object.pgmid || "-"} ${object.object_type || "-"}`;
-    const label = se03ObjectLabel(object.pgmid, object.object_type);
+    const label = object.object_label || object.object_type_description || se03ObjectLabel(object.pgmid, object.object_type);
     if (!groups.has(key)) groups.set(key, { key, label, objects: [] });
     groups.get(key)!.objects.push(object);
   }

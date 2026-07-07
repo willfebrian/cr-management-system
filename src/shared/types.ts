@@ -132,6 +132,9 @@ export type CrDetail = {
     position: string;
     pgmid?: string;
     object_type?: string;
+    object_label?: string;
+    pgmid_description?: string;
+    object_type_description?: string;
     object_name?: string;
     diff_readiness?: string;
   }>;

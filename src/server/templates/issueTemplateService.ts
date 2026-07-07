@@ -111,7 +111,7 @@ function formatTemplateObjectList(crDetail: CrDetail) {
   for (const object of crDetail.objects) {
     const key = `${object.pgmid || "-"} ${object.object_type || "-"}`;
     if (key.toUpperCase() === "CORR RELE") continue;
-    const label = se03ObjectLabel(object.pgmid, object.object_type);
+    const label = object.object_label || object.object_type_description || se03ObjectLabel(object.pgmid, object.object_type);
     if (!groups.has(key)) groups.set(key, { label, names: new Set() });
     groups.get(key)!.names.add(object.object_name || "-");
   }

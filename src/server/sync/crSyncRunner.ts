@@ -105,8 +105,10 @@ export async function runCrSync(options: RunCrSyncOptions): Promise<RunCrSyncRes
       });
 
       const scopedParentRequests = list.requests.filter((request) => isScopedParentRequest(request, owner));
+      const cachedRefreshSignatures = new Map<string, Awaited<ReturnType<typeof getCachedCrRefreshSignature>>>();
       let systemRequestCount = 0;
       for (const request of scopedParentRequests) {
+        cachedRefreshSignatures.set(request.trkorr, await getCachedCrRefreshSignature(system.code, request.trkorr));
         await upsertCrHeader(request, system.code, syncRunId);
         await insertCrStatusSnapshot(request, system.code, syncRunId);
         systemRequestCount += 1;
@@ -126,7 +128,7 @@ export async function runCrSync(options: RunCrSyncOptions): Promise<RunCrSyncRes
 
       const forceDetailRefresh = syncMode === "full_period";
       for (const request of scopedParentRequests) {
-        const signature = forceDetailRefresh ? null : await getCachedCrRefreshSignature(system.code, request.trkorr);
+        const signature = forceDetailRefresh ? null : cachedRefreshSignatures.get(request.trkorr);
         if (!forceDetailRefresh && signature && !shouldRefreshDetail(signature, request)) {
           continue;
         }

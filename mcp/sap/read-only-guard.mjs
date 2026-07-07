@@ -56,11 +56,15 @@ const LARGE_TABLES = new Set([
 ]);
 
 const DEFAULT_ABAP_SOURCE_CONFIG_TABLES = new Set([
+  "DD07L",
+  "DD07T",
   "E070",
   "E070CREATE",
   "E07T",
   "E071",
   "E071K",
+  "TLOGO",
+  "TLOGOT",
   "TPALOG",
   "ZMAP_INDICATOR",
   "ZMAP_TYPE"

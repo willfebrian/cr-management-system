@@ -84,6 +84,34 @@ CREATE INDEX IF NOT EXISTS idx_cr_objects_name ON cr_objects(object_name);
 CREATE INDEX IF NOT EXISTS idx_cr_objects_type ON cr_objects(object_type);
 CREATE INDEX IF NOT EXISTS idx_cr_objects_request ON cr_objects(sap_system_code, trkorr);
 
+CREATE TABLE IF NOT EXISTS sap_transport_program_ids (
+  pgmid TEXT PRIMARY KEY,
+  description TEXT,
+  language TEXT NOT NULL DEFAULT 'E',
+  source_system_code TEXT NOT NULL DEFAULT 'DEV',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS sap_transport_object_types (
+  object_type TEXT PRIMARY KEY,
+  description TEXT,
+  language TEXT NOT NULL DEFAULT 'E',
+  source_system_code TEXT NOT NULL DEFAULT 'DEV',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS sap_transport_object_catalog (
+  pgmid TEXT NOT NULL REFERENCES sap_transport_program_ids(pgmid) ON DELETE CASCADE,
+  object_type TEXT NOT NULL REFERENCES sap_transport_object_types(object_type) ON DELETE CASCADE,
+  display_label TEXT,
+  source_system_code TEXT NOT NULL DEFAULT 'DEV',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (pgmid, object_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sap_transport_object_catalog_label
+  ON sap_transport_object_catalog(display_label);
+
 CREATE TABLE IF NOT EXISTS cr_object_keys (
   id BIGSERIAL PRIMARY KEY,
   sap_system_code TEXT NOT NULL,

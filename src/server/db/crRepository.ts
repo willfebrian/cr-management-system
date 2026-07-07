@@ -344,8 +344,19 @@ export async function getCrDetailForSystem(trkorr: string, sapSystemCode: string
     pool.query("SELECT * FROM cr_requests WHERE sap_system_code = $1 AND trkorr = $2", [sapSystemCode, trkorr]),
     pool.query("SELECT * FROM cr_requests WHERE sap_system_code = $1 AND parent_request = $2 ORDER BY trkorr", [sapSystemCode, trkorr]),
     pool.query(`
-      SELECT *
+      SELECT
+        cr_objects.*,
+        catalog.display_label AS object_label,
+        program.description AS pgmid_description,
+        object_type.description AS object_type_description
       FROM cr_objects
+      LEFT JOIN sap_transport_object_catalog catalog
+        ON catalog.pgmid = upper(trim(cr_objects.pgmid))
+        AND catalog.object_type = upper(trim(cr_objects.object_type))
+      LEFT JOIN sap_transport_program_ids program
+        ON program.pgmid = upper(trim(cr_objects.pgmid))
+      LEFT JOIN sap_transport_object_types object_type
+        ON object_type.object_type = upper(trim(cr_objects.object_type))
       WHERE sap_system_code = $1
         AND (trkorr = $2 OR trkorr IN (
           SELECT trkorr FROM cr_requests WHERE sap_system_code = $1 AND parent_request = $2

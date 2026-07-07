@@ -1685,6 +1685,10 @@ button {
   flex: 0 0 auto;
 }
 
+.detail-action-menu {
+  position: relative;
+}
+
 .detail-change-button {
   display: inline-flex;
   align-items: center;
@@ -1694,6 +1698,7 @@ button {
   white-space: nowrap;
 }
 
+.detail-icon-action,
 .detail-icon-close {
   display: grid;
   place-items: center;
@@ -1706,10 +1711,55 @@ button {
   cursor: pointer;
 }
 
+.detail-icon-action:hover,
 .detail-icon-close:hover {
   border-color: #0f766e;
   color: #0f766e;
   background: #ecfdf5;
+}
+
+.detail-action-menu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 8;
+  min-width: 150px;
+  display: grid;
+  padding: 6px;
+  border: 1px solid #d8e0ea;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.14);
+}
+
+.detail-action-menu-list button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #17202a;
+  cursor: pointer;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.detail-action-menu-list button:hover {
+  background: #f1f5f9;
+}
+
+.detail-action-menu-list button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.detail-action-menu-list .danger-menu-item {
+  color: #9f1239;
+}
+
+.detail-action-menu-list .danger-menu-item:hover {
+  background: #fff1f2;
 }
 
 .detail-heading {

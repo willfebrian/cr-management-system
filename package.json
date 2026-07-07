@@ -15,6 +15,7 @@
     "db:migrate-source-aware": "node scripts/migrate-source-aware-keys.mjs",
     "db:refresh-lifecycle-cache": "node scripts/refresh-lifecycle-cache.mjs",
     "sap:refresh-transport-logs": "node scripts/refresh-transport-logs.mjs",
+    "sap:sync-transport-object-catalog": "node scripts/sync-transport-object-catalog.mjs",
     "db:check": "node scripts/check-db.mjs",
     "sync:summary": "node scripts/sync-summary.mjs",
     "issue:import-excel": "node scripts/import-issue-excel.mjs",

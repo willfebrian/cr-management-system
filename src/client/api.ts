@@ -97,6 +97,39 @@ export async function fetchIssueTemplate(id: number, kind: "email" | "ticket"): 
   return fetchJson(`/api/issues/${id}/templates/${kind}`);
 }
 
+export async function downloadCrTransportTemplate(id: number) {
+  const response = await fetch(`/api/issues/${id}/templates/cr-transport`);
+  if (!response.ok) {
+    let message = `Request failed: ${response.status}`;
+    try {
+      const payload = await response.json();
+      if (payload?.message) message = payload.message;
+    } catch {
+      const text = await response.text().catch(() => "");
+      if (text) message = text;
+    }
+    throw new Error(message);
+  }
+  const blob = await response.blob();
+  const filename = filenameFromDisposition(response.headers.get("content-disposition")) || "CR Transport.docx";
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function filenameFromDisposition(disposition: string | null) {
+  if (!disposition) return "";
+  const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  if (encoded) return decodeURIComponent(encoded);
+  const quoted = disposition.match(/filename="([^"]+)"/i)?.[1];
+  return quoted || "";
+}
+
 export type IssueSavePayload = {
   id?: number;
   createMode?: "new" | "sub";
