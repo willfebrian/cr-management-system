@@ -671,21 +671,6 @@ function Dashboard({
       <Metric label="Aging > 14 Days" value={dashboard?.aging?.older_than_14_days || 0} />
       <Metric label="Pending to QA" value={dashboard?.landscape?.pending_qa || 0} />
       <Metric label="Pending to PRD" value={dashboard?.landscape?.pending_prd || 0} />
-      <section className="panel lifecycle-panel">
-        <h2>Lifecycle Funnel</h2>
-        <div className="funnel-list">
-          {(dashboard?.lifecycleFunnel || []).map((item, index, items) => (
-            <div className="funnel-item" key={item.label}>
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
-              <div>
-                <i style={{ width: `${funnelWidth(item.value, items[0]?.value || 0)}%` }} />
-              </div>
-              <small>{index < items.length - 1 ? dropOffText(item.value, items[index + 1]?.value || 0) : "Final landscape"}</small>
-            </div>
-          ))}
-        </div>
-      </section>
       <section className="panel chart-panel">
         <div className="panel-heading">
           <div>
@@ -724,29 +709,6 @@ function Dashboard({
       <Metric label="OK Issues" value={issueStatusCount("ok")} />
       <Metric label="Cancelled Issues" value={issueStatusCount("cancelled")} />
       <Metric label="Incomplete Active Issues" value={issueInsights?.completion?.incomplete || 0} />
-      <section className="panel lifecycle-panel">
-        <h2>Issue Completion</h2>
-        <div className="funnel-list">
-          <div className="funnel-item">
-            <span>Complete</span>
-            <strong>{issueInsights?.completion?.complete || 0}</strong>
-            <div><i style={{ width: `${completionWidth(issueInsights?.completion?.complete || 0, issueInsights?.completion?.active || 0)}%` }} /></div>
-            <small>Active issues with complete data</small>
-          </div>
-          <div className="funnel-item">
-            <span>Incomplete</span>
-            <strong>{issueInsights?.completion?.incomplete || 0}</strong>
-            <div><i className="warning-bar" style={{ width: `${completionWidth(issueInsights?.completion?.incomplete || 0, issueInsights?.completion?.active || 0)}%` }} /></div>
-            <small>Active issues still need data</small>
-          </div>
-          <div className="funnel-item">
-            <span>Cancelled</span>
-            <strong>{issueInsights?.completion?.cancelled || 0}</strong>
-            <div><i className="danger-bar" style={{ width: `${completionWidth(issueInsights?.completion?.cancelled || 0, issueInsights?.completion?.total || 0)}%` }} /></div>
-            <small>Excluded from completeness</small>
-          </div>
-        </div>
-      </section>
       <section className="panel chart-panel">
         <div className="panel-heading">
           <div>
@@ -770,16 +732,27 @@ function Dashboard({
           </ResponsiveContainer>
         </div>
       </section>
-      <section className="panel issue-insight-panel">
-        <h2>Pending Data Breakdown</h2>
-        <div className="insight-list">
-          {(issueInsights?.missingBreakdown || []).map((item) => (
-            <div className="insight-row" key={item.label}>
-              <span>{item.label}</span>
-              <strong>{item.count}</strong>
-            </div>
-          ))}
-          {issueInsights && issueInsights.missingBreakdown.length === 0 ? <div className="empty">No incomplete active issue data.</div> : null}
+      <section className="panel lifecycle-panel">
+        <h2>Issue Completion</h2>
+        <div className="funnel-list">
+          <div className="funnel-item">
+            <span>Complete</span>
+            <strong>{issueInsights?.completion?.complete || 0}</strong>
+            <div><i style={{ width: `${completionWidth(issueInsights?.completion?.complete || 0, issueInsights?.completion?.active || 0)}%` }} /></div>
+            <small>Active issues with complete data</small>
+          </div>
+          <div className="funnel-item">
+            <span>Incomplete</span>
+            <strong>{issueInsights?.completion?.incomplete || 0}</strong>
+            <div><i className="warning-bar" style={{ width: `${completionWidth(issueInsights?.completion?.incomplete || 0, issueInsights?.completion?.active || 0)}%` }} /></div>
+            <small>Active issues still need data</small>
+          </div>
+          <div className="funnel-item">
+            <span>Cancelled</span>
+            <strong>{issueInsights?.completion?.cancelled || 0}</strong>
+            <div><i className="danger-bar" style={{ width: `${completionWidth(issueInsights?.completion?.cancelled || 0, issueInsights?.completion?.total || 0)}%` }} /></div>
+            <small>Excluded from completeness</small>
+          </div>
         </div>
       </section>
       <section className="panel issue-insight-panel">
@@ -791,22 +764,6 @@ function Dashboard({
               <strong>{issueLifecycleCount(status)}</strong>
             </div>
           ))}
-        </div>
-      </section>
-      <section className="panel wide">
-        <h2>Sync Health</h2>
-        <div className="sync-health-grid">
-          {(dashboard?.syncHealth || []).map((item) => (
-            <div className="sync-health-card" key={item.sap_system_code}>
-              <span>{item.sap_system_code}</span>
-              <Status value={item.status} />
-              <small>{formatDateTime(item.finished_at || item.started_at)}</small>
-              <small>{syncModeLabel(item.sync_mode, item.lookback_days)}</small>
-              <small>{periodLabel({ fromDate: item.from_date || "", toDate: item.to_date || "", periodType: item.sync_mode || "" })}</small>
-              <strong>{item.request_count} CR</strong>
-            </div>
-          ))}
-          {dashboard && dashboard.syncHealth.length === 0 ? <div className="empty">No sync run cached.</div> : null}
         </div>
       </section>
       <section className="panel wide">
@@ -3002,11 +2959,6 @@ function formatMonthValue(value: string) {
   return new Date(year, month - 1, 1).toLocaleDateString(undefined, { month: "short", year: "numeric" });
 }
 
-function funnelWidth(value: number, max: number) {
-  if (!max) return 0;
-  return Math.max(6, Math.round((value / max) * 100));
-}
-
 function completionWidth(value: number, total: number) {
   if (!total || value <= 0) return 0;
   return Math.max(6, Math.round((value / total) * 100));
@@ -3029,9 +2981,4 @@ function issueLifecycleLabel(value: string) {
     default:
       return "Unknown";
   }
-}
-
-function dropOffText(current: number, next: number) {
-  const gap = Math.max(current - next, 0);
-  return `${gap} pending next step`;
 }
