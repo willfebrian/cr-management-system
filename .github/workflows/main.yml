@@ -1,0 +1,21 @@
+name: Deploy CR Management
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, Linux, X64]
+
+    steps:
+      - name: Deploy to server
+        run: |
+          set -e
+          cd /var/www/cr-management-system
+          git pull origin main
+          npm ci
+          npm run build
+          sudo systemctl restart cr-management
+          sudo systemctl status cr-management --no-pager
