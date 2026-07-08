@@ -16,6 +16,7 @@ Web application for SAP Change Request management.
 
    ```powershell
    npm install
+   
    ```
 
 2. Fill `.env`.
