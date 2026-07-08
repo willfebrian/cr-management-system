@@ -653,6 +653,49 @@ button {
   justify-content: flex-end;
 }
 
+.sticky-action-menu {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sticky-action-menu-list {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+  min-width: 220px;
+  display: grid;
+  padding: 6px;
+  border: 1px solid #d8e0ea;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.16);
+}
+
+.sticky-action-menu-list button {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #17202a;
+  cursor: pointer;
+  padding: 9px 10px;
+  text-align: left;
+}
+
+.sticky-action-menu-list button:hover {
+  background: #f1f5f9;
+}
+
+.sticky-action-menu-list .danger-menu-item {
+  color: #9f1239;
+}
+
+.sticky-action-menu-list .danger-menu-item:hover {
+  background: #fff1f2;
+}
+
 .change-summary-main {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1390,6 +1433,34 @@ button {
   border-color: #dbe4ef;
   background: #f8fafc;
   color: #475569;
+}
+
+.timestamp-field {
+  position: relative;
+}
+
+.timestamp-display-input {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  border: 1px solid #cfd7e2;
+  border-radius: 6px;
+  background: #fff;
+  color: #17202a;
+  font: inherit;
+  padding: 8px 10px;
+  text-align: left;
+  cursor: text;
+}
+
+.timestamp-display-input:hover,
+.timestamp-display-input:focus {
+  border-color: #94a3b8;
+  outline: none;
+}
+
+.timestamp-field.is-editing input {
+  border-color: #0f766e;
 }
 
 .wide-field {

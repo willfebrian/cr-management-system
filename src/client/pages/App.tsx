@@ -337,7 +337,7 @@ export function App() {
                 if (!navigateTo("issue-display")) return;
                 loadIssues(issueFilters).catch((err) => setError(err instanceof Error ? err.message : String(err)));
               }}>
-                Display
+                Report
               </button>
               <button className={view === "issue-create" ? "active" : ""} onClick={() => {
                 setChangeIssueInitialId(null);
@@ -480,6 +480,14 @@ export function App() {
               setChangeIssueInitialAction(action);
               navigateTo("issue-change");
             }}
+            onGenerateCrForm={async (issueId) => {
+              setError("");
+              try {
+                await downloadCrTransportTemplate(issueId);
+              } catch (err) {
+                setError(err instanceof Error ? err.message : String(err));
+              }
+            }}
             onPage={(page) => {
               const nextFilters = { ...issueFilters, page };
               setIssueFilters(nextFilters);
@@ -504,9 +512,12 @@ export function App() {
                 const saved = await saveIssue(payload);
                 setIssueDetail(saved);
                 setSelectedIssueId(saved.issue?.id || null);
+                setChangeIssueInitialId(saved.issue?.id || null);
+                setChangeIssueInitialAction("");
                 setIssueFormDirty(false);
+                setSyncRefreshToken((current) => current + 1);
                 showToast("success", "Issue saved.");
-                setView("issue-display");
+                setView("issue-change");
                 await loadIssues({ ...issueFilters, page: 1 });
               } catch (err) {
                 setError(err instanceof Error ? err.message : String(err));
@@ -526,9 +537,12 @@ export function App() {
                 const saved = await saveIssue(payload);
                 setIssueDetail(saved);
                 setSelectedIssueId(saved.issue?.id || null);
+                setChangeIssueInitialId(saved.issue?.id || null);
+                setChangeIssueInitialAction("");
                 setIssueFormDirty(false);
+                setSyncRefreshToken((current) => current + 1);
                 showToast("success", "Issue saved.");
-                setView("issue-display");
+                setView("issue-change");
                 await loadIssues({ ...issueFilters, page: 1 });
               } catch (err) {
                 setError(err instanceof Error ? err.message : String(err));
@@ -1082,6 +1096,7 @@ function IssueDisplay({
   onCloseDetail,
   onChangeIssue,
   onIssueAction,
+  onGenerateCrForm,
   onPage,
   onPageSize,
   onOpenCr
@@ -1096,6 +1111,7 @@ function IssueDisplay({
   onCloseDetail: () => void;
   onChangeIssue: (id: number) => void;
   onIssueAction: (id: number, action: "cancel" | "delete") => void;
+  onGenerateCrForm: (id: number) => void;
   onPage: (page: number) => void;
   onPageSize: (pageSize: number) => void;
   onOpenCr: (link: { sap_system_code?: string; trkorr: string }) => void;
@@ -1103,9 +1119,11 @@ function IssueDisplay({
   const [detailMenuOpen, setDetailMenuOpen] = useState(false);
   const selectedIssue = issues.find((issue) => issue.id === selectedId) || detail?.issue || null;
   const hasDetail = Boolean(selectedId && selectedIssue);
+  const canGenerateCrForm = Boolean(detail?.crLinks.length);
   const issueColumns = useResizableColumns("issue-report-columns", {
     issue: 112,
     name: 320,
+    abaper: 180,
     glpi: 110,
     crHelpdesk: 140,
     cr: 140,
@@ -1114,6 +1132,7 @@ function IssueDisplay({
   }, {
     issue: 100,
     name: 220,
+    abaper: 130,
     glpi: 90,
     crHelpdesk: 115,
     cr: 115,
@@ -1150,6 +1169,7 @@ function IssueDisplay({
               <colgroup>
                 <col style={{ width: issueColumns.widths.issue }} />
                 <col style={{ width: issueColumns.widths.name }} />
+                <col style={{ width: issueColumns.widths.abaper }} />
                 <col style={{ width: issueColumns.widths.glpi }} />
                 <col style={{ width: issueColumns.widths.crHelpdesk }} />
                 <col style={{ width: issueColumns.widths.cr }} />
@@ -1160,6 +1180,7 @@ function IssueDisplay({
                 <tr>
                   <ResizableHeader label="Issue" column="issue" width={issueColumns.widths.issue} onResize={issueColumns.startResize} />
                   <ResizableHeader label="Name" column="name" width={issueColumns.widths.name} onResize={issueColumns.startResize} />
+                  <ResizableHeader label="ABAPer" column="abaper" width={issueColumns.widths.abaper} onResize={issueColumns.startResize} />
                   <ResizableHeader label="GLPI" column="glpi" width={issueColumns.widths.glpi} onResize={issueColumns.startResize} />
                   <ResizableHeader label="CR Helpdesk" column="crHelpdesk" width={issueColumns.widths.crHelpdesk} onResize={issueColumns.startResize} />
                   <ResizableHeader label="CR" column="cr" width={issueColumns.widths.cr} onResize={issueColumns.startResize} />
@@ -1172,6 +1193,7 @@ function IssueDisplay({
                   <tr key={issue.id} className={selectedId === issue.id ? "selected" : ""} onClick={() => onSelect(issue.id)}>
                     <td>{issue.issue_key}</td>
                     <td>{issue.issue_name}</td>
+                    <td>{issue.abaper_name_snapshot || "-"}</td>
                     <td>{formatGlpi(issue.primary_glpi_ticket)}</td>
                     <td>{issue.primary_cr_helpdesk_no || "-"}</td>
                     <td>{issue.primary_cr || "-"}</td>
@@ -1223,6 +1245,14 @@ function IssueDisplay({
                         }}>
                           <PencilLine size={15} /> Change
                         </button>
+                        {canGenerateCrForm ? (
+                          <button type="button" onClick={() => {
+                            setDetailMenuOpen(false);
+                            onGenerateCrForm(selectedIssue.id);
+                          }}>
+                            <FileSearch size={15} /> Generate CR Form
+                          </button>
+                        ) : null}
                         <button type="button" disabled={selectedIssue.issue_status === "cancelled"} onClick={() => {
                           setDetailMenuOpen(false);
                           onIssueAction(selectedIssue.id, "cancel");
@@ -1382,6 +1412,8 @@ function IssueEditor({
   const [expandedPhases, setExpandedPhases] = useState({ dev: true, qa: false, prd: false });
   const [templatePreview, setTemplatePreview] = useState<{ title: string; body: string; bodyHtml?: string } | null>(null);
   const [templateBusy, setTemplateBusy] = useState<"" | "email" | "ticket" | "cr-transport">("");
+  const [generateMenuOpen, setGenerateMenuOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [missingPeople, setMissingPeople] = useState<IssuePersonCheck[]>([]);
   const [newPeople, setNewPeople] = useState<IssuePersonRegistration[]>([]);
   const [pendingSavePayload, setPendingSavePayload] = useState<IssueSavePayload | null>(null);
@@ -1399,6 +1431,8 @@ function IssueEditor({
     setDeleteConfirm("");
     setActionDialog("");
     setTemplatePreview(null);
+    setGenerateMenuOpen(false);
+    setMoreMenuOpen(false);
     onDirtyChange?.(false);
   }, [detail?.issue?.id, mode]);
 
@@ -1505,7 +1539,8 @@ function IssueEditor({
 
   const primaryCr = detail?.crLinks[0];
   const crTokens = splitTokenValues(form.crLinks);
-  const hasGlpiNo = splitTokenValues(form.glpiTickets).length > 0;
+  const hasSavedGlpiNo = Boolean(detail?.glpi.length);
+  const hasSavedCrLink = Boolean(detail?.crLinks.length);
   const hasCrAssigned = crTokens.length > 0;
   const primaryLifecycle = primaryCr?.lifecycle_status;
   const qaReady = Boolean(primaryCr?.qa_import_date || ["in_qa", "pending_prd", "in_prd"].includes(primaryLifecycle || ""));
@@ -1593,8 +1628,8 @@ function IssueEditor({
   async function generateCrTransportTemplate() {
     if (!detail?.issue?.id) {
       setTemplatePreview({
-        title: "Generate CR Transport",
-        body: "Save issue terlebih dahulu sebelum generate CR Transport."
+        title: "Generate CR Form",
+        body: "Save issue terlebih dahulu sebelum generate CR Form."
       });
       return;
     }
@@ -1603,7 +1638,7 @@ function IssueEditor({
       await downloadCrTransportTemplate(detail.issue.id);
     } catch (err) {
       setTemplatePreview({
-        title: "Generate CR Transport",
+        title: "Generate CR Form",
         body: err instanceof Error ? err.message : String(err)
       });
     } finally {
@@ -1612,7 +1647,7 @@ function IssueEditor({
   }
 
   if (mode === "change" && !detail?.issue) {
-    return <section className="panel issue-editor-panel"><h2>Change Issue</h2><p className="empty">Pilih issue dari menu Display terlebih dahulu.</p></section>;
+    return <section className="panel issue-editor-panel"><h2>Change Issue</h2><p className="empty">Pilih issue dari menu Report terlebih dahulu.</p></section>;
   }
 
   return (
@@ -1691,7 +1726,7 @@ function IssueEditor({
                 <option value="ok">OK</option>
                 {isCancelled ? <option value="cancelled">Cancelled</option> : null}
               </select></label>
-              <label>Created On<input type="datetime-local" value={toDatetimeInput(form.createIssueDate)} onChange={(event) => update("createIssueDate", event.target.value)} disabled={formDisabled} /></label>
+              <TimestampInput label="Created On" value={form.createIssueDate} onChange={(value) => update("createIssueDate", value)} disabled={formDisabled} />
             </div>
             <label>Email Subject<input value={form.emailSubject || ""} onChange={(event) => update("emailSubject", event.target.value)} placeholder="Email subject" disabled={formDisabled} /></label>
             <label>Problem Analysis<textarea value={form.problemAnalysis || ""} onChange={(event) => update("problemAnalysis", event.target.value)} rows={6} disabled={formDisabled} /></label>
@@ -1767,10 +1802,10 @@ function IssueEditor({
         </button>
         {expandedPhases.dev ? (
           <div className="phase-pair-grid">
-            <ValueHelpField label="DEV Tester" kind="people" personMode="nickname" value={form.participants?.dev_tester || ""} onChange={(value) => updateParticipant("dev_tester", value)} placeholder="Nickname; nickname" disabled={devDisabled} />
-            <label>Testing Date<input type="datetime-local" value={toDatetimeInput(form.timeline?.dev_tested_date)} onChange={(event) => updateTimeline("dev_tested_date", event.target.value)} disabled={devDisabled} /></label>
-            <ValueHelpField label="DEV Evaluator" kind="people" personMode="nickname" value={form.participants?.dev_evaluator || ""} onChange={(value) => updateParticipant("dev_evaluator", value)} placeholder="Nickname; nickname" disabled={devDisabled} />
-            <label>Evaluation Date<input type="datetime-local" value={toDatetimeInput(form.timeline?.dev_evaluated_date)} onChange={(event) => updateTimeline("dev_evaluated_date", event.target.value)} disabled={devDisabled} /></label>
+            <ValueHelpField label="DEV Tester" kind="people" personMode="full_name" value={form.participants?.dev_tester || ""} onChange={(value) => updateParticipant("dev_tester", value)} placeholder="Full name" disabled={devDisabled} />
+            <TimestampInput label="Testing Date" value={form.timeline?.dev_tested_date} onChange={(value) => updateTimeline("dev_tested_date", value)} disabled={devDisabled} />
+            <ValueHelpField label="DEV Evaluator" kind="people" personMode="full_name" value={form.participants?.dev_evaluator || ""} onChange={(value) => updateParticipant("dev_evaluator", value)} placeholder="Full name" disabled={devDisabled} />
+            <TimestampInput label="Evaluation Date" value={form.timeline?.dev_evaluated_date} onChange={(value) => updateTimeline("dev_evaluated_date", value)} disabled={devDisabled} />
           </div>
         ) : null}
       </section>
@@ -1788,12 +1823,12 @@ function IssueEditor({
         </button>
         {expandedPhases.qa ? (
           <div className="phase-pair-grid">
-            <ValueHelpField label="QA Transporter" kind="people" personMode="nickname" value={form.participants?.qa_transporter || ""} onChange={(value) => updateParticipant("qa_transporter", value)} placeholder="Nickname; nickname" disabled={qaDisabled} />
+            <ValueHelpField label="QA Transporter" kind="people" personMode="full_name" value={form.participants?.qa_transporter || ""} onChange={(value) => updateParticipant("qa_transporter", value)} placeholder="Full name" disabled={qaDisabled} />
             <label>Transport Date<input className="readonly-input" value={formatIssueTimestamp(primaryCr?.qa_import_date, primaryCr?.qa_import_time)} readOnly /></label>
-            <ValueHelpField label="QA Tester" kind="people" personMode="nickname" value={form.participants?.qa_tester || ""} onChange={(value) => updateParticipant("qa_tester", value)} placeholder="Nickname; nickname" disabled={qaDisabled} />
-            <label>Testing Date<input type="datetime-local" value={toDatetimeInput(form.timeline?.qa_tested_date)} onChange={(event) => updateTimeline("qa_tested_date", event.target.value)} disabled={qaDisabled} /></label>
-            <ValueHelpField label="QA Evaluator" kind="people" personMode="nickname" value={form.participants?.qa_evaluator || ""} onChange={(value) => updateParticipant("qa_evaluator", value)} placeholder="Nickname; nickname" disabled={qaDisabled} />
-            <label>Evaluation Date<input type="datetime-local" value={toDatetimeInput(form.timeline?.qa_evaluated_date)} onChange={(event) => updateTimeline("qa_evaluated_date", event.target.value)} disabled={qaDisabled} /></label>
+            <ValueHelpField label="QA Tester" kind="people" personMode="full_name" value={form.participants?.qa_tester || ""} onChange={(value) => updateParticipant("qa_tester", value)} placeholder="Full name" disabled={qaDisabled} />
+            <TimestampInput label="Testing Date" value={form.timeline?.qa_tested_date} onChange={(value) => updateTimeline("qa_tested_date", value)} disabled={qaDisabled} />
+            <ValueHelpField label="QA Evaluator" kind="people" personMode="full_name" value={form.participants?.qa_evaluator || ""} onChange={(value) => updateParticipant("qa_evaluator", value)} placeholder="Full name" disabled={qaDisabled} />
+            <TimestampInput label="Evaluation Date" value={form.timeline?.qa_evaluated_date} onChange={(value) => updateTimeline("qa_evaluated_date", value)} disabled={qaDisabled} />
           </div>
         ) : null}
       </section>
@@ -1811,13 +1846,13 @@ function IssueEditor({
         </button>
         {expandedPhases.prd ? (
           <div className="phase-pair-grid">
-            <ValueHelpField label="PRD Requester" kind="people" personMode="nickname" value={form.participants?.prd_requester || ""} onChange={(value) => updateParticipant("prd_requester", value)} placeholder="Nickname; nickname" disabled={prdRequestDisabled} />
-            <label>Request Date<input type="datetime-local" value={toDatetimeInput(form.timeline?.prd_requested_date)} onChange={(event) => updateTimeline("prd_requested_date", event.target.value)} disabled={prdRequestDisabled} /></label>
-            <ValueHelpField label="PRD Evaluator" kind="people" personMode="nickname" value={form.participants?.prd_evaluator || ""} onChange={(value) => updateParticipant("prd_evaluator", value)} placeholder="Nickname; nickname" disabled={prdRequestDisabled} />
-            <label>Evaluation Date<input type="datetime-local" value={toDatetimeInput(form.timeline?.prd_evaluated_date)} onChange={(event) => updateTimeline("prd_evaluated_date", event.target.value)} disabled={prdRequestDisabled} /></label>
-            <ValueHelpField label="Approver" kind="people" personMode="nickname" value={form.participants?.approval || ""} onChange={(value) => updateParticipant("approval", value)} placeholder="Nickname; nickname" disabled={prdRequestDisabled} />
-            <label>Approval Date<input type="datetime-local" value={toDatetimeInput(form.timeline?.approval_date)} onChange={(event) => updateTimeline("approval_date", event.target.value)} disabled={prdRequestDisabled} /></label>
-            <ValueHelpField label="PRD Transporter" kind="people" personMode="nickname" value={form.participants?.executor || ""} onChange={(value) => updateParticipant("executor", value)} placeholder="Nickname; nickname" disabled={prdTransportDisabled} />
+            <ValueHelpField label="PRD Requester" kind="people" personMode="full_name" value={form.participants?.prd_requester || ""} onChange={(value) => updateParticipant("prd_requester", value)} placeholder="Full name" disabled={prdRequestDisabled} />
+            <TimestampInput label="Request Date" value={form.timeline?.prd_requested_date} onChange={(value) => updateTimeline("prd_requested_date", value)} disabled={prdRequestDisabled} />
+            <ValueHelpField label="PRD Evaluator" kind="people" personMode="full_name" value={form.participants?.prd_evaluator || ""} onChange={(value) => updateParticipant("prd_evaluator", value)} placeholder="Full name" disabled={prdRequestDisabled} />
+            <TimestampInput label="Evaluation Date" value={form.timeline?.prd_evaluated_date} onChange={(value) => updateTimeline("prd_evaluated_date", value)} disabled={prdRequestDisabled} />
+            <ValueHelpField label="Approver" kind="people" personMode="full_name" value={form.participants?.approval || ""} onChange={(value) => updateParticipant("approval", value)} placeholder="Full name" disabled={prdRequestDisabled} />
+            <TimestampInput label="Approval Date" value={form.timeline?.approval_date} onChange={(value) => updateTimeline("approval_date", value)} disabled={prdRequestDisabled} />
+            <ValueHelpField label="PRD Transporter" kind="people" personMode="full_name" value={form.participants?.executor || ""} onChange={(value) => updateParticipant("executor", value)} placeholder="Full name" disabled={prdTransportDisabled} />
             <label>Transport Date<input className="readonly-input" value={formatIssueTimestamp(primaryCr?.prd_import_date, primaryCr?.prd_import_time)} readOnly /></label>
           </div>
         ) : null}
@@ -1827,28 +1862,58 @@ function IssueEditor({
         <div className="sticky-actions">
           {mode === "change" ? (
             <>
-              <button className="secondary" type="button" onClick={() => generateTemplate("ticket")} disabled={templateBusy !== "" || !detail?.issue?.id}>
-                {templateBusy === "ticket" ? "Generating" : "Generate GLPI Ticket Template"}
-              </button>
-              {hasGlpiNo ? (
-                <button className="secondary" type="button" onClick={() => generateTemplate("email")} disabled={templateBusy !== "" || !detail?.issue?.id}>
-                  {templateBusy === "email" ? "Generating" : "Generate Email Template"}
+              <div className="sticky-action-menu">
+                <button className="secondary" type="button" onClick={() => {
+                  setGenerateMenuOpen((current) => !current);
+                  setMoreMenuOpen(false);
+                }} disabled={templateBusy !== "" || !detail?.issue?.id}>
+                  {templateBusy ? "Generating" : "Generate"} ▾
                 </button>
-              ) : null}
-              <button className="secondary" type="button" onClick={generateCrTransportTemplate} disabled={templateBusy !== "" || !detail?.issue?.id}>
-                {templateBusy === "cr-transport" ? "Generating" : "Generate CR Transport"}
-              </button>
+                {generateMenuOpen ? (
+                  <div className="sticky-action-menu-list">
+                    <button type="button" onClick={() => {
+                      setGenerateMenuOpen(false);
+                      generateTemplate("ticket");
+                    }}>GLPI Ticket Template</button>
+                    {hasSavedCrLink && hasSavedGlpiNo ? (
+                      <button type="button" onClick={() => {
+                        setGenerateMenuOpen(false);
+                        generateTemplate("email");
+                      }}>Email Template</button>
+                    ) : null}
+                    {hasSavedCrLink ? (
+                      <button type="button" onClick={() => {
+                        setGenerateMenuOpen(false);
+                        generateCrTransportTemplate();
+                      }}>CR Form</button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
             </>
           ) : null}
           {mode === "change" && detail?.issue ? (
-            <>
-              {!isCancelled ? (
-                <button className="danger-secondary" type="button" onClick={() => setActionDialog("cancel")}>Cancel Issue</button>
-              ) : (
-                <span className="readonly-note">Cancelled issue is read-only.</span>
-              )}
-              <button className="danger" type="button" onClick={() => setActionDialog("delete")}>Delete Issue</button>
-            </>
+            <div className="sticky-action-menu">
+              <button className="secondary" type="button" onClick={() => {
+                setMoreMenuOpen((current) => !current);
+                setGenerateMenuOpen(false);
+              }}>More ▾</button>
+              {moreMenuOpen ? (
+                <div className="sticky-action-menu-list">
+                  {!isCancelled ? (
+                    <button type="button" onClick={() => {
+                      setMoreMenuOpen(false);
+                      setActionDialog("cancel");
+                    }}>Cancel Issue</button>
+                  ) : null}
+                  <button className="danger-menu-item" type="button" onClick={() => {
+                    setMoreMenuOpen(false);
+                    setActionDialog("delete");
+                  }}>Delete Issue</button>
+                </div>
+              ) : null}
+              {isCancelled ? <span className="readonly-note">Cancelled issue is read-only.</span> : null}
+            </div>
           ) : null}
           {!isCancelled ? <button className="primary" type="submit" disabled={saving}>{saving ? "Saving" : "Save"}</button> : null}
         </div>
@@ -2055,7 +2120,6 @@ function ChangeIssue({
       <form className="panel issue-selection-panel" onSubmit={search}>
         <div className="panel-heading">
           <h2>Selection Parameter</h2>
-          <button className="primary" type="submit" disabled={searching}>{searching ? "Searching" : "Search"}</button>
         </div>
         <div className="issue-selection-grid">
           <label>Issue / Description / Requester
@@ -2192,6 +2256,49 @@ function ValueHelpField({
           {rows.length === 0 ? <span>No value found</span> : null}
         </div>
       ) : null}
+    </label>
+  );
+}
+
+function TimestampInput({
+  label,
+  value,
+  onChange,
+  disabled = false
+}: {
+  label: string;
+  value?: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const inputValue = toDatetimeInput(value);
+
+  if (disabled) {
+    return (
+      <label className="timestamp-field">
+        {label}
+        <input className="readonly-input" value={formatIssueTimestamp(value)} disabled />
+      </label>
+    );
+  }
+
+  return (
+    <label className={`timestamp-field ${editing ? "is-editing" : ""}`}>
+      {label}
+      {editing ? (
+        <input
+          type="datetime-local"
+          value={inputValue}
+          onChange={(event) => onChange(event.target.value)}
+          onBlur={() => setEditing(false)}
+          autoFocus
+        />
+      ) : (
+        <button type="button" className="timestamp-display-input" onClick={() => setEditing(true)}>
+          <span>{formatIssueTimestamp(value)}</span>
+        </button>
+      )}
     </label>
   );
 }
@@ -2559,7 +2666,7 @@ function peopleChecksFromIssuePayload(payload: IssueSavePayload): IssuePersonChe
   for (const group of PARTICIPANT_GROUPS) {
     for (const role of group.roles) {
       if (role === "requester" || role === "abaper") continue;
-      checks.push(...splitTokenValues(payload.participants?.[role]).map((name) => ({ name, mode: "nickname" as const })));
+      checks.push(...splitTokenValues(payload.participants?.[role]).map((name) => ({ name, mode: "full_name" as const })));
     }
   }
   const seen = new Set<string>();
