@@ -43,7 +43,7 @@ export function startCrAutoSyncScheduler() {
     }
   };
 
-  setInterval(run, intervalMs);
+  unrefTimer(setInterval(run, intervalMs));
   windowlessDelay(run, 5000);
 }
 
@@ -62,7 +62,15 @@ async function getStaleSystems() {
 }
 
 function windowlessDelay(callback: () => void | Promise<void>, ms: number) {
-  setTimeout(() => {
+  const timer = setTimeout(() => {
     void callback();
   }, ms);
+  unrefTimer(timer);
+}
+
+function unrefTimer(timer: ReturnType<typeof setTimeout>) {
+  if (typeof timer === "object" && timer && "unref" in timer) {
+    const unref = (timer as { unref?: () => void }).unref;
+    if (typeof unref === "function") unref.call(timer);
+  }
 }

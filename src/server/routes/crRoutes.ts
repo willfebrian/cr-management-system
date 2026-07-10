@@ -6,7 +6,8 @@ import {
   getDashboardStatusTrend,
   listCrRequests,
 } from "../db/crRepository.js";
-import { cancelIssue, deleteIssue, getIssueDashboardInsights, getIssueDetail, getIssueStatusOptions, getNextIssueNumber, getNextSubIssueNumber, listIssues, registerIssuePeople, saveIssue, searchIssueCrHelpdesk, searchIssueCrLinks, searchIssueGlpi, searchIssuePeople, validateIssuePeople } from "../db/issueRepository.js";
+import { cancelIssue, deleteIssue, getIssueDashboardInsights, getIssueDetail, getIssueStatusOptions, getNextIssueNumber, getNextSubIssueNumber, listIssues, registerIssuePeople, saveIssue, searchIssueCrHelpdesk, searchIssueCrLinks, searchIssuePeople, validateIssuePeople } from "../db/issueRepository.js";
+import { searchGlpiTicketsFromMaria } from "../db/glpiMariaRepository.js";
 import { getSapCrSystem, listSapCrSystems } from "../config.js";
 import { normalizeLookbackDays, normalizeSyncMode, normalizeSystemCodes, runCrSync } from "../sync/crSyncRunner.js";
 import { buildCrTransportDocument } from "../templates/crTransportTemplateService.js";
@@ -155,8 +156,8 @@ crRoutes.post("/value-help/people", async (req, res, next) => {
 
 crRoutes.get("/value-help/glpi", async (req, res, next) => {
   try {
-    await assertDatabaseConfigured();
-    res.json({ rows: await searchIssueGlpi(stringQuery(req.query.q) || "") });
+    const q = stringQuery(req.query.q) || "";
+    res.json({ rows: await searchGlpiTicketsFromMaria(q) });
   } catch (error) {
     next(error);
   }

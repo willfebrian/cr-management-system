@@ -1366,6 +1366,7 @@ function IssueEditor({
   const [baseIssueCandidates, setBaseIssueCandidates] = useState<IssueRow[]>([]);
   const [showBaseIssueCandidates, setShowBaseIssueCandidates] = useState(false);
   const [crPreview, setCrPreview] = useState<Record<string, { description?: string; status?: string; system?: string }>>({});
+  const [glpiPreview, setGlpiPreview] = useState<Record<string, { title?: string; openedAt?: string; status?: string; notFound?: boolean }>>({});
   const [expandedPhases, setExpandedPhases] = useState({ dev: true, qa: false, prd: false });
   const [templatePreview, setTemplatePreview] = useState<{ title: string; body: string; bodyHtml?: string } | null>(null);
   const [templateBusy, setTemplateBusy] = useState<"" | "email" | "ticket" | "cr-transport">("");
@@ -1384,6 +1385,7 @@ function IssueEditor({
     setBaseIssueCandidates([]);
     setShowBaseIssueCandidates(false);
     setCrPreview({});
+    setGlpiPreview({});
     setCancelReason(detail?.issue?.cancelled_reason || "");
     setDeleteConfirm("");
     setActionDialog("");
@@ -1496,6 +1498,8 @@ function IssueEditor({
 
   const primaryCr = detail?.crLinks[0];
   const crTokens = splitTokenValues(form.crLinks);
+  const glpiTokens = splitTokenValues(form.glpiTickets).filter((token) => /^\d+$/.test(token));
+  const glpiLookupKey = glpiTokens.join("|");
   const hasSavedGlpiNo = Boolean(detail?.glpi.length);
   const hasSavedCrLink = Boolean(detail?.crLinks.length);
   const hasCrAssigned = crTokens.length > 0;
@@ -1520,6 +1524,42 @@ function IssueEditor({
   function previewForCr(trkorr: string) {
     return crPreview[trkorr] || detailCrMap.get(trkorr);
   }
+
+  useEffect(() => {
+    if (!glpiLookupKey) return;
+    const missing = glpiTokens.filter((token) => !glpiPreview[token]);
+    if (!missing.length) return;
+    let cancelled = false;
+    const timeout = window.setTimeout(() => {
+      Promise.all(missing.map(async (token) => {
+        try {
+          const result = await fetchValueHelp("glpi", token);
+          const row = result.rows.find((item) => String(item.ticket_number || "") === token) || result.rows[0];
+          return {
+            token,
+            preview: row ? {
+              title: String(row.title || ""),
+              openedAt: row.opened_at ? String(row.opened_at) : "",
+              status: row.status ? String(row.status) : ""
+            } : { notFound: true }
+          };
+        } catch {
+          return { token, preview: { notFound: true } };
+        }
+      })).then((items) => {
+        if (cancelled) return;
+        setGlpiPreview((current) => {
+          const next = { ...current };
+          for (const item of items) next[item.token] = item.preview;
+          return next;
+        });
+      });
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [glpiLookupKey]);
 
   useEffect(() => {
     setExpandedPhases({
@@ -1672,76 +1712,129 @@ function IssueEditor({
         </div>
         <div className="issue-initiation-layout">
           <div className="issue-initiation-column issue-initiation-main">
-            <div className="initiation-pair">
-              <label>Issue No.<input className="readonly-input" value={displayedIssueNo} onChange={(event) => update("issueNo", event.target.value)} placeholder="Auto" readOnly={mode === "create"} disabled={formDisabled} /></label>
-              <label>Sub Issue<input className={mode === "create" ? "readonly-input" : ""} value={displayedSubIssueNo} onChange={(event) => update("subIssueNo", event.target.value)} readOnly={mode === "create"} disabled={formDisabled} /></label>
+            <div className="initiation-section">
+              <h3>Issue Information</h3>
+              <div className="initiation-pair">
+                <label>Issue No.<input className="readonly-input" value={displayedIssueNo} onChange={(event) => update("issueNo", event.target.value)} placeholder="Auto" readOnly={mode === "create"} disabled={formDisabled} /></label>
+                <label>Sub Issue<input className={mode === "create" ? "readonly-input" : ""} value={displayedSubIssueNo} onChange={(event) => update("subIssueNo", event.target.value)} readOnly={mode === "create"} disabled={formDisabled} /></label>
+              </div>
+              <label>Issue Name<input value={form.issueName || ""} onChange={(event) => update("issueName", event.target.value)} required disabled={formDisabled} /></label>
+              <div className="initiation-pair">
+                <label>Status<select value={form.sourceIssueStatus || "open"} onChange={(event) => update("sourceIssueStatus", event.target.value)} disabled={formDisabled}>
+                  <option value="open">Open</option>
+                  <option value="ok">OK</option>
+                  {isCancelled ? <option value="cancelled">Cancelled</option> : null}
+                </select></label>
+                <TimestampInput label="Created On" value={form.createIssueDate} onChange={(value) => update("createIssueDate", value)} disabled={formDisabled} />
+              </div>
+              <label>Email Subject<input value={form.emailSubject || ""} onChange={(event) => update("emailSubject", event.target.value)} placeholder="Email subject" disabled={formDisabled} /></label>
             </div>
-            <label>Issue Name<input value={form.issueName || ""} onChange={(event) => update("issueName", event.target.value)} required disabled={formDisabled} /></label>
-            <div className="initiation-pair">
-              <label>Status<select value={form.sourceIssueStatus || "open"} onChange={(event) => update("sourceIssueStatus", event.target.value)} disabled={formDisabled}>
-                <option value="open">Open</option>
-                <option value="ok">OK</option>
-                {isCancelled ? <option value="cancelled">Cancelled</option> : null}
-              </select></label>
-              <TimestampInput label="Created On" value={form.createIssueDate} onChange={(value) => update("createIssueDate", value)} disabled={formDisabled} />
+            <div className="initiation-section">
+              <h3>Analysis</h3>
+              <label>Problem Analysis<textarea value={form.problemAnalysis || ""} onChange={(event) => update("problemAnalysis", event.target.value)} rows={6} disabled={formDisabled} /></label>
+              <label>Impact Analysis<textarea value={form.impactAnalysis || ""} onChange={(event) => update("impactAnalysis", event.target.value)} rows={6} disabled={formDisabled} /></label>
             </div>
-            <label>Email Subject<input value={form.emailSubject || ""} onChange={(event) => update("emailSubject", event.target.value)} placeholder="Email subject" disabled={formDisabled} /></label>
-            <label>Problem Analysis<textarea value={form.problemAnalysis || ""} onChange={(event) => update("problemAnalysis", event.target.value)} rows={6} disabled={formDisabled} /></label>
-            <label>Impact Analysis<textarea value={form.impactAnalysis || ""} onChange={(event) => update("impactAnalysis", event.target.value)} rows={6} disabled={formDisabled} /></label>
           </div>
 
           <div className="issue-initiation-column issue-initiation-reference">
-            <div className="initiation-pair">
-              <ValueHelpField label="CR Helpdesk No." kind="cr-helpdesk" value={form.crHelpdeskNumbers || ""} onChange={(value) => update("crHelpdeskNumbers", value)} placeholder="CR Helpdesk No." disabled={formDisabled} />
-              <ValueHelpField label="GLPI No." kind="glpi" value={form.glpiTickets || ""} onChange={(value) => update("glpiTickets", value)} placeholder="16095; 16096" disabled={formDisabled} />
-            </div>
-            <ValueHelpField
-              label="CR SAP No."
-              kind="cr"
-              value={form.crLinks || ""}
-              onChange={(value) => update("crLinks", value.toUpperCase())}
-              onSelectRow={(row) => {
-                const trkorr = String(row.trkorr || "");
-                if (!trkorr) return;
-                setCrPreview((current) => ({
-                  ...current,
-                  [trkorr]: {
-                    description: String(row.description || ""),
-                    status: String(row.status_group || ""),
-                    system: String(row.sap_system_code || "")
-                  }
-                }));
-              }}
-              placeholder="TRDK..."
-              disabled={formDisabled}
-            />
-            {crTokens.length ? (
-              <div className="cr-inline-preview">
-                {crTokens.map((trkorr) => {
-                  const preview = previewForCr(trkorr);
-                  const description = preview?.description || "Description will appear after the CR is cached/selected.";
-                  const status = preview?.status ? formatStatusLabel(preview.status) : "Status unknown";
-                  return (
-                    <div className="cr-description-card" key={trkorr}>
-                      <span>{description}</span>
-                      <strong>{status}</strong>
+            <div className="initiation-section">
+              <h3>References</h3>
+              <div className="initiation-pair reference-pair">
+                <div className="reference-field-group">
+                  <ValueHelpField label="CR Helpdesk No." kind="cr-helpdesk" value={form.crHelpdeskNumbers || ""} onChange={(value) => update("crHelpdeskNumbers", value)} placeholder="CR Helpdesk No." disabled={formDisabled} />
+                </div>
+                <div className="reference-field-group">
+                  <ValueHelpField
+                    label="GLPI No."
+                    kind="glpi"
+                    value={form.glpiTickets || ""}
+                    onChange={(value) => update("glpiTickets", value)}
+                    onSelectRow={(row) => {
+                      const ticket = String(row.ticket_number || "");
+                      if (!ticket) return;
+                      setGlpiPreview((current) => ({
+                        ...current,
+                        [ticket]: {
+                          title: String(row.title || ""),
+                          openedAt: row.opened_at ? String(row.opened_at) : "",
+                          status: row.status ? String(row.status) : ""
+                        }
+                      }));
+                    }}
+                    placeholder="16095; 16096"
+                    disabled={formDisabled}
+                  />
+                  {glpiTokens.length ? (
+                    <div className="reference-hints">
+                      {glpiTokens.map((ticket) => {
+                        const preview = glpiPreview[ticket];
+                        const meta = [formatValueHelpDate(preview?.openedAt), formatGlpiStatus(preview?.status)].filter(Boolean).join(" - ");
+                        return (
+                          <div className={`reference-hint glpi-reference-hint ${preview?.notFound ? "muted" : ""}`} key={ticket}>
+                            <div>
+                              <strong>{preview?.notFound ? "Ticket not found" : preview?.title || "Looking up GLPI ticket..."}</strong>
+                              {meta ? <small>{meta}</small> : null}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
+                  ) : null}
+                </div>
               </div>
-            ) : null}
-            <div className="repeatable-row-field">
-              <MultiValueHelpField label="Requester" kind="people" personMode="full_name" value={form.requesterNames || ""} onChange={(value) => update("requesterNames", value)} placeholder="Full name" disabled={formDisabled} />
+              <ValueHelpField
+                label="CR SAP No."
+                kind="cr"
+                value={form.crLinks || ""}
+                onChange={(value) => update("crLinks", value.toUpperCase())}
+                onSelectRow={(row) => {
+                  const trkorr = String(row.trkorr || "");
+                  if (!trkorr) return;
+                  setCrPreview((current) => ({
+                    ...current,
+                    [trkorr]: {
+                      description: String(row.description || ""),
+                      status: String(row.status_group || ""),
+                      system: String(row.sap_system_code || "")
+                    }
+                  }));
+                }}
+                placeholder="TRDK..."
+                disabled={formDisabled}
+              />
+              {crTokens.length ? (
+                <div className="reference-hints">
+                  {crTokens.map((trkorr) => {
+                    const preview = previewForCr(trkorr);
+                    const description = preview?.description || "Description will appear after the CR is cached/selected.";
+                    const status = preview?.status ? formatStatusLabel(preview.status) : "Status unknown";
+                    return (
+                      <div className="reference-hint cr-reference-hint" key={trkorr}>
+                        <div>
+                          <strong>{description}</strong>
+                        </div>
+                        <em>{status}</em>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
-            <div className="repeatable-row-field">
-              <MultiValueHelpField label="ABAPer" kind="people" personMode="full_name" value={form.abaperNames || ""} onChange={(value) => update("abaperNames", value)} placeholder="Full name" disabled={formDisabled} />
+            <div className="initiation-section">
+              <h3>People</h3>
+              <div className="repeatable-row-field">
+                <MultiValueHelpField label="Requester" kind="people" personMode="full_name" value={form.requesterNames || ""} onChange={(value) => update("requesterNames", value)} placeholder="Full name" disabled={formDisabled} />
+              </div>
+              <div className="repeatable-row-field">
+                <MultiValueHelpField label="ABAPer" kind="people" personMode="full_name" value={form.abaperNames || ""} onChange={(value) => update("abaperNames", value)} placeholder="Full name" disabled={formDisabled} />
+              </div>
+              {isCancelled ? (
+                <section className="issue-cancel-card">
+                  <small>Cancel Reason</small>
+                  <strong>{form.cancelledReason || detail?.issue?.cancelled_reason || "-"}</strong>
+                </section>
+              ) : null}
             </div>
-            {isCancelled ? (
-              <section className="issue-cancel-card">
-                <small>Cancel Reason</small>
-                <strong>{form.cancelledReason || detail?.issue?.cancelled_reason || "-"}</strong>
-              </section>
-            ) : null}
           </div>
         </div>
       </section>
@@ -2548,6 +2641,19 @@ function formatGlpi(value?: number) {
   return String(value);
 }
 
+function formatGlpiStatus(value?: string) {
+  if (!value) return "";
+  const labels: Record<string, string> = {
+    "1": "New",
+    "2": "Processing",
+    "3": "Planned",
+    "4": "Pending",
+    "5": "Solved",
+    "6": "Closed"
+  };
+  return labels[value] || value;
+}
+
 function formatCrHelpdeskNumbers(detail: IssueDetail | null) {
   return detail?.crHelpdeskNumbers.map((item) => item.cr_helpdesk_no).join("; ") || "";
 }
@@ -2602,10 +2708,17 @@ function valueHelpValue(kind: ValueHelpKind, row: Record<string, unknown>, perso
 }
 
 function valueHelpDescription(kind: ValueHelpKind, row: Record<string, unknown>) {
-  if (kind === "glpi") return "GLPI ticket";
+  if (kind === "glpi") return [row.title, formatValueHelpDate(row.opened_at), row.status ? `status ${row.status}` : ""].filter(Boolean).join(" - ") || "GLPI ticket";
   if (kind === "cr-helpdesk") return "CR Helpdesk No.";
   if (kind === "cr") return [row.sap_system_code, row.status_group, row.description].filter(Boolean).join(" - ");
   return [row.nickname, row.department, row.email].filter(Boolean).join(" - ");
+}
+
+function formatValueHelpDate(value: unknown) {
+  if (!value) return "";
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString();
 }
 
 function splitTokenValues(value?: string) {

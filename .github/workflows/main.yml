@@ -14,7 +14,7 @@ jobs:
         run: |
           set -e
           cd /var/www/cr-management-system
-          git pull origin main
+          git pull origin master
           npm ci
           npm run build
           sudo systemctl restart cr-management

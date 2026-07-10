@@ -1287,25 +1287,43 @@ button {
 
 .issue-initiation-layout {
   display: grid;
-  grid-template-columns: minmax(360px, 0.95fr) minmax(360px, 1fr);
-  gap: 24px;
+  grid-template-columns: minmax(380px, 1fr) minmax(360px, 0.95fr);
+  gap: 22px;
 }
 
 .issue-initiation-column {
   display: grid;
   align-content: start;
-  gap: 12px;
+  gap: 18px;
 }
 
 .issue-initiation-reference {
-  border-left: 1px solid #cfd7e2;
-  padding-left: 24px;
+  border-left: 1px solid #dbe4ef;
+  padding-left: 22px;
 }
 
 .initiation-pair {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.reference-pair {
+  align-items: start;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+}
+
+.initiation-section {
+  display: grid;
+  gap: 12px;
+}
+
+.initiation-section h3 {
+  margin: 0 0 -2px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0;
 }
 
 .issue-initiation-column label,
@@ -1422,7 +1440,7 @@ button {
 .value-help-field input:disabled {
   border-color: #e2e8f0;
   background: #f1f5f9;
-  color: #94a3b8;
+  color: #64748b;
   cursor: not-allowed;
 }
 
@@ -1523,6 +1541,71 @@ button {
   display: grid;
   gap: 6px;
   margin-top: -4px;
+}
+
+.reference-field-group {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+
+.reference-hints {
+  display: grid;
+  gap: 6px;
+}
+
+.reference-hint {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+  border-left: 2px solid #dbe4ef;
+  padding-left: 8px;
+  color: #475569;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.reference-hint strong {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.reference-hint small {
+  display: block;
+  margin-top: 1px;
+  color: #64748b;
+}
+
+.reference-hint em {
+  align-self: start;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #166534;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.glpi-reference-hint strong {
+  color: #334155;
+}
+
+.cr-reference-hint {
+  margin-top: 2px;
+}
+
+.reference-hint.muted strong {
+  color: #94a3b8;
 }
 
 .cr-description-card {
