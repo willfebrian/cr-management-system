@@ -32,6 +32,7 @@ try {
     message: error.message,
     code: error.code,
     key: error.key,
+    sessions: options.verbose ? error.sessions : undefined,
     stack: options.verbose ? error.stack : undefined
   }, null, 2));
   process.exitCode = 1;
@@ -46,6 +47,9 @@ async function dispatch(name, args, opts) {
     case "login-test":
       ensureSap();
       return loginTest();
+    case "session-check":
+      ensureSap();
+      return sessionCheck(opts);
     case "tcode":
       ensureSap();
       return tcodeLookup(requiredArg(args, 0, "tcode"));
@@ -106,6 +110,7 @@ function help() {
     ok: true,
     usage: [
       "node scripts/sap-discovery.mjs login-test",
+      "node scripts/sap-discovery.mjs session-check --server SAP_DEV_AIX",
       "node scripts/sap-discovery.mjs tcode F-30",
       "node scripts/sap-discovery.mjs table TSTC --fields TCODE,PGMNA,DYPNO --where \"TCODE = 'F-30'\" --row-count 5",
       "node scripts/sap-discovery.mjs cr-list --days 30 --row-count 100 --save",
@@ -124,6 +129,78 @@ function help() {
       "Use --server SAP_DEV_AIX_MAINT for read-only helper RFCs that exist only on the DEV AIX maintenance server."
     ]
   };
+}
+
+async function sessionCheck(opts) {
+  const server = opts.server || defaultCrServer;
+  const client = gateway.clients[server];
+  if (!client?.connection?.user) {
+    throw new Error(`No SAP RFC user is configured for ${server}`);
+  }
+
+  const user = String(client.connection.user).trim().toUpperCase();
+  const sapClient = String(client.connection.client || "").trim();
+  const maxExistingSessions = Math.max(Number(opts.maxExistingSessions || 0), 0);
+  const result = await gateway.call({
+    agentName,
+    server,
+    rfcName: "TH_USER_LIST",
+    params: {},
+    userQuestion: "Preflight SAP RFC session check before CR synchronization"
+  });
+  const sourceRows = extractSessionRows(result);
+  const rows = sourceRows
+    .filter((row) => matchesSessionUser(row, user, sapClient));
+  const sessions = rows.map((row) => ({
+    terminal: row.TERM || row.TERMINAL || row.GUI_TERM || undefined,
+    host: row.HOSTADR || row.HOST || row.HOSTNAME || undefined,
+    logonDate: row.LOGON_DATE || row.LOGONDATE || row.DATUM || undefined,
+    logonTime: row.LOGON_TIME || row.LOGONTIME || row.UZEIT || undefined,
+    mode: row.MODE || row.MODETYPE || row.TYPE || undefined
+  }));
+
+  if (sessions.length > maxExistingSessions) {
+    const error = new Error(`SAP multiple logon protection blocked sync for ${user} on ${server}: ${sessions.length} existing active session(s), maximum ${maxExistingSessions}.`);
+    error.code = "SAP_MULTIPLE_LOGON_DETECTED";
+    error.server = server;
+    error.user = user;
+    error.activeSessionCount = sessions.length;
+    error.sessions = sessions;
+    throw error;
+  }
+
+  return {
+    ok: true,
+    server,
+    user,
+    client: sapClient || undefined,
+    activeSessionCount: sessions.length,
+    maxExistingSessions,
+    sessions,
+    ...(opts.verbose ? {
+      diagnostics: {
+        sourceRowCount: sourceRows.length,
+        sourceFields: [...new Set(sourceRows.flatMap((row) => Object.keys(row || {})))].sort()
+      }
+    } : {})
+  };
+}
+
+function extractSessionRows(result) {
+  const candidates = [result?.USRLIST, result?.USERLIST, result?.USERS, result?.LIST]
+    .filter((value) => Array.isArray(value));
+  return candidates.find((value) => value.length > 0)
+    || candidates[0]
+    || Object.values(result || {}).find((value) => Array.isArray(value) && value.length > 0)
+    || [];
+}
+
+function matchesSessionUser(row, user, sapClient) {
+  const sessionUser = String(
+    row.BNAME || row.USER || row.USERNAME || row.USER_NAME || row.UNAME || row.LOGON_USER || ""
+  ).trim().toUpperCase();
+  const sessionClient = String(row.MANDT || row.CLIENT || "").trim();
+  return sessionUser === user && (!sapClient || !sessionClient || sessionClient === sapClient);
 }
 
 async function loginTest() {

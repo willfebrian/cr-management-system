@@ -269,8 +269,18 @@ export async function syncCr(options: SyncCrOptions): Promise<SyncCrResult> {
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
+  const response = await fetch(url, { ...init, credentials: "include" });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.message || `Request failed: ${response.status}`);
   return body;
 }
+
+export type AuthUser = { id: number; username: string; role: "ADMIN" | "USER"; mustChangePassword: boolean };
+export async function login(username: string, password: string) { return fetchJson<{ user: AuthUser }>("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password }) }); }
+export async function fetchCurrentUser() { return fetchJson<{ user: AuthUser }>("/api/auth/me"); }
+export async function logout() { return fetchJson<{ ok: boolean }>("/api/auth/logout", { method: "POST" }); }
+export async function changePassword(currentPassword: string, newPassword: string) { return fetchJson<{ ok: boolean }>("/api/auth/change-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currentPassword, newPassword }) }); }
+export type ManagedUser = { id: number; username: string; role: "ADMIN" | "USER"; is_active: boolean; must_change_password: boolean; last_login_at?: string };
+export async function fetchUsers() { return fetchJson<{ users: ManagedUser[] }>("/api/users"); }
+export async function createUser(username: string, password: string, role: "ADMIN" | "USER") { return fetchJson<{ user: ManagedUser }>("/api/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password, role }) }); }
+export async function resetUserPassword(id: number, password: string) { return fetchJson<{ ok: boolean }>(`/api/users/${id}/password`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password }) }); }

@@ -1,0 +1,10 @@
+import { Router } from "express";
+import { hashPassword } from "../auth/authService";
+import { requireAdmin } from "../auth/middleware";
+import { pool } from "../db/pool";
+export const userRoutes = Router();
+userRoutes.use(requireAdmin);
+userRoutes.get("/", async (_req, res, next) => { try { const result = await pool.query("SELECT id, username, role, is_active, must_change_password, last_login_at, created_at FROM app_users ORDER BY username"); res.json({ users: result.rows }); } catch (e) { next(e); } });
+userRoutes.post("/", async (req, res, next) => { try { const username = String(req.body?.username || "").trim().toUpperCase(); const password = String(req.body?.password || ""); const role = req.body?.role === "ADMIN" ? "ADMIN" : "USER"; if (!username || password.length < 8) return res.status(400).json({ message: "Username wajib dan password minimal 8 karakter" }); const result = await pool.query("INSERT INTO app_users (username, password_hash, role) VALUES ($1, $2, $3) RETURNING id, username, role, is_active, must_change_password", [username, await hashPassword(password), role]); res.status(201).json({ user: result.rows[0] }); } catch (e: any) { if (e?.code === "23505") return res.status(409).json({ message: "Username sudah ada" }); next(e); } });
+userRoutes.patch("/:id/password", async (req, res, next) => { try { const password = String(req.body?.password || ""); if (password.length < 8) return res.status(400).json({ message: "Password minimal 8 karakter" }); await pool.query("UPDATE app_users SET password_hash = $1, must_change_password = true, password_changed_at = null, updated_at = now() WHERE id = $2", [await hashPassword(password), Number(req.params.id)]); res.json({ ok: true }); } catch (e) { next(e); } });
+userRoutes.patch("/:id/status", async (req, res, next) => { try { await pool.query("UPDATE app_users SET is_active = $1, updated_at = now() WHERE id = $2", [Boolean(req.body?.isActive), Number(req.params.id)]); res.json({ ok: true }); } catch (e) { next(e); } });

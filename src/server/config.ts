@@ -52,6 +52,11 @@ export const config = {
   port: Number(process.env.PORT || 3001),
   host: process.env.HOST || "0.0.0.0",
   clientOrigin: process.env.CLIENT_ORIGIN || "http://127.0.0.1:5173",
+  auth: {
+    sessionTtlHours: Math.max(Number(process.env.AUTH_SESSION_TTL_HOURS || 8), 1),
+    cookieName: process.env.AUTH_COOKIE_NAME || "crms_session",
+    cookieSecure: boolEnv(process.env.AUTH_COOKIE_SECURE, false)
+  },
   databaseUrl: process.env.DATABASE_URL || "",
   pg: {
     host: process.env.PGHOST || "localhost",

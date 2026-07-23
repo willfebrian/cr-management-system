@@ -1011,6 +1011,7 @@ export async function cancelIssue(id: number, reason: string) {
       WHERE id = $1
     `, [issueId, cancelReason]);
 
+    await closeIssueCrLinkHistory(client, issueId, "cancelled", cancelReason);
     await client.query("DELETE FROM issue_cr_links WHERE issue_id = $1", [issueId]);
 
     await client.query(`
@@ -1032,13 +1033,25 @@ export async function deleteIssue(id: number) {
   const issueId = Number(id);
   if (!Number.isFinite(issueId) || issueId <= 0) throw new Error("Issue id is invalid.");
 
-  const { rows } = await pool.query(`
-    DELETE FROM issue_headers
-    WHERE id = $1
-    RETURNING id
-  `, [issueId]);
-  if (!rows[0]) throw new Error("Issue not found.");
-  return { ok: true, id: issueId };
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const current = await client.query("SELECT id FROM issue_headers WHERE id = $1 LIMIT 1", [issueId]);
+    if (!current.rows[0]) throw new Error("Issue not found.");
+    await closeIssueCrLinkHistory(client, issueId, "deleted", "Issue deleted");
+    const deleted = await client.query(`
+      DELETE FROM issue_headers
+      WHERE id = $1
+      RETURNING id
+    `, [issueId]);
+    await client.query("COMMIT");
+    return { ok: true, id: Number(deleted.rows[0].id) };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 function deriveIssueProcessStatus(sourceStatus: string | undefined, crLinks: Array<{ lifecycle_status?: string; trkorr?: string }>) {
@@ -1131,6 +1144,29 @@ async function replaceCrLinks(client: Pick<typeof pool, "query">, issueId: numbe
   const links = splitNames(crText)
     .map((item) => item.toUpperCase())
     .filter((item, index, array) => item && array.indexOf(item) === index);
+
+  await ensureIssueCrLinkHistory(client, issueId);
+  const currentHistory = await client.query(`
+    SELECT sap_system_code, trkorr
+    FROM issue_cr_link_history
+    WHERE issue_id = $1 AND relation_status = 'active'
+  `, [issueId]);
+  const desired = new Set(links);
+  for (const row of currentHistory.rows) {
+    if (row.sap_system_code === "DEV" && !desired.has(String(row.trkorr).toUpperCase())) {
+      await client.query(`
+        UPDATE issue_cr_link_history
+        SET relation_status = 'replaced',
+            unlinked_at = now(),
+            close_reason = 'CR links updated'
+        WHERE issue_id = $1
+          AND sap_system_code = $2
+          AND trkorr = $3
+          AND relation_status = 'active'
+      `, [issueId, row.sap_system_code, row.trkorr]);
+    }
+  }
+
   await client.query("DELETE FROM issue_cr_links WHERE issue_id = $1", [issueId]);
   for (const [index, trkorr] of links.entries()) {
     const snapshot = await client.query(`
@@ -1144,7 +1180,63 @@ async function replaceCrLinks(client: Pick<typeof pool, "query">, issueId: numbe
       INSERT INTO issue_cr_links (issue_id, sap_system_code, trkorr, relation_type, is_primary, cr_description_snapshot)
       VALUES ($1, 'DEV', $2, 'main', $3, $4)
     `, [issueId, trkorr, index === 0, snapshot.rows[0]?.description || null]);
+
+    await client.query(`
+      INSERT INTO issue_cr_link_history (
+        issue_id, issue_no, sub_issue_no, sap_system_code, trkorr,
+        relation_type, relation_status, issue_status_snapshot
+      )
+      SELECT h.id, h.issue_no, h.sub_issue_no, 'DEV', $2, 'main', 'active', h.issue_status
+      FROM issue_headers h
+      WHERE h.id = $1
+        AND NOT EXISTS (
+          SELECT 1 FROM issue_cr_link_history existing
+          WHERE existing.issue_id = $1
+            AND existing.sap_system_code = 'DEV'
+            AND existing.trkorr = $2
+            AND existing.relation_status = 'active'
+        )
+    `, [issueId, trkorr]);
   }
+}
+
+async function ensureIssueCrLinkHistory(client: Pick<typeof pool, "query">, issueId: number) {
+  await client.query(`
+    INSERT INTO issue_cr_link_history (
+      issue_id, issue_no, sub_issue_no, sap_system_code, trkorr,
+      relation_type, relation_status, issue_status_snapshot, linked_at
+    )
+    SELECT
+      l.issue_id, h.issue_no, h.sub_issue_no, l.sap_system_code, l.trkorr,
+      l.relation_type, 'active', h.issue_status, l.created_at
+    FROM issue_cr_links l
+    JOIN issue_headers h ON h.id = l.issue_id
+    WHERE l.issue_id = $1
+      AND NOT EXISTS (
+        SELECT 1 FROM issue_cr_link_history existing
+        WHERE existing.issue_id = l.issue_id
+          AND existing.sap_system_code = l.sap_system_code
+          AND existing.trkorr = l.trkorr
+          AND existing.relation_status = 'active'
+      )
+  `, [issueId]);
+}
+
+async function closeIssueCrLinkHistory(
+  client: Pick<typeof pool, "query">,
+  issueId: number,
+  relationStatus: "cancelled" | "deleted",
+  reason: string
+) {
+  await ensureIssueCrLinkHistory(client, issueId);
+  await client.query(`
+    UPDATE issue_cr_link_history
+    SET relation_status = $2,
+        unlinked_at = now(),
+        close_reason = $3,
+        issue_status_snapshot = COALESCE((SELECT issue_status FROM issue_headers WHERE id = $1), issue_status_snapshot)
+    WHERE issue_id = $1 AND relation_status = 'active'
+  `, [issueId, relationStatus, reason]);
 }
 
 async function replaceParticipants(

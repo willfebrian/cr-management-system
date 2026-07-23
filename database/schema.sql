@@ -322,6 +322,58 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_issue_cr_primary
 CREATE INDEX IF NOT EXISTS idx_issue_cr_links_trkorr ON issue_cr_links(trkorr);
 CREATE INDEX IF NOT EXISTS idx_issue_cr_links_system_trkorr ON issue_cr_links(sap_system_code, trkorr);
 
+-- Immutable relationship history. One SAP CR may be active on multiple Issues.
+CREATE TABLE IF NOT EXISTS issue_cr_link_history (
+  id BIGSERIAL PRIMARY KEY,
+  issue_id BIGINT REFERENCES issue_headers(id) ON DELETE SET NULL,
+  issue_no INTEGER,
+  sub_issue_no TEXT,
+  sap_system_code TEXT NOT NULL DEFAULT 'DEV',
+  trkorr TEXT NOT NULL,
+  relation_type TEXT NOT NULL DEFAULT 'main',
+  relation_status TEXT NOT NULL DEFAULT 'active'
+    CHECK (relation_status IN ('active', 'cancelled', 'deleted', 'replaced')),
+  issue_status_snapshot TEXT,
+  linked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  unlinked_at TIMESTAMPTZ,
+  close_reason TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_issue_cr_link_history_trkorr
+  ON issue_cr_link_history(sap_system_code, trkorr, linked_at DESC);
+CREATE INDEX IF NOT EXISTS idx_issue_cr_link_history_issue
+  ON issue_cr_link_history(issue_id, linked_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_issue_cr_link_history_active
+  ON issue_cr_link_history(issue_id, sap_system_code, trkorr)
+  WHERE relation_status = 'active';
+
+-- Backfill links created before lifecycle history was introduced.
+INSERT INTO issue_cr_link_history (
+  issue_id, issue_no, sub_issue_no, sap_system_code, trkorr,
+  relation_type, relation_status, issue_status_snapshot, linked_at
+)
+SELECT
+  l.issue_id,
+  h.issue_no,
+  h.sub_issue_no,
+  l.sap_system_code,
+  l.trkorr,
+  l.relation_type,
+  'active',
+  h.issue_status,
+  l.created_at
+FROM issue_cr_links l
+JOIN issue_headers h ON h.id = l.issue_id
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM issue_cr_link_history history
+  WHERE history.issue_id = l.issue_id
+    AND history.sap_system_code = l.sap_system_code
+    AND history.trkorr = l.trkorr
+    AND history.relation_status = 'active'
+);
+
 CREATE TABLE IF NOT EXISTS issue_dev_timeline (
   issue_id BIGINT PRIMARY KEY REFERENCES issue_headers(id) ON DELETE CASCADE,
   dev_tested_date DATE,
@@ -447,3 +499,68 @@ VALUES
   ('QA', 'SAP QA source for CR management'),
   ('PRD', 'SAP production source for CR management')
 ON CONFLICT (code) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS app_users (
+  id BIGSERIAL PRIMARY KEY,
+  username TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'USER' CHECK (role IN ('ADMIN', 'USER')),
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  must_change_password BOOLEAN NOT NULL DEFAULT TRUE,
+  last_login_at TIMESTAMPTZ,
+  password_changed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS app_user_sessions (
+  id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE, created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(), expires_at TIMESTAMPTZ NOT NULL,
+  revoked_at TIMESTAMPTZ, user_agent TEXT, ip_address TEXT
+);
+
+CREATE TABLE IF NOT EXISTS app_user_audit_logs (
+  id BIGSERIAL PRIMARY KEY, actor_user_id BIGINT REFERENCES app_users(id) ON DELETE SET NULL,
+  target_user_id BIGINT REFERENCES app_users(id) ON DELETE SET NULL, action TEXT NOT NULL,
+  metadata JSONB, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_app_sessions_token ON app_user_sessions(token_hash);
+CREATE INDEX IF NOT EXISTS idx_app_sessions_active ON app_user_sessions(user_id, revoked_at, expires_at);
+
+CREATE TABLE IF NOT EXISTS app_users (
+  id BIGSERIAL PRIMARY KEY,
+  username TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'USER' CHECK (role IN ('ADMIN', 'USER')),
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  must_change_password BOOLEAN NOT NULL DEFAULT TRUE,
+  last_login_at TIMESTAMPTZ,
+  password_changed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS app_user_sessions (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  revoked_at TIMESTAMPTZ,
+  user_agent TEXT,
+  ip_address TEXT
+);
+
+CREATE TABLE IF NOT EXISTS app_user_audit_logs (
+  id BIGSERIAL PRIMARY KEY,
+  actor_user_id BIGINT REFERENCES app_users(id) ON DELETE SET NULL,
+  target_user_id BIGINT REFERENCES app_users(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  metadata JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_app_sessions_token ON app_user_sessions(token_hash);
+CREATE INDEX IF NOT EXISTS idx_app_sessions_active ON app_user_sessions(user_id, revoked_at, expires_at);

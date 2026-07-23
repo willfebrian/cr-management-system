@@ -74,7 +74,7 @@ export class SapRfcClient {
       return await client.call(rfcName, params);
     } finally {
       if (client.alive) {
-        client.close();
+        await client.close();
       }
     }
   }

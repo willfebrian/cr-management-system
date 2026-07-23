@@ -340,7 +340,7 @@ export async function getCrDetail(trkorr: string) {
 }
 
 export async function getCrDetailForSystem(trkorr: string, sapSystemCode: string) {
-  const [request, tasks, objects, keys, lifecycle] = await Promise.all([
+  const [request, tasks, objects, keys, lifecycle, issueLinks] = await Promise.all([
     pool.query("SELECT * FROM cr_requests WHERE sap_system_code = $1 AND trkorr = $2", [sapSystemCode, trkorr]),
     pool.query("SELECT * FROM cr_requests WHERE sap_system_code = $1 AND parent_request = $2 ORDER BY trkorr", [sapSystemCode, trkorr]),
     pool.query(`
@@ -372,7 +372,77 @@ export async function getCrDetailForSystem(trkorr: string, sapSystemCode: string
         ))
       ORDER BY trkorr, position
     `, [sapSystemCode, trkorr]),
-    getCrLifecycle(trkorr)
+    getCrLifecycle(trkorr),
+    pool.query(`
+      SELECT
+        history.id,
+        history.issue_id,
+        history.issue_no,
+        history.sub_issue_no,
+        history.sap_system_code,
+        history.trkorr,
+        history.relation_type,
+        history.relation_status,
+        history.issue_status_snapshot,
+        history.linked_at,
+        history.unlinked_at,
+        history.close_reason,
+        CASE
+          WHEN lower(coalesce(issue.issue_status, '')) = 'cancelled' THEN 'cancelled'
+          WHEN primary_issue_cr.trkorr IS NULL THEN 'open'
+          WHEN primary_issue_cr.lifecycle_status = 'in_prd' THEN 'ok'
+          ELSE 'in_progress'
+        END AS current_issue_status,
+        issue.issue_name
+      FROM issue_cr_link_history history
+      LEFT JOIN issue_headers issue ON issue.id = history.issue_id
+      LEFT JOIN LATERAL (
+        SELECT
+          link.trkorr,
+          CASE
+            WHEN lifecycle_request.status_group <> 'released' THEN lifecycle_request.status_group
+            WHEN EXISTS (
+              SELECT 1
+              FROM cr_transport_lifecycle prd_lifecycle
+              WHERE prd_lifecycle.source_system_code = 'DEV'
+                AND prd_lifecycle.target_system_code = 'PRD'
+                AND prd_lifecycle.trkorr = lifecycle_request.trkorr
+                AND prd_lifecycle.transport_status = 'imported'
+            ) THEN 'in_prd'
+            WHEN EXISTS (
+              SELECT 1
+              FROM cr_transport_lifecycle qa_lifecycle
+              WHERE qa_lifecycle.source_system_code = 'DEV'
+                AND qa_lifecycle.target_system_code = 'QA'
+                AND qa_lifecycle.trkorr = lifecycle_request.trkorr
+                AND qa_lifecycle.transport_status = 'imported'
+            ) THEN 'pending_prd'
+            WHEN lifecycle_request.sap_system_code = 'DEV' AND lifecycle_request.status_group = 'released' THEN 'pending_qa'
+            ELSE 'unknown'
+          END AS lifecycle_status
+        FROM issue_cr_links link
+        LEFT JOIN cr_requests request
+          ON request.sap_system_code = link.sap_system_code
+         AND request.trkorr = link.trkorr
+        LEFT JOIN cr_requests parent_request
+          ON parent_request.sap_system_code = request.sap_system_code
+         AND parent_request.trkorr = request.parent_request
+        CROSS JOIN LATERAL (
+          SELECT
+            coalesce(parent_request.sap_system_code, request.sap_system_code) AS sap_system_code,
+            coalesce(parent_request.trkorr, request.trkorr) AS trkorr,
+            coalesce(parent_request.status_group, request.status_group) AS status_group
+        ) lifecycle_request
+        WHERE link.issue_id = issue.id
+        ORDER BY link.is_primary DESC, link.trkorr
+        LIMIT 1
+      ) primary_issue_cr ON true
+      WHERE history.sap_system_code = $1
+        AND history.trkorr = $2
+      ORDER BY CASE WHEN history.relation_status = 'active' THEN 0 ELSE 1 END,
+               history.linked_at DESC,
+               history.id DESC
+    `, [sapSystemCode, trkorr])
   ]);
 
   return {
@@ -380,7 +450,8 @@ export async function getCrDetailForSystem(trkorr: string, sapSystemCode: string
     tasks: tasks.rows,
     lifecycle,
     objects: objects.rows,
-    keys: keys.rows
+    keys: keys.rows,
+    issueLinks: issueLinks.rows
   };
 }
 

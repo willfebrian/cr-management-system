@@ -18,7 +18,7 @@ const pool = new Pool(
 
 try {
   const [runs, requests, status, objects, keys, snapshots] = await Promise.all([
-    pool.query("SELECT id, sap_system_code, scope_owner, status, request_count, started_at, finished_at FROM sync_runs ORDER BY id DESC LIMIT 5"),
+    pool.query("SELECT id, sap_system_code, scope_owner, status, message, request_count, started_at, finished_at FROM sync_runs ORDER BY id DESC LIMIT 5"),
     pool.query("SELECT COUNT(*)::int AS count FROM cr_requests"),
     pool.query("SELECT status_group, COUNT(*)::int AS count FROM cr_requests GROUP BY status_group ORDER BY status_group"),
     pool.query("SELECT COUNT(*)::int AS count FROM cr_objects"),

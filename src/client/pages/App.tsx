@@ -1,16 +1,51 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
-import { AlertTriangle, BarChart3, CheckCircle2, ClipboardList, Database, FileSearch, MoreVertical, PencilLine, RefreshCw, X, XCircle } from "lucide-react";
+import { AlertTriangle, BarChart3, CheckCircle2, ClipboardList, Database, FileSearch, MoreVertical, PencilLine, RefreshCw, Users, X, XCircle } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchCrDetail, fetchCrList, fetchDashboard, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind } from "../api";
+import { cancelIssue as cancelIssueRequest, createUser, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchCrDetail, fetchCrList, fetchDashboard, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchUsers, fetchValueHelp, registerIssuePeople, resetUserPassword, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type ManagedUser, type SyncCrOptions, type SyncCrResult, type ValueHelpKind } from "../api";
 import type { CrDetail, CrRequest, DashboardData, IssueDetail, IssueRow, SapSystemConfig, StatusTrendData } from "../../shared/types";
 
-type View = "dashboard" | "report" | "issue-display" | "issue-create" | "issue-change";
+type View = "dashboard" | "report" | "issue-display" | "issue-create" | "issue-change" | "user-management";
 const SYNC_RESULT_VISIBLE_MS = 6000;
 const DASHBOARD_DB_REFRESH_MS = 60000;
 const REPORT_DB_REFRESH_MS = 120000;
 
+function LoginScreen({ onLogin }: { onLogin: (user: AuthUser) => void }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function submit(event: FormEvent) {
+    event.preventDefault(); setBusy(true); setError("");
+    try { onLogin((await login(username, password)).user); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } finally { setBusy(false); }
+  }
+  return <div className="auth-screen"><form className="auth-panel" onSubmit={submit}><div className="brand"><Database size={22} /><span>CR Management System</span></div><h1>Sign in</h1><label>Username<input autoFocus value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Enter username" autoComplete="username" /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter password" autoComplete="current-password" /></label>{error ? <div className="auth-error">{error}</div> : null}<button className="primary-button" disabled={busy}>{busy ? "Signing in..." : "Sign in"}</button></form></div>;
+}
+
+function ChangePasswordScreen({ onDone }: { onDone: () => void }) {
+  const [currentPassword, setCurrentPassword] = useState("admin");
+  const [newPassword, setNewPassword] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function submit(event: FormEvent) {
+    event.preventDefault(); setBusy(true); setError("");
+    try { await changePassword(currentPassword, newPassword); onDone(); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } finally { setBusy(false); }
+  }
+  return <div className="auth-screen"><form className="auth-panel" onSubmit={submit}><div className="brand"><Database size={22} /><span>CR Management System</span></div><h1>Change password</h1><p>For security, change the initial password before continuing.</p><label>Current password<input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label><label>New password<input autoFocus type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={8} /></label>{error ? <div className="auth-error">{error}</div> : null}<button className="primary-button" disabled={busy}>{busy ? "Saving..." : "Save password"}</button></form></div>;
+}
+
+function UserManagement({ users, onRefresh }: { users: ManagedUser[]; onRefresh: () => Promise<void> }) {
+  const [username, setUsername] = useState(""); const [password, setPassword] = useState(""); const [role, setRole] = useState<"ADMIN" | "USER">("USER"); const [message, setMessage] = useState("");
+  async function create(event: FormEvent) { event.preventDefault(); setMessage(""); try { await createUser(username, password, role); setUsername(""); setPassword(""); await onRefresh(); setMessage("User created."); } catch (err) { setMessage(err instanceof Error ? err.message : String(err)); } }
+  async function reset(user: ManagedUser) { const next = window.prompt(`New password for ${user.username} (minimum 8 characters)`); if (!next) return; try { await resetUserPassword(user.id, next); setMessage(`Password reset for ${user.username}.`); await onRefresh(); } catch (err) { setMessage(err instanceof Error ? err.message : String(err)); } }
+  return <section className="user-management"><div className="user-management-grid"><div className="card user-create-card"><div className="section-heading"><div><h2>Create user</h2><p>Add a new application account.</p></div></div><form className="user-create-form" onSubmit={create}><label>Username<input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Enter username" required /></label><label>Initial password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Minimum 8 characters" minLength={8} required /></label><label>Role<select value={role} onChange={(event) => setRole(event.target.value as "ADMIN" | "USER")}><option value="USER">User</option><option value="ADMIN">Administrator</option></select></label><button className="primary" type="submit">Create user</button></form>{message ? <div className="notice">{message}</div> : null}</div><div className="card user-list-card"><div className="section-heading"><div><h2>Application users</h2><p>{users.length} registered account{users.length === 1 ? "" : "s"}.</p></div></div><div className="table-scroll"><table className="data-table"><thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Last login</th><th>Action</th></tr></thead><tbody>{users.map((user) => <tr key={user.id}><td><strong>{user.username}</strong></td><td><span className={`role-badge ${user.role.toLowerCase()}`}>{user.role}</span></td><td><span className={`status-badge ${user.is_active ? "active" : "inactive"}`}>{user.is_active ? "Active" : "Inactive"}</span></td><td>{user.last_login_at ? formatDateTime(user.last_login_at) : "Never"}</td><td><button className="secondary" onClick={() => reset(user)}>Reset password</button></td></tr>)}</tbody></table></div></div></div></section>;
+}
+
 export function App() {
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  useEffect(() => { fetchCurrentUser().then((result) => setAuthUser(result.user)).catch(() => setAuthUser(null)).finally(() => setAuthLoading(false)); }, []);
   const [view, setView] = useState<View>("dashboard");
+  const [managedUsers, setManagedUsers] = useState<ManagedUser[]>([]);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [systems, setSystems] = useState<SapSystemConfig[]>([]);
   const [trend, setTrend] = useState<StatusTrendData | null>(null);
@@ -64,6 +99,8 @@ export function App() {
     setSystems(systemData.rows);
   }
 
+  async function loadManagedUsers() { const result = await fetchUsers(); setManagedUsers(result.users); }
+
   async function loadReport(nextFilters = filters) {
     const requestId = ++reportRequestId.current;
     const crData = await fetchCrList(nextFilters);
@@ -73,13 +110,13 @@ export function App() {
     if (!crData.rows.some((request) => requestKey(request) === selected)) setSelected("");
   }
 
-  async function loadIssues(nextFilters = issueFilters) {
+  async function loadIssues(nextFilters = issueFilters, options?: { preserveSelection?: boolean }) {
     const requestId = ++issueRequestId.current;
     const issueData = await fetchIssueList(nextFilters);
     if (requestId !== issueRequestId.current) return;
     setIssues(issueData.rows);
     setIssuePagination({ page: issueData.page, pageSize: issueData.pageSize, total: issueData.total, totalPages: issueData.totalPages });
-    if (!issueData.rows.some((issue) => issue.id === selectedIssueId)) setSelectedIssueId(null);
+    if (!options?.preserveSelection && !issueData.rows.some((issue) => issue.id === selectedIssueId)) setSelectedIssueId(null);
   }
 
   async function load(nextFilters = filters) {
@@ -177,6 +214,16 @@ export function App() {
     loadReport(nextFilters).catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }
 
+  function openIssueFromCrLink(link: { issue_id?: number | null }) {
+    if (!link.issue_id) return;
+    const issueId = Number(link.issue_id);
+    if (!navigateTo("issue-display")) return;
+    setIssueSidebarExpanded(true);
+    setSelectedIssueId(issueId);
+    fetchIssueDetail(issueId).then(setIssueDetail).catch((err) => setError(err instanceof Error ? err.message : String(err)));
+    loadIssues(issueFilters, { preserveSelection: true }).catch((err) => setError(err instanceof Error ? err.message : String(err)));
+  }
+
   function navigateTo(nextView: View) {
     if (nextView === view) return true;
     if ((view === "issue-create" || view === "issue-change") && issueFormDirty) {
@@ -227,6 +274,8 @@ export function App() {
     }, REPORT_DB_REFRESH_MS);
     return () => window.clearInterval(interval);
   }, [view, issueFilters, selectedIssueId]);
+
+  useEffect(() => { if (view === "user-management" && authUser?.role === "ADMIN") loadManagedUsers().catch((err) => setError(err instanceof Error ? err.message : String(err))); }, [view, authUser?.role]);
 
   useEffect(() => {
     const enabledCodes = systems.filter((system) => system.enabled).map((system) => system.code);
@@ -310,6 +359,10 @@ export function App() {
 
   const selectedRequest = useMemo(() => requests.find((request) => requestKey(request) === selected), [requests, selected]);
 
+  if (authLoading) return <div className="auth-screen"><div className="auth-panel"><h1>CR Management System</h1><p>Loading...</p></div></div>;
+  if (!authUser) return <LoginScreen onLogin={(user) => { setAuthUser(user); window.location.reload(); }} />;
+  if (authUser.mustChangePassword) return <ChangePasswordScreen onDone={() => window.location.reload()} />;
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -317,12 +370,14 @@ export function App() {
           <Database size={22} />
           <span>CR Management System</span>
         </div>
+        <div className="sidebar-nav">
         <button className={view === "dashboard" ? "active" : ""} onClick={() => navigateTo("dashboard")}>
           <BarChart3 size={18} /> Dashboard
         </button>
         <button className={view === "report" ? "active" : ""} onClick={() => navigateTo("report")}>
           <FileSearch size={18} /> CR Report
         </button>
+        {authUser.role === "ADMIN" ? <button className={view === "user-management" ? "active" : ""} onClick={() => navigateTo("user-management")}><Users size={18} /> User Management</button> : null}
         <div className={`sidebar-group ${view.startsWith("issue-") ? "active" : ""}`}>
           <button className={view.startsWith("issue-") ? "active" : ""} onClick={() => {
             setIssueSidebarExpanded((current) => !current);
@@ -352,12 +407,14 @@ export function App() {
             </div>
           ) : null}
         </div>
+        </div>
+        <div className="sidebar-footer"><span className="sidebar-user">{authUser.username}</span><button className="logout-button" onClick={() => { logout().finally(() => window.location.reload()); }}>Logout</button></div>
       </aside>
 
       <section className="workspace">
         <header className="topbar report-topbar">
           <div>
-            <h1>{view === "dashboard" ? "Dashboard" : view === "report" ? "CR Report" : view === "issue-create" ? "Create Issue" : view === "issue-change" ? "Change Issue" : "Issue"}</h1>
+            <h1>{view === "dashboard" ? "Dashboard" : view === "report" ? "CR Report" : view === "issue-create" ? "Create Issue" : view === "issue-change" ? "Change Issue" : view === "user-management" ? "User Management" : "Issue"}</h1>
             {view === "dashboard" ? (
               <div className="header-sync">
                 <CheckCircle2 size={15} />
@@ -426,7 +483,7 @@ export function App() {
           <SyncRunSummary loading={loading} systems={runningSyncSystems} result={syncResult} />
         ) : null}
 
-        {view === "dashboard" ? (
+        {view === "user-management" ? <UserManagement users={managedUsers} onRefresh={loadManagedUsers} /> : view === "dashboard" ? (
           <Dashboard
             dashboard={dashboard}
             requests={requests}
@@ -459,6 +516,7 @@ export function App() {
             onCloseDetail={() => setSelected("")}
             selectedRequest={selectedRequest}
             detail={detail}
+            onOpenIssue={openIssueFromCrLink}
           />
         ) : view === "issue-display" ? (
           <IssueDisplay
@@ -873,7 +931,8 @@ function Report({
   onSelect,
   onCloseDetail,
   selectedRequest,
-  detail
+  detail,
+  onOpenIssue
 }: {
   requests: CrRequest[];
   filters: CrFilters;
@@ -886,6 +945,7 @@ function Report({
   onCloseDetail: () => void;
   selectedRequest?: CrRequest;
   detail: CrDetail | null;
+  onOpenIssue: (link: { issue_id?: number | null }) => void;
 }) {
   const displayRequest = selectedRequest || detail?.request;
   const hasDetail = Boolean(selected && displayRequest);
@@ -986,6 +1046,31 @@ function Report({
             <span>Type<strong>{displayRequest?.function_code || "-"}</strong></span>
             <span>Changed<strong>{formatDate(displayRequest?.changed_date)}</strong></span>
           </div>
+          <h3>Related Issues</h3>
+          <div className="rows compact cr-related-issues">
+            {(detail?.issueLinks || []).map((link) => {
+              const issueKey = link.issue_no ? `${link.issue_no}-${link.sub_issue_no || "01"}` : "Issue removed";
+              const status = formatIssueLinkStatus(link.relation_status, link.current_issue_status || link.issue_status_snapshot);
+              return link.issue_id ? (
+                <button className="cr-related-issue-link" type="button" key={link.id} onClick={() => onOpenIssue(link)}>
+                  <span className="cr-related-issue-heading">
+                    <strong>{issueKey}</strong>
+                    <Status value={status} />
+                  </span>
+                  <span className="cr-related-issue-name">{link.issue_name || "-"}</span>
+                </button>
+              ) : (
+                <div className="cr-related-issue-link historical" key={link.id}>
+                  <span className="cr-related-issue-heading">
+                    <strong>{issueKey}</strong>
+                    <Status value={status} />
+                  </span>
+                  <span className="cr-related-issue-name">{link.issue_name || "Issue removed"}</span>
+                </div>
+              );
+            })}
+            {detail && detail.issueLinks.length === 0 ? <div className="empty">No Issue linked to this CR.</div> : null}
+          </div>
           <h3>Lifecycle</h3>
           <div className="issue-timeline cr-lifecycle-timeline">
             {[
@@ -1077,6 +1162,9 @@ function IssueDisplay({
   const selectedIssue = issues.find((issue) => issue.id === selectedId) || detail?.issue || null;
   const hasDetail = Boolean(selectedId && selectedIssue);
   const canGenerateCrForm = Boolean(detail?.crLinks.length);
+  const primaryGlpiTicket = detail?.glpi.find((ticket) => ticket.is_primary)?.ticket_number
+    ?? detail?.glpi[0]?.ticket_number
+    ?? selectedIssue?.primary_glpi_ticket;
   const issueColumns = useResizableColumns("issue-report-columns", {
     issue: 112,
     name: 320,
@@ -1239,7 +1327,7 @@ function IssueDisplay({
             <span>Requester<strong>{selectedIssue?.requester_name_snapshot || "-"}</strong></span>
             <span>ABAPer<strong>{selectedIssue?.abaper_name_snapshot || "-"}</strong></span>
             <span>Created<strong>{formatIssueTimestamp(selectedIssue?.create_issue_date)}</strong></span>
-            <GlpiMetaCard value={selectedIssue?.primary_glpi_ticket} />
+            <GlpiMetaCard value={primaryGlpiTicket} />
             <span>CR Helpdesk No.<strong>{formatCrHelpdeskNumbers(detail) || selectedIssue?.primary_cr_helpdesk_no || "-"}</strong></span>
           </div>
 
@@ -2432,6 +2520,13 @@ function Status({ value }: { value?: string }) {
   return <span className={`status ${value || "unknown"}`}>{formatStatusLabel(value)}</span>;
 }
 
+function formatIssueLinkStatus(relationStatus: string, issueStatus?: string) {
+  if (relationStatus === "cancelled") return "cancelled";
+  if (relationStatus === "deleted") return "deleted";
+  if (relationStatus === "replaced") return "replaced";
+  return issueStatus || "active";
+}
+
 function requestKey(request: CrRequest) {
   return `${request.sap_system_code}:${request.trkorr}`;
 }
@@ -2478,6 +2573,12 @@ function formatStatusLabel(value?: string) {
       return "Open";
     case "cancelled":
       return "Cancelled";
+    case "active":
+      return "Active";
+    case "deleted":
+      return "Deleted";
+    case "replaced":
+      return "Replaced";
     case "pending_qa":
       return "Pending to QA";
     case "in_qa":

@@ -144,6 +144,22 @@ export type CrDetail = {
     object_name?: string;
     table_key?: string;
   }>;
+  issueLinks: Array<{
+    id: number;
+    issue_id?: number | null;
+    issue_no?: number;
+    sub_issue_no?: string;
+    sap_system_code: string;
+    trkorr: string;
+    relation_type?: string;
+    relation_status: "active" | "cancelled" | "deleted" | "replaced";
+    issue_status_snapshot?: string;
+    current_issue_status?: string;
+    issue_name?: string;
+    linked_at?: string;
+    unlinked_at?: string;
+    close_reason?: string;
+  }>;
 };
 
 export type IssueRow = {
