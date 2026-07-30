@@ -1,10 +1,28 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
-import { AlertTriangle, BarChart3, CheckCircle2, ClipboardList, Database, FileSearch, MoreVertical, PencilLine, RefreshCw, Users, X, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Ban, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Database, FileOutput, FileSearch, FolderKanban, KeyRound, LogIn, LogOut, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, Trash2, UserPlus, Users, X, XCircle } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { cancelIssue as cancelIssueRequest, createUser, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchCrDetail, fetchCrList, fetchDashboard, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchUsers, fetchValueHelp, registerIssuePeople, resetUserPassword, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type ManagedUser, type SyncCrOptions, type SyncCrResult, type ValueHelpKind } from "../api";
+import { IncompleteGroupCards } from "../components/IncompleteGroupCards";
+import { DisplayNameList } from "../components/DisplayNameList";
+import { DEFAULT_ISSUE_COLUMNS, IssueColumnMenu, type IssueColumnKey } from "../components/IssueColumnMenu";
+import { ProjectLinkedIssues, findIssueByKey, type ProjectLinkedIssue } from "../components/ProjectLinkedIssues";
+import { SummaryStrip } from "../components/SummaryStrip";
+import { afterIncompleteSectionRender, expandSection, getIncompleteItems, groupIncompleteItems, markIncompleteTarget, type ExpandedIssueSections, type IncompleteItem, type IssueSection } from "../issueIncomplete";
+import { nextExpandedSidebarGroup, type SidebarGroup } from "../navigation";
 import type { CrDetail, CrRequest, DashboardData, IssueDetail, IssueRow, SapSystemConfig, StatusTrendData } from "../../shared/types";
 
-type View = "dashboard" | "report" | "issue-display" | "issue-create" | "issue-change" | "user-management";
+type View = "dashboard" | "report" | "issue-display" | "issue-create" | "issue-change" | "user-management" | "project-report" | "project-create" | "project-change";
+const VIEW_META: Record<View, { title: string; description: string }> = {
+  dashboard: { title: "Dashboard", description: "Monitor CR and Issue activity across connected source systems." },
+  report: { title: "CR Transport", description: "Review SAP change requests ordered from the latest CR number." },
+  "issue-display": { title: "Issue Report", description: "Search Issues and inspect their linked CR transports." },
+  "issue-create": { title: "Create Issue", description: "Register a new Issue and its delivery information." },
+  "issue-change": { title: "Change Issue", description: "Maintain Issue details, lifecycle, and linked CR transports." },
+  "user-management": { title: "User Management", description: "Create accounts and manage application access." },
+  "project-report": { title: "Project Report", description: "Group related Issues and CR transports in one delivery view." },
+  "project-create": { title: "Create Project", description: "Create a project and group its related Issues." },
+  "project-change": { title: "Change Project", description: "Maintain project ownership, scope, and linked Issues." },
+};
 const SYNC_RESULT_VISIBLE_MS = 6000;
 const DASHBOARD_DB_REFRESH_MS = 60000;
 const REPORT_DB_REFRESH_MS = 120000;
@@ -18,7 +36,7 @@ function LoginScreen({ onLogin }: { onLogin: (user: AuthUser) => void }) {
     event.preventDefault(); setBusy(true); setError("");
     try { onLogin((await login(username, password)).user); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } finally { setBusy(false); }
   }
-  return <div className="auth-screen"><form className="auth-panel" onSubmit={submit}><div className="brand"><Database size={22} /><span>CR Management System</span></div><h1>Sign in</h1><label>Username<input autoFocus value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Enter username" autoComplete="username" /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter password" autoComplete="current-password" /></label>{error ? <div className="auth-error">{error}</div> : null}<button className="primary-button" disabled={busy}>{busy ? "Signing in..." : "Sign in"}</button></form></div>;
+  return <div className="auth-screen"><form className="auth-panel" onSubmit={submit}><div className="brand"><Database size={22} /><span>CR Management System</span></div><h1>Sign in</h1><label>Username<input autoFocus value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Enter username" autoComplete="username" /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter password" autoComplete="current-password" /></label>{error ? <div className="auth-error">{error}</div> : null}<button className="primary-button" disabled={busy}><LogIn size={17} /> {busy ? "Signing in..." : "Sign in"}</button></form></div>;
 }
 
 function ChangePasswordScreen({ onDone }: { onDone: () => void }) {
@@ -30,14 +48,123 @@ function ChangePasswordScreen({ onDone }: { onDone: () => void }) {
     event.preventDefault(); setBusy(true); setError("");
     try { await changePassword(currentPassword, newPassword); onDone(); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } finally { setBusy(false); }
   }
-  return <div className="auth-screen"><form className="auth-panel" onSubmit={submit}><div className="brand"><Database size={22} /><span>CR Management System</span></div><h1>Change password</h1><p>For security, change the initial password before continuing.</p><label>Current password<input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label><label>New password<input autoFocus type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={8} /></label>{error ? <div className="auth-error">{error}</div> : null}<button className="primary-button" disabled={busy}>{busy ? "Saving..." : "Save password"}</button></form></div>;
+  return <div className="auth-screen"><form className="auth-panel" onSubmit={submit}><div className="brand"><Database size={22} /><span>CR Management System</span></div><h1>Change password</h1><p>For security, change the initial password before continuing.</p><label>Current password<input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label><label>New password<input autoFocus type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={8} /></label>{error ? <div className="auth-error">{error}</div> : null}<button className="primary-button" disabled={busy}><KeyRound size={17} /> {busy ? "Saving..." : "Save password"}</button></form></div>;
 }
 
 function UserManagement({ users, onRefresh }: { users: ManagedUser[]; onRefresh: () => Promise<void> }) {
   const [username, setUsername] = useState(""); const [password, setPassword] = useState(""); const [role, setRole] = useState<"ADMIN" | "USER">("USER"); const [message, setMessage] = useState("");
   async function create(event: FormEvent) { event.preventDefault(); setMessage(""); try { await createUser(username, password, role); setUsername(""); setPassword(""); await onRefresh(); setMessage("User created."); } catch (err) { setMessage(err instanceof Error ? err.message : String(err)); } }
   async function reset(user: ManagedUser) { const next = window.prompt(`New password for ${user.username} (minimum 8 characters)`); if (!next) return; try { await resetUserPassword(user.id, next); setMessage(`Password reset for ${user.username}.`); await onRefresh(); } catch (err) { setMessage(err instanceof Error ? err.message : String(err)); } }
-  return <section className="user-management"><div className="user-management-grid"><div className="card user-create-card"><div className="section-heading"><div><h2>Create user</h2><p>Add a new application account.</p></div></div><form className="user-create-form" onSubmit={create}><label>Username<input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Enter username" required /></label><label>Initial password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Minimum 8 characters" minLength={8} required /></label><label>Role<select value={role} onChange={(event) => setRole(event.target.value as "ADMIN" | "USER")}><option value="USER">User</option><option value="ADMIN">Administrator</option></select></label><button className="primary" type="submit">Create user</button></form>{message ? <div className="notice">{message}</div> : null}</div><div className="card user-list-card"><div className="section-heading"><div><h2>Application users</h2><p>{users.length} registered account{users.length === 1 ? "" : "s"}.</p></div></div><div className="table-scroll"><table className="data-table"><thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Last login</th><th>Action</th></tr></thead><tbody>{users.map((user) => <tr key={user.id}><td><strong>{user.username}</strong></td><td><span className={`role-badge ${user.role.toLowerCase()}`}>{user.role}</span></td><td><span className={`status-badge ${user.is_active ? "active" : "inactive"}`}>{user.is_active ? "Active" : "Inactive"}</span></td><td>{user.last_login_at ? formatDateTime(user.last_login_at) : "Never"}</td><td><button className="secondary" onClick={() => reset(user)}>Reset password</button></td></tr>)}</tbody></table></div></div></div></section>;
+  return <section className="user-management"><div className="user-management-grid"><div className="card user-create-card user-form-workspace"><div className="section-heading"><div><h2>Create user</h2><p>Add a new application account.</p></div></div><form className="user-create-form" onSubmit={create}><label>Username<input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Enter username" required /></label><label>Initial password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Minimum 8 characters" minLength={8} required /></label><label>Role<select value={role} onChange={(event) => setRole(event.target.value as "ADMIN" | "USER")}><option value="USER">User</option><option value="ADMIN">Administrator</option></select></label><button className="primary" type="submit"><UserPlus size={16} /> Create user</button></form>{message ? <div className="notice">{message}</div> : null}</div><div className="card user-list-card user-table-workspace"><div className="section-heading"><div><h2>Application users</h2><p>{users.length} registered account{users.length === 1 ? "" : "s"}.</p></div></div><div className="table-scroll"><table className="data-table"><thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Last login</th><th>Action</th></tr></thead><tbody>{users.map((user) => <tr key={user.id}><td><strong>{user.username}</strong></td><td><span className={`role-badge ${user.role.toLowerCase()}`}>{user.role}</span></td><td><span className={`status-badge ${user.is_active ? "active" : "inactive"}`}>{user.is_active ? "Active" : "Inactive"}</span></td><td>{user.last_login_at ? formatDateTime(user.last_login_at) : "Never"}</td><td><button className="secondary" onClick={() => reset(user)}><KeyRound size={15} /> Reset password</button></td></tr>)}</tbody></table></div></div></div></section>;
+}
+
+type ProjectStatus = "Planned" | "In Progress" | "Completed" | "On Hold";
+type ProjectMock = { id: string; name: string; owner: string; status: ProjectStatus; created: string; description: string; issues: ProjectLinkedIssue[] };
+
+const projectMockData: ProjectMock[] = [
+  { id: "PRJ-26001", name: "COA Automation", owner: "William Febrian Piktono", status: "In Progress", created: "7/2/2026", description: "Automation and reporting improvements for the COA process.", issues: [
+    { id: "26032-01", name: "Enhancement Program for COA Automation Project", cr: "TRDK924626", status: "In Progress" },
+    { id: "26033-01", name: "Update ZMM_MD_DL case download data LFBK and BNKA", cr: "TRDK924648", status: "In Progress" },
+    { id: "26034-01", name: "Update ZLABEL TE02 case exclude category NC", cr: "TRDK924650", status: "Open" }
+  ] },
+  { id: "PRJ-26002", name: "ZLABEL Enhancement", owner: "Fany Parama Admaja", status: "Completed", created: "6/23/2026", description: "Consolidated ZLABEL changes delivered through DEV, QA, and PRD.", issues: [
+    { id: "26031-01", name: "Update ZLABEL case new label SE04 and SE05", cr: "TRDK924612", status: "OK" },
+    { id: "26028-01", name: "Update ZLABEL case new label A172", cr: "TRDK924592", status: "OK" }
+  ] },
+  { id: "PRJ-26003", name: "Vendor Tax Document", owner: "Fiqih", status: "Planned", created: "7/8/2026", description: "Initial grouping for the vendor and tax document change stream.", issues: [
+    { id: "26035-01", name: "Update tax document validation", cr: "TRDK924652", status: "Open" }
+  ] }
+];
+
+function ProjectPrototype({ mode, onOpenIssue }: { mode: "report" | "create" | "change"; onOpenIssue: (issueKey: string) => void }) {
+  const [projects, setProjects] = useState(projectMockData);
+  const [selectedId, setSelectedId] = useState(projectMockData[0].id);
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("all");
+  const [saved, setSaved] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const selectedProject = projects.find((project) => project.id === selectedId) || projects[0];
+  const visibleProjects = projects.filter((project) => `${project.id} ${project.name} ${project.owner}`.toLowerCase().includes(query.toLowerCase()) && (status === "all" || project.status === status));
+  const [form, setForm] = useState(() => mode === "change" ? { name: selectedProject.name, owner: selectedProject.owner, description: selectedProject.description } : { name: "", owner: "", description: "" });
+
+  function saveDemo(event: FormEvent) {
+    event.preventDefault(); setSaved(true);
+    if (mode === "create" && form.name.trim()) setProjects((current) => [{ id: `PRJ-${new Date().getFullYear()}-NEW`, name: form.name, owner: form.owner || "Unassigned", status: "Planned", created: "Today", description: form.description, issues: [] }, ...current]);
+  }
+
+  if (mode !== "report") {
+    return (
+      <section className="project-prototype">
+        <form className="project-form card" onSubmit={saveDemo}>
+          <div className="project-form-grid">
+            <label>Project name<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="e.g. COA Automation" required /></label>
+            <label>Owner<input value={form.owner} onChange={(event) => setForm({ ...form, owner: event.target.value })} placeholder="Project owner" /></label>
+            <label>Status<select defaultValue={mode === "create" ? "Planned" : selectedProject.status}><option>Planned</option><option>In Progress</option><option>Completed</option><option>On Hold</option></select></label>
+            <label>Created on<input type="date" defaultValue="2026-07-29" disabled={mode === "change"} /></label>
+            <label className="project-wide-field">Description<textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Describe the project scope and outcome." rows={4} /></label>
+          </div>
+          <div className="project-form-section">
+            <div><h3>Linked Issues</h3><p>Select Issue records that belong to this project. CR SAP is shown as context.</p></div>
+            <div className="project-issue-picker"><button type="button" className="secondary"><Plus size={16} /> Add Issue</button><span className="project-chip">26032-01 - TRDK924626</span><span className="project-chip">26033-01 - TRDK924648</span></div>
+          </div>
+          <div className="project-form-actions">
+            <button type="button" className="secondary"><X size={16} /> Cancel</button>
+            <button className="primary"><Save size={16} /> {mode === "create" ? "Create project" : "Save changes"}</button>
+          </div>
+          {saved ? <div className="notice success">Project form updated for this session.</div> : null}
+        </form>
+      </section>
+    );
+  }
+
+  return (
+    <section className="project-prototype">
+      <div className="project-toolbar">
+        <label className="project-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search project, owner" /></label>
+        <label className="project-status-filter">
+          <select aria-label="Project status" value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">All statuses</option><option>Planned</option><option>In Progress</option><option>Completed</option><option>On Hold</option></select>
+          <ChevronDown size={16} aria-hidden="true" />
+        </label>
+      </div>
+      <div className="project-layout">
+        <div className="project-list card">
+          <div className="project-list-heading"><strong>{visibleProjects.length} projects</strong><span>Click a project to inspect its linked Issues</span></div>
+          {visibleProjects.map((project) => (
+            <button key={project.id} className={`project-row ${project.id === selectedId ? "selected" : ""}`} onClick={() => { setSelectedId(project.id); setActionsOpen(false); }}>
+              <span className="project-row-main"><strong>{project.name}</strong><small>{project.id} - {project.owner}</small></span>
+              <span className={`project-status ${project.status.toLowerCase().replace(" ", "-")}`}>{project.status}</span>
+              <span className="project-count">{project.issues.length} Issues</span>
+            </button>
+          ))}
+        </div>
+        <div className="project-detail card">
+          <div className="project-detail-heading">
+            <div><span className="eyebrow">{selectedProject.id}</span><h2>{selectedProject.name}</h2><p>{selectedProject.description}</p></div>
+            <div className="project-detail-actions">
+              <span className={`project-status ${selectedProject.status.toLowerCase().replace(" ", "-")}`}>{selectedProject.status}</span>
+              <button className="detail-icon-action" type="button" onClick={() => setActionsOpen((current) => !current)} aria-label="Project actions" aria-expanded={actionsOpen}><MoreVertical size={20} /></button>
+              {actionsOpen ? (
+                <div className="project-action-menu">
+                  <button type="button" onClick={() => setActionsOpen(false)}><Plus size={16} /> Add Issue</button>
+                  <button type="button" onClick={() => setActionsOpen(false)}><FileOutput size={16} /> Generate Project CR Form</button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+          <SummaryStrip
+            className="project-summary-strip"
+            items={[
+              { label: "Owner", value: selectedProject.owner },
+              { label: "Created", value: selectedProject.created },
+              { label: "Issues", value: selectedProject.issues.length },
+              { label: "CR SAP", value: new Set(selectedProject.issues.map((issue) => issue.cr).filter(Boolean)).size }
+            ]}
+          />
+          <div className="project-detail-section"><div className="project-section-title"><h3>Linked Issues</h3></div><ProjectLinkedIssues issues={selectedProject.issues} onOpenIssue={onOpenIssue} /></div>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 export function App() {
@@ -45,6 +172,10 @@ export function App() {
   const [authLoading, setAuthLoading] = useState(true);
   useEffect(() => { fetchCurrentUser().then((result) => setAuthUser(result.user)).catch(() => setAuthUser(null)).finally(() => setAuthLoading(false)); }, []);
   const [view, setView] = useState<View>("dashboard");
+  const workspaceRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    workspaceRef.current?.scrollTo({ top: 0, left: 0 });
+  }, [view]);
   const [managedUsers, setManagedUsers] = useState<ManagedUser[]>([]);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [systems, setSystems] = useState<SapSystemConfig[]>([]);
@@ -65,7 +196,7 @@ export function App() {
   const [issueDetail, setIssueDetail] = useState<IssueDetail | null>(null);
   const [changeIssueInitialId, setChangeIssueInitialId] = useState<number | null>(null);
   const [changeIssueInitialAction, setChangeIssueInitialAction] = useState<"" | "cancel" | "delete">("");
-  const [issueSidebarExpanded, setIssueSidebarExpanded] = useState(false);
+  const [expandedSidebarGroup, setExpandedSidebarGroup] = useState<SidebarGroup | null>(null);
   const [syncSystems, setSyncSystems] = useState<string[]>(["DEV", "QA", "PRD"]);
   const [syncMode, setSyncMode] = useState<"incremental" | "full_period">("incremental");
   const [lookbackDays, setLookbackDays] = useState(3);
@@ -218,10 +349,43 @@ export function App() {
     if (!link.issue_id) return;
     const issueId = Number(link.issue_id);
     if (!navigateTo("issue-display")) return;
-    setIssueSidebarExpanded(true);
+    setExpandedSidebarGroup("issue");
     setSelectedIssueId(issueId);
     fetchIssueDetail(issueId).then(setIssueDetail).catch((err) => setError(err instanceof Error ? err.message : String(err)));
     loadIssues(issueFilters, { preserveSelection: true }).catch((err) => setError(err instanceof Error ? err.message : String(err)));
+  }
+
+  async function openIssueFromProjectLink(issueKey: string) {
+    const nextFilters: IssueFilters = {
+      ...issueFilters,
+      status: "all",
+      q: issueKey,
+      page: 1,
+      pageSize: issuePagination.pageSize
+    };
+    try {
+      const issueData = await fetchIssueList(nextFilters);
+      const issue = findIssueByKey(issueData.rows, issueKey);
+      if (!issue) {
+        showToast("error", `Issue ${issueKey} tidak ditemukan.`);
+        return;
+      }
+      if (!navigateTo("issue-display")) return;
+      setExpandedSidebarGroup("issue");
+      setIssueFilters(nextFilters);
+      setDraftIssueFilters(nextFilters);
+      setIssues(issueData.rows);
+      setIssuePagination({
+        page: issueData.page,
+        pageSize: issueData.pageSize,
+        total: issueData.total,
+        totalPages: issueData.totalPages
+      });
+      setSelectedIssueId(issue.id);
+      await fetchIssueDetail(issue.id).then(setIssueDetail);
+    } catch (err) {
+      showToast("error", err instanceof Error ? err.message : String(err));
+    }
   }
 
   function navigateTo(nextView: View) {
@@ -375,16 +539,15 @@ export function App() {
           <BarChart3 size={18} /> Dashboard
         </button>
         <button className={view === "report" ? "active" : ""} onClick={() => navigateTo("report")}>
-          <FileSearch size={18} /> CR Report
+          <FileSearch size={18} /> CR Transport
         </button>
-        {authUser.role === "ADMIN" ? <button className={view === "user-management" ? "active" : ""} onClick={() => navigateTo("user-management")}><Users size={18} /> User Management</button> : null}
         <div className={`sidebar-group ${view.startsWith("issue-") ? "active" : ""}`}>
           <button className={view.startsWith("issue-") ? "active" : ""} onClick={() => {
-            setIssueSidebarExpanded((current) => !current);
+            setExpandedSidebarGroup((current) => nextExpandedSidebarGroup(current, "issue"));
           }}>
             <ClipboardList size={18} /> Issue
           </button>
-          {issueSidebarExpanded ? (
+          {expandedSidebarGroup === "issue" ? (
             <div className="sidebar-submenu">
               <button className={view === "issue-display" ? "active" : ""} onClick={() => {
                 setChangeIssueInitialId(null);
@@ -392,29 +555,49 @@ export function App() {
                 if (!navigateTo("issue-display")) return;
                 loadIssues(issueFilters).catch((err) => setError(err instanceof Error ? err.message : String(err)));
               }}>
-                Report
+                <FileSearch size={15} /> Report
               </button>
               <button className={view === "issue-create" ? "active" : ""} onClick={() => {
                 setChangeIssueInitialId(null);
                 setChangeIssueInitialAction("");
                 navigateTo("issue-create");
-              }}>Create</button>
+              }}><Plus size={15} /> Create</button>
               <button className={view === "issue-change" ? "active" : ""} onClick={() => {
                 setChangeIssueInitialId(null);
                 setChangeIssueInitialAction("");
                 navigateTo("issue-change");
-              }}>Change</button>
+              }}><PencilLine size={15} /> Change</button>
             </div>
           ) : null}
         </div>
+        <div className={`sidebar-group ${view.startsWith("project-") ? "active" : ""}`}>
+          <button className={view.startsWith("project-") ? "active" : ""} onClick={() => setExpandedSidebarGroup((current) => nextExpandedSidebarGroup(current, "project"))}>
+            <FolderKanban size={18} /> Project
+          </button>
+          {expandedSidebarGroup === "project" ? (
+            <div className="sidebar-submenu">
+              <button className={view === "project-report" ? "active" : ""} onClick={() => navigateTo("project-report")}><FileSearch size={15} /> Report</button>
+              <button className={view === "project-create" ? "active" : ""} onClick={() => navigateTo("project-create")}><Plus size={15} /> Create</button>
+              <button className={view === "project-change" ? "active" : ""} onClick={() => navigateTo("project-change")}><PencilLine size={15} /> Change</button>
+            </div>
+          ) : null}
         </div>
-        <div className="sidebar-footer"><span className="sidebar-user">{authUser.username}</span><button className="logout-button" onClick={() => { logout().finally(() => window.location.reload()); }}>Logout</button></div>
+        {authUser.role === "ADMIN" ? <button className={view === "user-management" ? "active" : ""} onClick={() => navigateTo("user-management")}><Users size={18} /> User Management</button> : null}
+        </div>
+        <div className="sidebar-footer">
+          <div className="sidebar-session">
+            <span className="sidebar-user">{authUser.username}</span>
+            <small>Last login: {authUser.lastLoginAt ? formatDateTime(authUser.lastLoginAt) : "First session"}</small>
+          </div>
+          <button className="logout-button" onClick={() => { logout().finally(() => window.location.reload()); }}><LogOut size={16} /> Logout</button>
+        </div>
       </aside>
 
-      <section className="workspace">
+      <section className="workspace" ref={workspaceRef}>
         <header className="topbar report-topbar">
-          <div>
-            <h1>{view === "dashboard" ? "Dashboard" : view === "report" ? "CR Report" : view === "issue-create" ? "Create Issue" : view === "issue-change" ? "Change Issue" : view === "user-management" ? "User Management" : "Issue"}</h1>
+          <div className="page-identity">
+            <h1>{VIEW_META[view].title}</h1>
+            <p className="page-description">{VIEW_META[view].description}</p>
             {view === "dashboard" ? (
               <div className="header-sync">
                 <CheckCircle2 size={15} />
@@ -425,7 +608,7 @@ export function App() {
               </div>
             ) : null}
           </div>
-          <div className={`sync-controls report-sync-controls ${syncMode === "full_period" ? "full-mode" : "incremental-mode"}`}>
+          <div className={`sync-controls report-sync-controls page-sync-toolbar ${syncMode === "full_period" ? "full-mode" : "incremental-mode"}`}>
             <label>
               Source Systems
               <div className="system-checks">
@@ -582,6 +765,12 @@ export function App() {
               }
             }}
           />
+        ) : view === "project-report" ? (
+          <ProjectPrototype mode="report" onOpenIssue={openIssueFromProjectLink} />
+        ) : view === "project-create" ? (
+          <ProjectPrototype mode="create" onOpenIssue={openIssueFromProjectLink} />
+        ) : view === "project-change" ? (
+          <ProjectPrototype mode="change" onOpenIssue={openIssueFromProjectLink} />
         ) : (
           <ChangeIssue
             initialIssueId={changeIssueInitialId}
@@ -744,7 +933,7 @@ function Dashboard({
               To Period
               <input type="month" value={trendFilters.toPeriod} onChange={(event) => onTrendFilters({ ...trendFilters, toPeriod: event.target.value })} />
             </label>
-            <button className="secondary" onClick={onApplyTrend}>Apply</button>
+            <button className="secondary" onClick={onApplyTrend}><Search size={15} /> Apply</button>
           </div>
         </div>
         <div className="chart-wrap">
@@ -971,7 +1160,8 @@ function Report({
 
   return (
     <>
-      <section className="filterbar report-filterbar">
+      <section className="cr-data-workspace">
+      <section className="filterbar report-filterbar cr-workspace-filterbar">
         <select className="status-filter" value={filters.lifecycleStatus && filters.lifecycleStatus !== "all" ? filters.lifecycleStatus : filters.status || "all"} onChange={(event) => updateStatusFilter(event.target.value)}>
           <option value="all">All</option>
           <option value="outstanding">Outstanding</option>
@@ -1019,10 +1209,10 @@ function Report({
             <select value={pagination.pageSize} onChange={(event) => onPageSize(Number(event.target.value))}>
               {[10, 25, 50, 100].map((size) => <option value={size} key={size}>{size} / page</option>)}
             </select>
-            <button className="secondary" onClick={() => onPage(1)} disabled={pagination.page <= 1}>First</button>
-            <button className="secondary" onClick={() => onPage(pagination.page - 1)} disabled={pagination.page <= 1}>Prev</button>
-            <button className="secondary" onClick={() => onPage(pagination.page + 1)} disabled={pagination.page >= pagination.totalPages}>Next</button>
-            <button className="secondary" onClick={() => onPage(pagination.totalPages)} disabled={pagination.page >= pagination.totalPages}>Last</button>
+            <button className="secondary" onClick={() => onPage(1)} disabled={pagination.page <= 1}><ArrowLeft size={14} /> First</button>
+            <button className="secondary" onClick={() => onPage(pagination.page - 1)} disabled={pagination.page <= 1}><ArrowLeft size={14} /> Prev</button>
+            <button className="secondary" onClick={() => onPage(pagination.page + 1)} disabled={pagination.page >= pagination.totalPages}><ArrowRight size={14} /> Next</button>
+            <button className="secondary" onClick={() => onPage(pagination.totalPages)} disabled={pagination.page >= pagination.totalPages}><ArrowRight size={14} /> Last</button>
           </div>
         </section>
         {hasDetail ? (
@@ -1040,39 +1230,50 @@ function Report({
               </button>
             </div>
           </div>
-          <div className="meta-grid">
-            <span>Owner<strong>{displayRequest?.owner || "-"}</strong></span>
-            <span>Target<strong>{displayRequest?.target_system || "-"}</strong></span>
-            <span>Type<strong>{displayRequest?.function_code || "-"}</strong></span>
-            <span>Changed<strong>{formatDate(displayRequest?.changed_date)}</strong></span>
-          </div>
-          <h3>Related Issues</h3>
-          <div className="rows compact cr-related-issues">
-            {(detail?.issueLinks || []).map((link) => {
-              const issueKey = link.issue_no ? `${link.issue_no}-${link.sub_issue_no || "01"}` : "Issue removed";
-              const status = formatIssueLinkStatus(link.relation_status, link.current_issue_status || link.issue_status_snapshot);
-              return link.issue_id ? (
-                <button className="cr-related-issue-link" type="button" key={link.id} onClick={() => onOpenIssue(link)}>
-                  <span className="cr-related-issue-heading">
-                    <strong>{issueKey}</strong>
-                    <Status value={status} />
-                  </span>
-                  <span className="cr-related-issue-name">{link.issue_name || "-"}</span>
-                </button>
-              ) : (
-                <div className="cr-related-issue-link historical" key={link.id}>
-                  <span className="cr-related-issue-heading">
-                    <strong>{issueKey}</strong>
-                    <Status value={status} />
-                  </span>
-                  <span className="cr-related-issue-name">{link.issue_name || "Issue removed"}</span>
-                </div>
-              );
-            })}
-            {detail && detail.issueLinks.length === 0 ? <div className="empty">No Issue linked to this CR.</div> : null}
-          </div>
-          <h3>Lifecycle</h3>
-          <div className="issue-timeline cr-lifecycle-timeline">
+          <SummaryStrip
+            className="cr-summary-strip"
+            items={[
+              { label: "Owner", value: displayRequest?.owner || "-" },
+              { label: "Target", value: displayRequest?.target_system || "-" },
+              { label: "Type", value: displayRequest?.function_code || "-" },
+              { label: "Changed", value: formatDate(displayRequest?.changed_date) }
+            ]}
+          />
+          <section className="report-detail-section">
+            <h3>Related Issues</h3>
+            <div className="rows compact cr-related-issues">
+              {(detail?.issueLinks || []).map((link) => {
+                const issueKey = link.issue_no ? `${link.issue_no}-${link.sub_issue_no || "01"}` : "Issue removed";
+                const status = formatIssueLinkStatus(link.relation_status, link.current_issue_status || link.issue_status_snapshot);
+                return link.issue_id ? (
+                  <button className="cr-related-issue-link" type="button" key={link.id} onClick={() => onOpenIssue(link)}>
+                    <span className="cr-related-issue-copy">
+                      <span className="cr-related-issue-heading">
+                        <strong>{issueKey}</strong>
+                        <Status value={status} />
+                      </span>
+                      <span className="cr-related-issue-name">{link.issue_name || "-"}</span>
+                    </span>
+                    <ChevronRight className="cr-related-issue-chevron" size={16} aria-hidden="true" />
+                  </button>
+                ) : (
+                  <div className="cr-related-issue-link historical" key={link.id}>
+                    <span className="cr-related-issue-copy">
+                      <span className="cr-related-issue-heading">
+                        <strong>{issueKey}</strong>
+                        <Status value={status} />
+                      </span>
+                      <span className="cr-related-issue-name">{link.issue_name || "Issue removed"}</span>
+                    </span>
+                  </div>
+                );
+              })}
+              {detail && detail.issueLinks.length === 0 ? <div className="empty">No Issue linked to this CR.</div> : null}
+            </div>
+          </section>
+          <section className="report-detail-section">
+            <h3>Lifecycle</h3>
+            <div className="issue-timeline cr-lifecycle-timeline">
             {[
               { label: "Created", value: formatIssueTimestamp(detail?.lifecycle.created_at), filled: Boolean(detail?.lifecycle.created_at) },
               { label: "Released", value: formatIssueTimestamp(detail?.lifecycle.released_at), filled: Boolean(detail?.lifecycle.released_at) },
@@ -1087,42 +1288,48 @@ function Report({
                 </div>
               </div>
             ))}
-          </div>
-          <h3>Tasks</h3>
-          <div className="rows compact">
-            {(detail?.tasks || []).map((task) => (
-              <div className="row task-row" key={task.trkorr}>
-                <span>{task.trkorr}</span>
-                <Status value={displayLifecycleStatus(task.lifecycle_status || task.status_group)} />
-              </div>
-            ))}
-            {detail && detail.tasks.length === 0 ? <div className="empty">No child tasks cached.</div> : null}
-          </div>
-          <h3>Objects</h3>
-          <div className="object-list se03-object-list">
-            {groupObjectsBySe03Label(detail?.objects || []).map((group) => (
-              <div className="object-group" key={group.key}>
-                <div className="object-group-title">
-                  <strong>{group.label}</strong>
-                  <code>{group.key}</code>
+            </div>
+          </section>
+          <section className="report-detail-section">
+            <h3>Tasks</h3>
+            <div className="rows compact">
+              {(detail?.tasks || []).map((task) => (
+                <div className="row task-row" key={task.trkorr}>
+                  <span>{task.trkorr}</span>
+                  <Status value={displayLifecycleStatus(task.lifecycle_status || task.status_group)} />
                 </div>
-                {group.objects.map((object) => (
-                  <div className="object-row se03-object-row" key={`${object.trkorr}-${object.position}`}>
-                    <code>{object.pgmid} {object.object_type}</code>
-                    <div>
-                      <strong>{object.object_name}</strong>
-                      <span>{object.trkorr} - {object.position}</span>
-                      <small>{labelDiffReadiness(object.diff_readiness)}</small>
-                    </div>
+              ))}
+              {detail && detail.tasks.length === 0 ? <div className="empty">No child tasks cached.</div> : null}
+            </div>
+          </section>
+          <section className="report-detail-section">
+            <h3>Objects</h3>
+            <div className="object-list se03-object-list">
+              {groupObjectsBySe03Label(detail?.objects || []).map((group) => (
+                <div className="object-group" key={group.key}>
+                  <div className="object-group-title">
+                    <strong>{group.label}</strong>
+                    <code>{group.key}</code>
                   </div>
-                ))}
-              </div>
-            ))}
-            {detail && detail.objects.length === 0 ? <div className="empty">No objects cached for this CR.</div> : null}
-          </div>
+                  {group.objects.map((object) => (
+                    <div className="object-row se03-object-row" key={`${object.trkorr}-${object.position}`}>
+                      <code>{object.pgmid} {object.object_type}</code>
+                      <div>
+                        <strong>{object.object_name}</strong>
+                        <span>{object.trkorr} - {object.position}</span>
+                        <small>{labelDiffReadiness(object.diff_readiness)}</small>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+              {detail && detail.objects.length === 0 ? <div className="empty">No objects cached for this CR.</div> : null}
+            </div>
+          </section>
         </section>
         ) : null}
       </div>
+      </section>
     </>
   );
 }
@@ -1159,20 +1366,24 @@ function IssueDisplay({
   onOpenCr: (link: { sap_system_code?: string; trkorr: string }) => void;
 }) {
   const [detailMenuOpen, setDetailMenuOpen] = useState(false);
+  const [columnMenuOpen, setColumnMenuOpen] = useState(false);
+  const [visibleIssueColumns, setVisibleIssueColumns] = useState<IssueColumnKey[]>([...DEFAULT_ISSUE_COLUMNS]);
   const selectedIssue = issues.find((issue) => issue.id === selectedId) || detail?.issue || null;
   const hasDetail = Boolean(selectedId && selectedIssue);
   const canGenerateCrForm = Boolean(detail?.crLinks.length);
   const primaryGlpiTicket = detail?.glpi.find((ticket) => ticket.is_primary)?.ticket_number
     ?? detail?.glpi[0]?.ticket_number
     ?? selectedIssue?.primary_glpi_ticket;
+  const detailIncompleteItems = detail?.issue?.issue_status !== "cancelled" && detail ? getIncompleteItems(detail) : [];
+  const detailIncompleteGroups = groupIncompleteItems(detailIncompleteItems);
   const issueColumns = useResizableColumns("issue-report-columns", {
     issue: 112,
-    name: 320,
-    abaper: 180,
+    name: 280,
+    abaper: 160,
     glpi: 110,
     crHelpdesk: 140,
-    cr: 140,
-    status: 128,
+    cr: 132,
+    status: 120,
     completeness: 48
   }, {
     issue: 100,
@@ -1184,13 +1395,24 @@ function IssueDisplay({
     status: 115,
     completeness: 44
   });
+  const issueTableWidth = visibleIssueColumns.reduce((total, column) => total + issueColumns.widths[column], 0);
 
   function updateFilter(key: keyof IssueFilters, value: string) {
     onFilters({ ...filters, [key]: value });
   }
 
+  function toggleIssueColumn(column: IssueColumnKey) {
+    setVisibleIssueColumns((current) => current.includes(column)
+      ? current.filter((item) => item !== column)
+      : [...current, column]);
+  }
+
+  function hasIssueColumn(column: IssueColumnKey) {
+    return visibleIssueColumns.includes(column);
+  }
+
   return (
-    <>
+    <section className="issue-report-workspace">
       <section className="filterbar issue-filterbar">
         <select value={filters.status || "all"} onChange={(event) => updateFilter("status", event.target.value)}>
           <option value="all">All Status</option>
@@ -1205,18 +1427,24 @@ function IssueDisplay({
         <input value={filters.cr || ""} onChange={(event) => updateFilter("cr", event.target.value)} placeholder="CR" />
         <input type="date" value={filters.fromDate || ""} onChange={(event) => updateFilter("fromDate", event.target.value)} />
         <input type="date" value={filters.toDate || ""} onChange={(event) => updateFilter("toDate", event.target.value)} />
+        <IssueColumnMenu
+          open={columnMenuOpen}
+          visibleColumns={visibleIssueColumns}
+          onOpenChange={setColumnMenuOpen}
+          onToggle={toggleIssueColumn}
+        />
       </section>
 
-      <div className={`report-layout issue-layout ${hasDetail ? "" : "detail-closed"}`}>
+      <div className={`report-layout issue-layout controlled-dual-pane ${hasDetail ? "" : "detail-closed"}`}>
         <section className="table-panel report-table-panel issue-table-panel">
           <div className="table-scroll">
-            <table className="record-table issue-record-table" style={{ width: issueColumns.totalWidth, minWidth: "100%" }}>
+            <table className="record-table issue-record-table" style={{ width: issueTableWidth, minWidth: "100%" }}>
               <colgroup>
                 <col style={{ width: issueColumns.widths.issue }} />
                 <col style={{ width: issueColumns.widths.name }} />
                 <col style={{ width: issueColumns.widths.abaper }} />
-                <col style={{ width: issueColumns.widths.glpi }} />
-                <col style={{ width: issueColumns.widths.crHelpdesk }} />
+                {hasIssueColumn("glpi") ? <col style={{ width: issueColumns.widths.glpi }} /> : null}
+                {hasIssueColumn("crHelpdesk") ? <col style={{ width: issueColumns.widths.crHelpdesk }} /> : null}
                 <col style={{ width: issueColumns.widths.cr }} />
                 <col style={{ width: issueColumns.widths.status }} />
                 <col style={{ width: issueColumns.widths.completeness }} />
@@ -1226,8 +1454,8 @@ function IssueDisplay({
                   <ResizableHeader label="Issue" column="issue" width={issueColumns.widths.issue} onResize={issueColumns.startResize} />
                   <ResizableHeader label="Name" column="name" width={issueColumns.widths.name} onResize={issueColumns.startResize} />
                   <ResizableHeader label="ABAPer" column="abaper" width={issueColumns.widths.abaper} onResize={issueColumns.startResize} />
-                  <ResizableHeader label="GLPI" column="glpi" width={issueColumns.widths.glpi} onResize={issueColumns.startResize} />
-                  <ResizableHeader label="CR Helpdesk" column="crHelpdesk" width={issueColumns.widths.crHelpdesk} onResize={issueColumns.startResize} />
+                  {hasIssueColumn("glpi") ? <ResizableHeader label="GLPI" column="glpi" width={issueColumns.widths.glpi} onResize={issueColumns.startResize} /> : null}
+                  {hasIssueColumn("crHelpdesk") ? <ResizableHeader label="CR Helpdesk" column="crHelpdesk" width={issueColumns.widths.crHelpdesk} onResize={issueColumns.startResize} /> : null}
                   <ResizableHeader label="CR" column="cr" width={issueColumns.widths.cr} onResize={issueColumns.startResize} />
                   <ResizableHeader label="Status" column="status" width={issueColumns.widths.status} onResize={issueColumns.startResize} />
                   <ResizableHeader label="" column="completeness" width={issueColumns.widths.completeness} onResize={issueColumns.startResize} />
@@ -1239,8 +1467,8 @@ function IssueDisplay({
                     <td>{issue.issue_key}</td>
                     <td>{issue.issue_name}</td>
                     <td>{issue.abaper_name_snapshot || "-"}</td>
-                    <td>{formatGlpi(issue.primary_glpi_ticket)}</td>
-                    <td>{issue.primary_cr_helpdesk_no || "-"}</td>
+                    {hasIssueColumn("glpi") ? <td>{formatGlpi(issue.primary_glpi_ticket)}</td> : null}
+                    {hasIssueColumn("crHelpdesk") ? <td>{issue.primary_cr_helpdesk_no || "-"}</td> : null}
                     <td>{issue.primary_cr || "-"}</td>
                     <td><Status value={issue.issue_status} /></td>
                     <td className="completeness-cell">{issue.issue_status === "cancelled" ? (
@@ -1261,10 +1489,10 @@ function IssueDisplay({
             <select value={pagination.pageSize} onChange={(event) => onPageSize(Number(event.target.value))}>
               {[10, 25, 50, 100].map((size) => <option value={size} key={size}>{size} / page</option>)}
             </select>
-            <button className="secondary" onClick={() => onPage(1)} disabled={pagination.page <= 1}>First</button>
-            <button className="secondary" onClick={() => onPage(pagination.page - 1)} disabled={pagination.page <= 1}>Prev</button>
-            <button className="secondary" onClick={() => onPage(pagination.page + 1)} disabled={pagination.page >= pagination.totalPages}>Next</button>
-            <button className="secondary" onClick={() => onPage(pagination.totalPages)} disabled={pagination.page >= pagination.totalPages}>Last</button>
+            <button className="secondary" onClick={() => onPage(1)} disabled={pagination.page <= 1}><ArrowLeft size={14} /> First</button>
+            <button className="secondary" onClick={() => onPage(pagination.page - 1)} disabled={pagination.page <= 1}><ArrowLeft size={14} /> Prev</button>
+            <button className="secondary" onClick={() => onPage(pagination.page + 1)} disabled={pagination.page >= pagination.totalPages}><ArrowRight size={14} /> Next</button>
+            <button className="secondary" onClick={() => onPage(pagination.totalPages)} disabled={pagination.page >= pagination.totalPages}><ArrowRight size={14} /> Last</button>
           </div>
         </section>
 
@@ -1322,14 +1550,19 @@ function IssueDisplay({
             <p className="issue-summary-description">{selectedIssue?.issue_name}</p>
           </div>
 
-          <div className="meta-grid">
-            <span className="wide-meta">Email Subject<strong>{detail?.issue?.email_subject || "-"}</strong></span>
-            <span>Requester<strong>{selectedIssue?.requester_name_snapshot || "-"}</strong></span>
-            <span>ABAPer<strong>{selectedIssue?.abaper_name_snapshot || "-"}</strong></span>
-            <span>Created<strong>{formatIssueTimestamp(selectedIssue?.create_issue_date)}</strong></span>
-            <GlpiMetaCard value={primaryGlpiTicket} />
-            <span>CR Helpdesk No.<strong>{formatCrHelpdeskNumbers(detail) || selectedIssue?.primary_cr_helpdesk_no || "-"}</strong></span>
-          </div>
+          <SummaryStrip items={[
+            { label: "Email Subject", value: detail?.issue?.email_subject || "-", wide: true },
+            { label: "Requester", value: <DisplayNameList value={selectedIssue?.requester_name_snapshot} /> },
+            { label: "ABAPer", value: <DisplayNameList value={selectedIssue?.abaper_name_snapshot} /> },
+            { label: "Created", value: formatIssueTimestamp(selectedIssue?.create_issue_date) },
+            {
+              label: "GLPI",
+              value: primaryGlpiTicket
+                ? <a className="summary-strip-link" href={glpiUrl(primaryGlpiTicket)} target="_blank" rel="noreferrer">{primaryGlpiTicket}</a>
+                : "-"
+            },
+            { label: "CR Helpdesk No.", value: formatCrHelpdeskNumbers(detail) || selectedIssue?.primary_cr_helpdesk_no || "-" }
+          ]} />
 
           {detail?.issue?.issue_status === "cancelled" ? (
             <section className="issue-cancel-box">
@@ -1338,12 +1571,10 @@ function IssueDisplay({
             </section>
           ) : null}
 
-          {detail && detail.issue?.issue_status !== "cancelled" && missingIssueData(detail).length ? (
+          {detailIncompleteItems.length ? (
             <section className="issue-missing-box">
-              <strong>Incomplete Data</strong>
-              <ul>
-                {missingIssueData(detail).map((item) => <li key={item}>{item}</li>)}
-              </ul>
+              <strong>Incomplete items</strong>
+              <IncompleteGroupCards groups={detailIncompleteGroups} />
             </section>
           ) : null}
 
@@ -1420,7 +1651,7 @@ function IssueDisplay({
         </section>
         ) : null}
       </div>
-    </>
+    </section>
   );
 }
 
@@ -1428,6 +1659,7 @@ function IssueEditor({
   mode,
   detail,
   initialAction = "",
+  navigationRequest,
   onSave,
   onCancel,
   onDelete,
@@ -1436,6 +1668,7 @@ function IssueEditor({
   mode: "create" | "change";
   detail: IssueDetail | null;
   initialAction?: "" | "cancel" | "delete";
+  navigationRequest?: { sequence: number; item: IncompleteItem } | null;
   onSave: (payload: IssueSavePayload) => Promise<void>;
   onCancel?: (id: number, reason: string) => Promise<void>;
   onDelete?: (id: number) => Promise<void>;
@@ -1455,7 +1688,7 @@ function IssueEditor({
   const [showBaseIssueCandidates, setShowBaseIssueCandidates] = useState(false);
   const [crPreview, setCrPreview] = useState<Record<string, { description?: string; status?: string; system?: string }>>({});
   const [glpiPreview, setGlpiPreview] = useState<Record<string, { title?: string; openedAt?: string; status?: string; notFound?: boolean }>>({});
-  const [expandedPhases, setExpandedPhases] = useState({ dev: true, qa: false, prd: false });
+  const [expandedPhases, setExpandedPhases] = useState<ExpandedIssueSections>({ initiation: true, dev: true, qa: false, prd: false });
   const [templatePreview, setTemplatePreview] = useState<{ title: string; body: string; bodyHtml?: string } | null>(null);
   const [templateBusy, setTemplateBusy] = useState<"" | "email" | "ticket" | "cr-transport">("");
   const [generateMenuOpen, setGenerateMenuOpen] = useState(false);
@@ -1651,13 +1884,29 @@ function IssueEditor({
 
   useEffect(() => {
     setExpandedPhases({
+      initiation: true,
       dev: hasCrAssigned,
       qa: qaReady,
       prd: prdReady
     });
   }, [detail?.issue?.id, hasCrAssigned, qaReady, prdReady]);
 
-  function togglePhase(phase: keyof typeof expandedPhases) {
+  useEffect(() => {
+    if (!navigationRequest) return;
+    setExpandedPhases((current) => expandSection(current, navigationRequest.item.section));
+    return afterIncompleteSectionRender(() => {
+      const target = document.querySelector<HTMLElement>(`[data-incomplete-target="${navigationRequest.item.targetId}"]`);
+      if (!target) return;
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      markIncompleteTarget(target);
+      const focusTarget = target.matches("input, select, textarea, button")
+        ? target
+        : target.querySelector<HTMLElement>("input:not(:disabled), select:not(:disabled), textarea:not(:disabled), button:not(:disabled)");
+      focusTarget?.focus({ preventScroll: true });
+    });
+  }, [navigationRequest]);
+
+  function togglePhase(phase: IssueSection) {
     setExpandedPhases((current) => ({ ...current, [phase]: !current[phase] }));
   }
 
@@ -1748,14 +1997,14 @@ function IssueEditor({
                 setCreateMode("new");
                 setForm((current) => ({ ...current, createMode: "new", issueNo: undefined, subIssueNo: "01" }));
               }}>
-                New Issue
+                <Plus size={15} /> New Issue
               </button>
               <button type="button" className={createMode === "sub" ? "active" : ""} onClick={() => {
                 setCreateMode("sub");
                 setForm((current) => ({ ...current, createMode: "sub" }));
                 setShowBaseIssueCandidates(true);
               }}>
-                Add Sub Issue
+                <Plus size={15} /> Add Sub Issue
               </button>
             </div>
             {createMode === "new" ? (
@@ -1792,13 +2041,18 @@ function IssueEditor({
       ) : null}
 
       <section className="panel editor-section issue-phase-card">
-        <div className="phase-title">
+        <button className="phase-title phase-toggle" type="button" onClick={() => togglePhase("initiation")}>
+          <ChevronDown size={18} />
           <div>
             <h2>Issue Initiation</h2>
             <p>Initial issue details, analysis, requester, ABAPer, and supporting references.</p>
           </div>
-        </div>
-        <div className="issue-initiation-layout">
+          <span className="phase-title-actions">
+            <span className="phase-chevron">{expandedPhases.initiation ? "Hide" : "Show"}</span>
+          </span>
+        </button>
+        {expandedPhases.initiation ? (
+          <div className="issue-initiation-layout">
           <div className="issue-initiation-column issue-initiation-main">
             <div className="initiation-section">
               <h3>Issue Information</h3>
@@ -1806,14 +2060,16 @@ function IssueEditor({
                 <label>Issue No.<input className="readonly-input" value={displayedIssueNo} onChange={(event) => update("issueNo", event.target.value)} placeholder="Auto" readOnly={mode === "create"} disabled={formDisabled} /></label>
                 <label>Sub Issue<input className={mode === "create" ? "readonly-input" : ""} value={displayedSubIssueNo} onChange={(event) => update("subIssueNo", event.target.value)} readOnly={mode === "create"} disabled={formDisabled} /></label>
               </div>
-              <label>Issue Name<input value={form.issueName || ""} onChange={(event) => update("issueName", event.target.value)} required disabled={formDisabled} /></label>
+              <label data-incomplete-target="issue-name">Issue Name<input value={form.issueName || ""} onChange={(event) => update("issueName", event.target.value)} required disabled={formDisabled} /></label>
               <div className="initiation-pair">
                 <label>Status<select value={form.sourceIssueStatus || "open"} onChange={(event) => update("sourceIssueStatus", event.target.value)} disabled={formDisabled}>
                   <option value="open">Open</option>
                   <option value="ok">OK</option>
                   {isCancelled ? <option value="cancelled">Cancelled</option> : null}
                 </select></label>
-                <TimestampInput label="Created On" value={form.createIssueDate} onChange={(value) => update("createIssueDate", value)} disabled={formDisabled} />
+                <div className="incomplete-target" data-incomplete-target="issue-created-on">
+                  <TimestampInput label="Created On" value={form.createIssueDate} onChange={(value) => update("createIssueDate", value)} disabled={formDisabled} />
+                </div>
               </div>
               <label>Email Subject<input value={form.emailSubject || ""} onChange={(event) => update("emailSubject", event.target.value)} placeholder="Email subject" disabled={formDisabled} /></label>
             </div>
@@ -1828,7 +2084,7 @@ function IssueEditor({
             <div className="initiation-section">
               <h3>References</h3>
               <div className="initiation-pair reference-pair">
-                <div className="reference-field-group">
+                <div className="reference-field-group" data-incomplete-target="issue-glpi">
                   <ValueHelpField label="CR Helpdesk No." kind="cr-helpdesk" value={form.crHelpdeskNumbers || ""} onChange={(value) => update("crHelpdeskNumbers", value)} placeholder="CR Helpdesk No." disabled={formDisabled} />
                 </div>
                 <div className="reference-field-group">
@@ -1870,26 +2126,28 @@ function IssueEditor({
                   ) : null}
                 </div>
               </div>
-              <ValueHelpField
-                label="CR SAP No."
-                kind="cr"
-                value={form.crLinks || ""}
-                onChange={(value) => update("crLinks", value.toUpperCase())}
-                onSelectRow={(row) => {
-                  const trkorr = String(row.trkorr || "");
-                  if (!trkorr) return;
-                  setCrPreview((current) => ({
-                    ...current,
-                    [trkorr]: {
-                      description: String(row.description || ""),
-                      status: String(row.status_group || ""),
-                      system: String(row.sap_system_code || "")
-                    }
-                  }));
-                }}
-                placeholder="TRDK..."
-                disabled={formDisabled}
-              />
+              <div className="incomplete-target" data-incomplete-target="issue-cr">
+                <ValueHelpField
+                  label="CR SAP No."
+                  kind="cr"
+                  value={form.crLinks || ""}
+                  onChange={(value) => update("crLinks", value.toUpperCase())}
+                  onSelectRow={(row) => {
+                    const trkorr = String(row.trkorr || "");
+                    if (!trkorr) return;
+                    setCrPreview((current) => ({
+                      ...current,
+                      [trkorr]: {
+                        description: String(row.description || ""),
+                        status: String(row.status_group || ""),
+                        system: String(row.sap_system_code || "")
+                      }
+                    }));
+                  }}
+                  placeholder="TRDK..."
+                  disabled={formDisabled}
+                />
+              </div>
               {crTokens.length ? (
                 <div className="reference-hints">
                   {crTokens.map((trkorr) => {
@@ -1910,10 +2168,10 @@ function IssueEditor({
             </div>
             <div className="initiation-section">
               <h3>People</h3>
-              <div className="repeatable-row-field">
+              <div className="repeatable-row-field" data-incomplete-target="issue-requesters">
                 <MultiValueHelpField label="Requester" kind="people" personMode="full_name" value={form.requesterNames || ""} onChange={(value) => update("requesterNames", value)} placeholder="Full name" disabled={formDisabled} />
               </div>
-              <div className="repeatable-row-field">
+              <div className="repeatable-row-field" data-incomplete-target="issue-abapers">
                 <MultiValueHelpField label="ABAPer" kind="people" personMode="full_name" value={form.abaperNames || ""} onChange={(value) => update("abaperNames", value)} placeholder="Full name" disabled={formDisabled} />
               </div>
               {isCancelled ? (
@@ -1924,11 +2182,13 @@ function IssueEditor({
               ) : null}
             </div>
           </div>
-        </div>
+          </div>
+        ) : null}
       </section>
 
       <section className={`panel editor-section issue-phase-card ${hasCrAssigned ? "" : "phase-muted"}`}>
         <button className="phase-title phase-toggle" type="button" onClick={() => togglePhase("dev")}>
+          <ChevronDown size={18} />
           <div>
             <h2>DEV Processing</h2>
             <p>Testing and evaluation in the DEV system.</p>
@@ -1940,16 +2200,17 @@ function IssueEditor({
         </button>
         {expandedPhases.dev ? (
           <div className="phase-pair-grid">
-            <ValueHelpField label="DEV Tester" kind="people" personMode="full_name" value={form.participants?.dev_tester || ""} onChange={(value) => updateParticipant("dev_tester", value)} placeholder="Full name" disabled={devDisabled} />
-            <TimestampInput label="Testing Date" value={form.timeline?.dev_tested_date} onChange={(value) => updateTimeline("dev_tested_date", value)} disabled={devDisabled} />
-            <ValueHelpField label="DEV Evaluator" kind="people" personMode="full_name" value={form.participants?.dev_evaluator || ""} onChange={(value) => updateParticipant("dev_evaluator", value)} placeholder="Full name" disabled={devDisabled} />
-            <TimestampInput label="Evaluation Date" value={form.timeline?.dev_evaluated_date} onChange={(value) => updateTimeline("dev_evaluated_date", value)} disabled={devDisabled} />
+            <ValueHelpField label="DEV Tester" kind="people" personMode="full_name" value={form.participants?.dev_tester || ""} onChange={(value) => updateParticipant("dev_tester", value)} placeholder="Full name" disabled={devDisabled} incompleteTarget="issue-dev-tester" />
+            <TimestampInput label="Testing Date" value={form.timeline?.dev_tested_date} onChange={(value) => updateTimeline("dev_tested_date", value)} disabled={devDisabled} incompleteTarget="issue-dev-testing-date" />
+            <ValueHelpField label="DEV Evaluator" kind="people" personMode="full_name" value={form.participants?.dev_evaluator || ""} onChange={(value) => updateParticipant("dev_evaluator", value)} placeholder="Full name" disabled={devDisabled} incompleteTarget="issue-dev-evaluator" />
+            <TimestampInput label="Evaluation Date" value={form.timeline?.dev_evaluated_date} onChange={(value) => updateTimeline("dev_evaluated_date", value)} disabled={devDisabled} incompleteTarget="issue-dev-evaluation-date" />
           </div>
         ) : null}
       </section>
 
       <section className={`panel editor-section issue-phase-card ${qaReady ? "" : "phase-muted"}`}>
         <button className="phase-title phase-toggle" type="button" onClick={() => togglePhase("qa")}>
+          <ChevronDown size={18} />
           <div>
             <h2>QA Processing</h2>
             <p>Testing and evaluation in the QA system.</p>
@@ -1961,18 +2222,19 @@ function IssueEditor({
         </button>
         {expandedPhases.qa ? (
           <div className="phase-pair-grid">
-            <ValueHelpField label="QA Transporter" kind="people" personMode="full_name" value={form.participants?.qa_transporter || ""} onChange={(value) => updateParticipant("qa_transporter", value)} placeholder="Full name" disabled={qaDisabled} />
+            <ValueHelpField label="QA Transporter" kind="people" personMode="full_name" value={form.participants?.qa_transporter || ""} onChange={(value) => updateParticipant("qa_transporter", value)} placeholder="Full name" disabled={qaDisabled} incompleteTarget="issue-qa-transporter" />
             <label>Transport Date<input className="readonly-input" value={formatIssueTimestamp(primaryCr?.qa_import_date, primaryCr?.qa_import_time)} readOnly /></label>
-            <ValueHelpField label="QA Tester" kind="people" personMode="full_name" value={form.participants?.qa_tester || ""} onChange={(value) => updateParticipant("qa_tester", value)} placeholder="Full name" disabled={qaDisabled} />
-            <TimestampInput label="Testing Date" value={form.timeline?.qa_tested_date} onChange={(value) => updateTimeline("qa_tested_date", value)} disabled={qaDisabled} />
-            <ValueHelpField label="QA Evaluator" kind="people" personMode="full_name" value={form.participants?.qa_evaluator || ""} onChange={(value) => updateParticipant("qa_evaluator", value)} placeholder="Full name" disabled={qaDisabled} />
-            <TimestampInput label="Evaluation Date" value={form.timeline?.qa_evaluated_date} onChange={(value) => updateTimeline("qa_evaluated_date", value)} disabled={qaDisabled} />
+            <ValueHelpField label="QA Tester" kind="people" personMode="full_name" value={form.participants?.qa_tester || ""} onChange={(value) => updateParticipant("qa_tester", value)} placeholder="Full name" disabled={qaDisabled} incompleteTarget="issue-qa-tester" />
+            <TimestampInput label="Testing Date" value={form.timeline?.qa_tested_date} onChange={(value) => updateTimeline("qa_tested_date", value)} disabled={qaDisabled} incompleteTarget="issue-qa-testing-date" />
+            <ValueHelpField label="QA Evaluator" kind="people" personMode="full_name" value={form.participants?.qa_evaluator || ""} onChange={(value) => updateParticipant("qa_evaluator", value)} placeholder="Full name" disabled={qaDisabled} incompleteTarget="issue-qa-evaluator" />
+            <TimestampInput label="Evaluation Date" value={form.timeline?.qa_evaluated_date} onChange={(value) => updateTimeline("qa_evaluated_date", value)} disabled={qaDisabled} incompleteTarget="issue-qa-evaluation-date" />
           </div>
         ) : null}
       </section>
 
       <section className={`panel editor-section issue-phase-card ${prdReady ? "" : "phase-muted"}`}>
         <button className="phase-title phase-toggle" type="button" onClick={() => togglePhase("prd")}>
+          <ChevronDown size={18} />
           <div>
             <h2>PRD Processing</h2>
             <p>PRD request, evaluation, approval, and transport execution.</p>
@@ -1984,17 +2246,18 @@ function IssueEditor({
         </button>
         {expandedPhases.prd ? (
           <div className="phase-pair-grid">
-            <ValueHelpField label="PRD Requester" kind="people" personMode="full_name" value={form.participants?.prd_requester || ""} onChange={(value) => updateParticipant("prd_requester", value)} placeholder="Full name" disabled={prdRequestDisabled} />
-            <TimestampInput label="Request Date" value={form.timeline?.prd_requested_date} onChange={(value) => updateTimeline("prd_requested_date", value)} disabled={prdRequestDisabled} />
-            <ValueHelpField label="PRD Evaluator" kind="people" personMode="full_name" value={form.participants?.prd_evaluator || ""} onChange={(value) => updateParticipant("prd_evaluator", value)} placeholder="Full name" disabled={prdRequestDisabled} />
-            <TimestampInput label="Evaluation Date" value={form.timeline?.prd_evaluated_date} onChange={(value) => updateTimeline("prd_evaluated_date", value)} disabled={prdRequestDisabled} />
-            <ValueHelpField label="Approver" kind="people" personMode="full_name" value={form.participants?.approval || ""} onChange={(value) => updateParticipant("approval", value)} placeholder="Full name" disabled={prdRequestDisabled} />
-            <TimestampInput label="Approval Date" value={form.timeline?.approval_date} onChange={(value) => updateTimeline("approval_date", value)} disabled={prdRequestDisabled} />
-            <ValueHelpField label="PRD Transporter" kind="people" personMode="full_name" value={form.participants?.executor || ""} onChange={(value) => updateParticipant("executor", value)} placeholder="Full name" disabled={prdTransportDisabled} />
+            <ValueHelpField label="PRD Requester" kind="people" personMode="full_name" value={form.participants?.prd_requester || ""} onChange={(value) => updateParticipant("prd_requester", value)} placeholder="Full name" disabled={prdRequestDisabled} incompleteTarget="issue-prd-requester" />
+            <TimestampInput label="Request Date" value={form.timeline?.prd_requested_date} onChange={(value) => updateTimeline("prd_requested_date", value)} disabled={prdRequestDisabled} incompleteTarget="issue-prd-request-date" />
+            <ValueHelpField label="PRD Evaluator" kind="people" personMode="full_name" value={form.participants?.prd_evaluator || ""} onChange={(value) => updateParticipant("prd_evaluator", value)} placeholder="Full name" disabled={prdRequestDisabled} incompleteTarget="issue-prd-evaluator" />
+            <TimestampInput label="Evaluation Date" value={form.timeline?.prd_evaluated_date} onChange={(value) => updateTimeline("prd_evaluated_date", value)} disabled={prdRequestDisabled} incompleteTarget="issue-prd-evaluation-date" />
+            <ValueHelpField label="Approver" kind="people" personMode="full_name" value={form.participants?.approval || ""} onChange={(value) => updateParticipant("approval", value)} placeholder="Full name" disabled={prdRequestDisabled} incompleteTarget="issue-approver" />
+            <TimestampInput label="Approval Date" value={form.timeline?.approval_date} onChange={(value) => updateTimeline("approval_date", value)} disabled={prdRequestDisabled} incompleteTarget="issue-approval-date" />
+            <ValueHelpField label="PRD Transporter" kind="people" personMode="full_name" value={form.participants?.executor || ""} onChange={(value) => updateParticipant("executor", value)} placeholder="Full name" disabled={prdTransportDisabled} incompleteTarget="issue-prd-transporter" />
             <label>Transport Date<input className="readonly-input" value={formatIssueTimestamp(primaryCr?.prd_import_date, primaryCr?.prd_import_time)} readOnly /></label>
           </div>
         ) : null}
       </section>
+      <div className="editor-safe-space" aria-hidden="true" />
       <div className="issue-save-bar">
         <span>Actions</span>
         <div className="sticky-actions">
@@ -2005,25 +2268,25 @@ function IssueEditor({
                   setGenerateMenuOpen((current) => !current);
                   setMoreMenuOpen(false);
                 }} disabled={templateBusy !== "" || !detail?.issue?.id}>
-                  {templateBusy ? "Generating" : "Generate"} ▾
+                  <FileOutput size={16} /> {templateBusy ? "Generating" : "Generate"} <ChevronDown size={14} />
                 </button>
                 {generateMenuOpen ? (
                   <div className="sticky-action-menu-list">
                     <button type="button" onClick={() => {
                       setGenerateMenuOpen(false);
                       generateTemplate("ticket");
-                    }}>GLPI Ticket Template</button>
+                    }}><FileOutput size={15} /> GLPI Ticket Template</button>
                     {hasSavedCrLink && hasSavedGlpiNo ? (
                       <button type="button" onClick={() => {
                         setGenerateMenuOpen(false);
                         generateTemplate("email");
-                      }}>Email Template</button>
+                      }}><FileOutput size={15} /> Email Template</button>
                     ) : null}
                     {hasSavedCrLink ? (
                       <button type="button" onClick={() => {
                         setGenerateMenuOpen(false);
                         generateCrTransportTemplate();
-                      }}>CR Form</button>
+                      }}><FileOutput size={15} /> CR Form</button>
                     ) : null}
                   </div>
                 ) : null}
@@ -2035,25 +2298,25 @@ function IssueEditor({
               <button className="secondary" type="button" onClick={() => {
                 setMoreMenuOpen((current) => !current);
                 setGenerateMenuOpen(false);
-              }}>More ▾</button>
+              }}><MoreVertical size={16} /> More <ChevronDown size={14} /></button>
               {moreMenuOpen ? (
                 <div className="sticky-action-menu-list">
                   {!isCancelled ? (
                     <button type="button" onClick={() => {
                       setMoreMenuOpen(false);
                       setActionDialog("cancel");
-                    }}>Cancel Issue</button>
+                    }}><Ban size={15} /> Cancel Issue</button>
                   ) : null}
                   <button className="danger-menu-item" type="button" onClick={() => {
                     setMoreMenuOpen(false);
                     setActionDialog("delete");
-                  }}>Delete Issue</button>
+                  }}><Trash2 size={15} /> Delete Issue</button>
                 </div>
               ) : null}
               {isCancelled ? <span className="readonly-note">Cancelled issue is read-only.</span> : null}
             </div>
           ) : null}
-          {!isCancelled ? <button className="primary" type="submit" disabled={saving}>{saving ? "Saving" : "Save"}</button> : null}
+          {!isCancelled ? <button className="primary" type="submit" disabled={saving}><Save size={16} /> {saving ? "Saving" : "Save"}</button> : null}
         </div>
       </div>
       {templatePreview ? (
@@ -2066,7 +2329,7 @@ function IssueEditor({
               <pre>{templatePreview.body}</pre>
             )}
             <div className="modal-actions">
-              <button type="button" className="secondary" onClick={() => setTemplatePreview(null)}>Close</button>
+              <button type="button" className="secondary" onClick={() => setTemplatePreview(null)}><X size={15} /> Close</button>
             </div>
           </section>
         </div>
@@ -2082,9 +2345,9 @@ function IssueEditor({
                   <textarea value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} placeholder="Reason for cancelling this issue" rows={4} autoFocus />
                 </label>
                 <div className="modal-actions">
-                  <button type="button" className="secondary" onClick={() => setActionDialog("")}>Close</button>
+                  <button type="button" className="secondary" onClick={() => setActionDialog("")}><X size={15} /> Close</button>
                   <button type="button" className="danger-secondary" disabled={!cancelReason.trim() || actionBusy === "cancel"} onClick={cancelCurrentIssue}>
-                    {actionBusy === "cancel" ? "Cancelling" : "Confirm Cancel"}
+                    <Ban size={15} /> {actionBusy === "cancel" ? "Cancelling" : "Confirm Cancel"}
                   </button>
                 </div>
               </>
@@ -2096,9 +2359,9 @@ function IssueEditor({
                   <input value={deleteConfirm} onChange={(event) => setDeleteConfirm(event.target.value)} placeholder={issueKey} autoFocus />
                 </label>
                 <div className="modal-actions">
-                  <button type="button" className="secondary" onClick={() => setActionDialog("")}>Close</button>
+                  <button type="button" className="secondary" onClick={() => setActionDialog("")}><X size={15} /> Close</button>
                   <button type="button" className="danger" disabled={deleteConfirm.trim() !== issueKey || actionBusy === "delete"} onClick={deleteCurrentIssue}>
-                    {actionBusy === "delete" ? "Deleting" : "Confirm Delete"}
+                    <Trash2 size={15} /> {actionBusy === "delete" ? "Deleting" : "Confirm Delete"}
                   </button>
                 </div>
               </>
@@ -2133,9 +2396,9 @@ function IssueEditor({
                 setMissingPeople([]);
                 setNewPeople([]);
                 setPendingSavePayload(null);
-              }}>Cancel</button>
+              }}><X size={15} /> Cancel</button>
               <button type="button" className="primary" disabled={saving || newPeople.some((person) => !person.fullName?.trim() || !person.nickname?.trim() || !person.department?.trim())} onClick={registerMissingPeopleAndSave}>
-                {saving ? "Saving" : "Save People and Issue"}
+                <Save size={15} /> {saving ? "Saving" : "Save People and Issue"}
               </button>
             </div>
           </section>
@@ -2170,6 +2433,7 @@ function ChangeIssue({
   const [showCandidates, setShowCandidates] = useState(false);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [navigationRequest, setNavigationRequest] = useState<{ sequence: number; item: IncompleteItem } | null>(null);
   const loadedInitialIssueId = useRef<number | null>(null);
   const searchKey = `${selection.q.trim()}|${selection.glpi.trim()}|${selection.crHelpdesk.trim()}|${selection.cr.trim()}`;
 
@@ -2251,7 +2515,12 @@ function ChangeIssue({
     setShowCandidates(false);
   }
 
-  const missing = changeDetail?.issue && changeDetail.issue.issue_status !== "cancelled" ? missingIssueData(changeDetail) : [];
+  const missing = changeDetail?.issue && changeDetail.issue.issue_status !== "cancelled" ? getIncompleteItems(changeDetail) : [];
+  const missingGroups = groupIncompleteItems(missing);
+
+  function navigateToIncompleteItem(item: IncompleteItem) {
+    setNavigationRequest((current) => ({ sequence: (current?.sequence || 0) + 1, item }));
+  }
 
   return (
     <div className="issue-change-layout">
@@ -2297,17 +2566,15 @@ function ChangeIssue({
             <Status value={changeDetail.issue.issue_status} />
           </div>
           {missing.length ? (
-            <details className="change-summary-details">
+            <details className="change-summary-details" open>
               <summary>{missing.length} incomplete item(s)</summary>
-              <ul>
-                {missing.map((item) => <li key={item}>{item}</li>)}
-              </ul>
+              <IncompleteGroupCards groups={missingGroups} onItemClick={navigateToIncompleteItem} />
             </details>
           ) : null}
         </section>
       ) : null}
 
-      {changeDetail ? <IssueEditor mode="change" detail={changeDetail} initialAction={initialAction} onSave={onSave} onCancel={onCancel} onDelete={onDelete} onDirtyChange={onDirtyChange} /> : null}
+      {changeDetail ? <IssueEditor mode="change" detail={changeDetail} initialAction={initialAction} navigationRequest={navigationRequest} onSave={onSave} onCancel={onCancel} onDelete={onDelete} onDirtyChange={onDirtyChange} /> : null}
     </div>
   );
 }
@@ -2320,7 +2587,8 @@ function ValueHelpField({
   placeholder,
   disabled = false,
   onSelectRow,
-  personMode = "full_name"
+  personMode = "full_name",
+  incompleteTarget
 }: {
   label: string;
   kind: ValueHelpKind;
@@ -2330,6 +2598,7 @@ function ValueHelpField({
   placeholder?: string;
   disabled?: boolean;
   onSelectRow?: (row: Record<string, unknown>) => void;
+  incompleteTarget?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(value);
@@ -2357,6 +2626,7 @@ function ValueHelpField({
   return (
     <label
       className="value-help-field"
+      data-incomplete-target={incompleteTarget}
       onBlurCapture={(event) => {
         const nextFocus = event.relatedTarget as Node | null;
         if (!nextFocus || !event.currentTarget.contains(nextFocus)) setOpen(false);
@@ -2402,19 +2672,21 @@ function TimestampInput({
   label,
   value,
   onChange,
-  disabled = false
+  disabled = false,
+  incompleteTarget
 }: {
   label: string;
   value?: string;
   onChange: (value: string) => void;
   disabled?: boolean;
+  incompleteTarget?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const inputValue = toDatetimeInput(value);
 
   if (disabled) {
     return (
-      <label className="timestamp-field">
+      <label className="timestamp-field" data-incomplete-target={incompleteTarget}>
         {label}
         <input className="readonly-input" value={formatIssueTimestamp(value)} disabled />
       </label>
@@ -2422,7 +2694,7 @@ function TimestampInput({
   }
 
   return (
-    <label className={`timestamp-field ${editing ? "is-editing" : ""}`}>
+    <label className={`timestamp-field ${editing ? "is-editing" : ""}`} data-incomplete-target={incompleteTarget}>
       {label}
       {editing ? (
         <input
@@ -2483,7 +2755,7 @@ function MultiValueHelpField({
     <div className="multi-value-field">
       <div className="multi-value-heading">
         <span>{label}</span>
-        <button type="button" className="mini-action" onClick={addRow} disabled={disabled}>+ Add</button>
+        <button type="button" className="mini-action" onClick={addRow} disabled={disabled}><Plus size={14} /> Add</button>
       </div>
       {visibleRows.map((rowValue, index) => (
         <div className="multi-value-row" key={`${label}-${index}`}>

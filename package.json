@@ -7,6 +7,7 @@
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "tsx watch src/server/index.ts",
     "dev:client": "vite --host 127.0.0.1 --port 5173",
+    "test": "node scripts/regression-navigation-and-cr-sort.test.mjs && node scripts/typography-contract.test.mjs && node scripts/visual-consistency-contract.test.mjs && node scripts/editor-layout-contract.test.mjs && tsx --test scripts/navigation-visual-state.test.ts scripts/issue-report-layout.test.tsx scripts/summary-strip.test.tsx scripts/issue-incomplete-navigation.test.ts scripts/incomplete-group-cards.test.tsx scripts/project-linked-issues.test.tsx scripts/cross-report-alignment.test.tsx",
     "build": "tsc --noEmit && vite build",
     "start": "tsx src/server/index.ts",
     "serve": "npm run build && npm run start",

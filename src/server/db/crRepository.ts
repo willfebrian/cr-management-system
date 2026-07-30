@@ -320,7 +320,7 @@ export async function listCrRequests(filters: CrRequestFilters = {}) {
            END AS lifecycle_status
     FROM cr_requests
     ${whereSql}
-    ORDER BY changed_date DESC NULLS LAST, changed_time DESC NULLS LAST, trkorr
+    ORDER BY trkorr DESC
     LIMIT $${params.length - 1} OFFSET $${params.length}
   `, params);
   return {
