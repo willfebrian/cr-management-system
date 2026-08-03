@@ -53,8 +53,10 @@ export const config = {
   host: process.env.HOST || "0.0.0.0",
   clientOrigin: process.env.CLIENT_ORIGIN || "http://127.0.0.1:5173",
   auth: {
+    sessionPersistent: boolEnv(process.env.AUTH_SESSION_PERSISTENT, true),
     sessionIdleHours: Math.max(Number(process.env.AUTH_SESSION_IDLE_HOURS || process.env.AUTH_SESSION_TTL_HOURS || 8), 1),
     sessionMaxLifetimeHours: Math.max(Number(process.env.AUTH_SESSION_MAX_LIFETIME_HOURS || 168), 1),
+    cookieMaxAgeDays: Math.min(Math.max(Number(process.env.AUTH_COOKIE_MAX_AGE_DAYS || 400), 1), 400),
     cookieName: process.env.AUTH_COOKIE_NAME || "crms_session",
     cookieSecure: boolEnv(process.env.AUTH_COOKIE_SECURE, false)
   },

@@ -22,6 +22,7 @@ outputs/
 # Local Codex/agent metadata
 .agents/
 .codex/
+.worktrees/
 
 # OS/editor noise
 .DS_Store

@@ -3,6 +3,13 @@ import { readFile } from "node:fs/promises";
 
 const styles = await readFile(new URL("../src/client/styles.css", import.meta.url), "utf8");
 const app = await readFile(new URL("../src/client/pages/App.tsx", import.meta.url), "utf8");
+const userWorkspace = await readFile(new URL("../src/client/components/users/UserManagementWorkspace.tsx", import.meta.url), "utf8");
+const userStyles = await readFile(new URL("../src/client/styles/user-management.css", import.meta.url), "utf8");
+const projectReport = await readFile(new URL("../src/client/components/projects/ProjectReport.tsx", import.meta.url), "utf8");
+const projectEditor = await readFile(new URL("../src/client/components/projects/ProjectEditor.tsx", import.meta.url), "utf8");
+const projectIssuePicker = await readFile(new URL("../src/client/components/projects/ProjectIssuePicker.tsx", import.meta.url), "utf8");
+const projectActions = await readFile(new URL("../src/client/components/projects/ProjectActions.tsx", import.meta.url), "utf8");
+const projectStyles = await readFile(new URL("../src/client/styles/project.css", import.meta.url), "utf8");
 
 for (const token of [
   "--color-primary:",
@@ -30,21 +37,35 @@ assert.match(styles, /\.cr-data-workspace\s*\{/);
 assert.match(styles, /th\s*\{[^}]*position:\s*sticky/is);
 assert.doesNotMatch(app, /className="[^"]*cr-row-card/);
 assert.match(styles, /\.dashboard-grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(240px,\s*1fr\)\)/is);
-assert.match(app, /className="card user-create-card user-form-workspace"/);
-assert.match(app, /className="card user-list-card user-table-workspace"/);
+assert.match(userWorkspace, /className="user-management__workspace"/);
+assert.match(userWorkspace, /className="user-management__list"/);
+assert.match(userStyles, /\.user-management__workspace\s*\{/);
 assert.match(styles, /@media \(max-width:\s*920px\)\s*\{[\s\S]*?\.issue-report-workspace\s*\{[^}]*height:\s*auto;[^}]*overflow:\s*visible;/is);
 assert.match(styles, /@media \(max-width:\s*560px\)\s*\{[\s\S]*?\.summary-strip[^}]*grid-template-columns:\s*1fr;/is);
-assert.match(styles, /\.project-detail-section\s*\{[^}]*gap:\s*0;/is);
-assert.match(styles, /\.project-issue-row\s*\{[^}]*background:\s*transparent;/is);
+assert.match(projectStyles, /\.project-linked-list,/);
+assert.match(projectStyles, /\.project-linked-row,/);
 assert.match(app, /workspaceRef\.current\?\.scrollTo\(\{\s*top:\s*0/);
 assert.match(styles, /\.summary-strip-item\s*\{[^}]*align-content:\s*start;[^}]*grid-auto-rows:\s*max-content;/is);
 assert.match(styles, /\.incomplete-group-card\s*\{[^}]*border:\s*1px solid var\(--color-border-soft\);[^}]*background:\s*var\(--surface-subtle\);/is);
 assert.match(styles, /tr\.selected td:first-child[\s\S]*box-shadow:\s*inset 3px 0 0 var\(--color-primary\)/is);
 assert.match(styles, /\.report-detail-section\s*\{[^}]*border-top:\s*1px solid var\(--color-border-soft\)/is);
-assert.match(app, /className="project-status-filter"/);
-assert.match(app, /aria-label="Project status"/);
-assert.match(app, /<ChevronDown[^>]*aria-hidden="true"/);
-assert.match(styles, /\.project-status-filter:focus-within\s*\{[^}]*border-color:\s*var\(--color-primary\)/is);
-assert.match(styles, /\.project-status-filter select\s*\{[^}]*appearance:\s*none;/is);
+assert.match(projectReport, /<span>Status<\/span><select/);
+assert.match(projectReport, /<option value="cancelled">Cancelled<\/option>/);
+assert.match(projectStyles, /\.project-report-filters,/);
+assert.match(projectStyles, /\.project-field select,/);
+assert.doesNotMatch(projectReport, /className="project-primary"/);
+assert.doesNotMatch(projectEditor, /className="project-primary"/);
+assert.doesNotMatch(projectActions, /className="project-danger"/);
+assert.match(projectReport, /className="project-button project-button--primary"/);
+assert.match(projectEditor, /className="project-button project-button--primary"/);
+assert.match(projectIssuePicker, /className="project-count-badge"/);
+assert.match(projectStyles, /\.project-button--primary\s*\{[^}]*background:\s*var\(--color-primary\)/is);
+assert.match(projectStyles, /\.project-editor-actions\s*\{[^}]*justify-content:\s*flex-end/is);
+assert.match(projectStyles, /\.project-issue-picker\s*\{[^}]*display:\s*grid/is);
+assert.match(projectStyles, /\.project-issue-action\s*\{[^}]*width:\s*112px/is);
+assert.match(projectStyles, /\.project-issue-action\s+\.project-button\s*\{[^}]*min-height:\s*34px/is);
+assert.match(projectStyles, /grid-template-columns:\s*minmax\(0,\s*1fr\)\s+112px/is);
+assert.match(projectStyles, /\.project-form-card,/);
+assert.doesNotMatch(projectStyles, /var\(--accent|var\(--surface,|var\(--border,|var\(--text,|var\(--muted,/);
 
 console.log("Shared visual tokens and generated-template exceptions are preserved.");

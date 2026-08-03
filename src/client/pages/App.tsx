@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
-import { AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Ban, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Database, FileOutput, FileSearch, FolderKanban, KeyRound, LogIn, LogOut, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, Trash2, UserPlus, Users, X, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Ban, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Database, FileOutput, FileSearch, FolderKanban, KeyRound, LogIn, LogOut, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, Trash2, Users, X, XCircle } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { cancelIssue as cancelIssueRequest, createUser, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchCrDetail, fetchCrList, fetchDashboard, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchUsers, fetchValueHelp, registerIssuePeople, resetUserPassword, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type ManagedUser, type SyncCrOptions, type SyncCrResult, type ValueHelpKind } from "../api";
+import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchCrDetail, fetchCrList, fetchDashboard, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind } from "../api";
 import { IncompleteGroupCards } from "../components/IncompleteGroupCards";
 import { DisplayNameList } from "../components/DisplayNameList";
 import { DEFAULT_ISSUE_COLUMNS, IssueColumnMenu, type IssueColumnKey } from "../components/IssueColumnMenu";
-import { ProjectLinkedIssues, findIssueByKey, type ProjectLinkedIssue } from "../components/ProjectLinkedIssues";
 import { SummaryStrip } from "../components/SummaryStrip";
+import { ProjectEditor } from "../components/projects/ProjectEditor";
+import { ProjectReport } from "../components/projects/ProjectReport";
+import { UserManagementWorkspace } from "../components/users/UserManagementWorkspace";
+import { fetchProjectDetail } from "../api/projectApi";
 import { afterIncompleteSectionRender, expandSection, getIncompleteItems, groupIncompleteItems, markIncompleteTarget, type ExpandedIssueSections, type IncompleteItem, type IssueSection } from "../issueIncomplete";
 import { nextExpandedSidebarGroup, type SidebarGroup } from "../navigation";
 import type { CrDetail, CrRequest, DashboardData, IssueDetail, IssueRow, SapSystemConfig, StatusTrendData } from "../../shared/types";
+import type { ProjectDetail as ProjectDetailModel } from "../../shared/projectTypes";
 
 type View = "dashboard" | "report" | "issue-display" | "issue-create" | "issue-change" | "user-management" | "project-report" | "project-create" | "project-change";
 const VIEW_META: Record<View, { title: string; description: string }> = {
@@ -26,6 +30,8 @@ const VIEW_META: Record<View, { title: string; description: string }> = {
 const SYNC_RESULT_VISIBLE_MS = 6000;
 const DASHBOARD_DB_REFRESH_MS = 60000;
 const REPORT_DB_REFRESH_MS = 120000;
+const PROJECTS_ENABLED = import.meta.env.VITE_ENABLE_PROJECTS !== "false";
+const USER_MANAGEMENT_ENABLED = import.meta.env.VITE_ENABLE_USER_MANAGEMENT !== "false";
 
 function LoginScreen({ onLogin }: { onLogin: (user: AuthUser) => void }) {
   const [username, setUsername] = useState("");
@@ -51,122 +57,6 @@ function ChangePasswordScreen({ onDone }: { onDone: () => void }) {
   return <div className="auth-screen"><form className="auth-panel" onSubmit={submit}><div className="brand"><Database size={22} /><span>CR Management System</span></div><h1>Change password</h1><p>For security, change the initial password before continuing.</p><label>Current password<input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label><label>New password<input autoFocus type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={8} /></label>{error ? <div className="auth-error">{error}</div> : null}<button className="primary-button" disabled={busy}><KeyRound size={17} /> {busy ? "Saving..." : "Save password"}</button></form></div>;
 }
 
-function UserManagement({ users, onRefresh }: { users: ManagedUser[]; onRefresh: () => Promise<void> }) {
-  const [username, setUsername] = useState(""); const [password, setPassword] = useState(""); const [role, setRole] = useState<"ADMIN" | "USER">("USER"); const [message, setMessage] = useState("");
-  async function create(event: FormEvent) { event.preventDefault(); setMessage(""); try { await createUser(username, password, role); setUsername(""); setPassword(""); await onRefresh(); setMessage("User created."); } catch (err) { setMessage(err instanceof Error ? err.message : String(err)); } }
-  async function reset(user: ManagedUser) { const next = window.prompt(`New password for ${user.username} (minimum 8 characters)`); if (!next) return; try { await resetUserPassword(user.id, next); setMessage(`Password reset for ${user.username}.`); await onRefresh(); } catch (err) { setMessage(err instanceof Error ? err.message : String(err)); } }
-  return <section className="user-management"><div className="user-management-grid"><div className="card user-create-card user-form-workspace"><div className="section-heading"><div><h2>Create user</h2><p>Add a new application account.</p></div></div><form className="user-create-form" onSubmit={create}><label>Username<input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Enter username" required /></label><label>Initial password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Minimum 8 characters" minLength={8} required /></label><label>Role<select value={role} onChange={(event) => setRole(event.target.value as "ADMIN" | "USER")}><option value="USER">User</option><option value="ADMIN">Administrator</option></select></label><button className="primary" type="submit"><UserPlus size={16} /> Create user</button></form>{message ? <div className="notice">{message}</div> : null}</div><div className="card user-list-card user-table-workspace"><div className="section-heading"><div><h2>Application users</h2><p>{users.length} registered account{users.length === 1 ? "" : "s"}.</p></div></div><div className="table-scroll"><table className="data-table"><thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Last login</th><th>Action</th></tr></thead><tbody>{users.map((user) => <tr key={user.id}><td><strong>{user.username}</strong></td><td><span className={`role-badge ${user.role.toLowerCase()}`}>{user.role}</span></td><td><span className={`status-badge ${user.is_active ? "active" : "inactive"}`}>{user.is_active ? "Active" : "Inactive"}</span></td><td>{user.last_login_at ? formatDateTime(user.last_login_at) : "Never"}</td><td><button className="secondary" onClick={() => reset(user)}><KeyRound size={15} /> Reset password</button></td></tr>)}</tbody></table></div></div></div></section>;
-}
-
-type ProjectStatus = "Planned" | "In Progress" | "Completed" | "On Hold";
-type ProjectMock = { id: string; name: string; owner: string; status: ProjectStatus; created: string; description: string; issues: ProjectLinkedIssue[] };
-
-const projectMockData: ProjectMock[] = [
-  { id: "PRJ-26001", name: "COA Automation", owner: "William Febrian Piktono", status: "In Progress", created: "7/2/2026", description: "Automation and reporting improvements for the COA process.", issues: [
-    { id: "26032-01", name: "Enhancement Program for COA Automation Project", cr: "TRDK924626", status: "In Progress" },
-    { id: "26033-01", name: "Update ZMM_MD_DL case download data LFBK and BNKA", cr: "TRDK924648", status: "In Progress" },
-    { id: "26034-01", name: "Update ZLABEL TE02 case exclude category NC", cr: "TRDK924650", status: "Open" }
-  ] },
-  { id: "PRJ-26002", name: "ZLABEL Enhancement", owner: "Fany Parama Admaja", status: "Completed", created: "6/23/2026", description: "Consolidated ZLABEL changes delivered through DEV, QA, and PRD.", issues: [
-    { id: "26031-01", name: "Update ZLABEL case new label SE04 and SE05", cr: "TRDK924612", status: "OK" },
-    { id: "26028-01", name: "Update ZLABEL case new label A172", cr: "TRDK924592", status: "OK" }
-  ] },
-  { id: "PRJ-26003", name: "Vendor Tax Document", owner: "Fiqih", status: "Planned", created: "7/8/2026", description: "Initial grouping for the vendor and tax document change stream.", issues: [
-    { id: "26035-01", name: "Update tax document validation", cr: "TRDK924652", status: "Open" }
-  ] }
-];
-
-function ProjectPrototype({ mode, onOpenIssue }: { mode: "report" | "create" | "change"; onOpenIssue: (issueKey: string) => void }) {
-  const [projects, setProjects] = useState(projectMockData);
-  const [selectedId, setSelectedId] = useState(projectMockData[0].id);
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("all");
-  const [saved, setSaved] = useState(false);
-  const [actionsOpen, setActionsOpen] = useState(false);
-  const selectedProject = projects.find((project) => project.id === selectedId) || projects[0];
-  const visibleProjects = projects.filter((project) => `${project.id} ${project.name} ${project.owner}`.toLowerCase().includes(query.toLowerCase()) && (status === "all" || project.status === status));
-  const [form, setForm] = useState(() => mode === "change" ? { name: selectedProject.name, owner: selectedProject.owner, description: selectedProject.description } : { name: "", owner: "", description: "" });
-
-  function saveDemo(event: FormEvent) {
-    event.preventDefault(); setSaved(true);
-    if (mode === "create" && form.name.trim()) setProjects((current) => [{ id: `PRJ-${new Date().getFullYear()}-NEW`, name: form.name, owner: form.owner || "Unassigned", status: "Planned", created: "Today", description: form.description, issues: [] }, ...current]);
-  }
-
-  if (mode !== "report") {
-    return (
-      <section className="project-prototype">
-        <form className="project-form card" onSubmit={saveDemo}>
-          <div className="project-form-grid">
-            <label>Project name<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="e.g. COA Automation" required /></label>
-            <label>Owner<input value={form.owner} onChange={(event) => setForm({ ...form, owner: event.target.value })} placeholder="Project owner" /></label>
-            <label>Status<select defaultValue={mode === "create" ? "Planned" : selectedProject.status}><option>Planned</option><option>In Progress</option><option>Completed</option><option>On Hold</option></select></label>
-            <label>Created on<input type="date" defaultValue="2026-07-29" disabled={mode === "change"} /></label>
-            <label className="project-wide-field">Description<textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Describe the project scope and outcome." rows={4} /></label>
-          </div>
-          <div className="project-form-section">
-            <div><h3>Linked Issues</h3><p>Select Issue records that belong to this project. CR SAP is shown as context.</p></div>
-            <div className="project-issue-picker"><button type="button" className="secondary"><Plus size={16} /> Add Issue</button><span className="project-chip">26032-01 - TRDK924626</span><span className="project-chip">26033-01 - TRDK924648</span></div>
-          </div>
-          <div className="project-form-actions">
-            <button type="button" className="secondary"><X size={16} /> Cancel</button>
-            <button className="primary"><Save size={16} /> {mode === "create" ? "Create project" : "Save changes"}</button>
-          </div>
-          {saved ? <div className="notice success">Project form updated for this session.</div> : null}
-        </form>
-      </section>
-    );
-  }
-
-  return (
-    <section className="project-prototype">
-      <div className="project-toolbar">
-        <label className="project-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search project, owner" /></label>
-        <label className="project-status-filter">
-          <select aria-label="Project status" value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">All statuses</option><option>Planned</option><option>In Progress</option><option>Completed</option><option>On Hold</option></select>
-          <ChevronDown size={16} aria-hidden="true" />
-        </label>
-      </div>
-      <div className="project-layout">
-        <div className="project-list card">
-          <div className="project-list-heading"><strong>{visibleProjects.length} projects</strong><span>Click a project to inspect its linked Issues</span></div>
-          {visibleProjects.map((project) => (
-            <button key={project.id} className={`project-row ${project.id === selectedId ? "selected" : ""}`} onClick={() => { setSelectedId(project.id); setActionsOpen(false); }}>
-              <span className="project-row-main"><strong>{project.name}</strong><small>{project.id} - {project.owner}</small></span>
-              <span className={`project-status ${project.status.toLowerCase().replace(" ", "-")}`}>{project.status}</span>
-              <span className="project-count">{project.issues.length} Issues</span>
-            </button>
-          ))}
-        </div>
-        <div className="project-detail card">
-          <div className="project-detail-heading">
-            <div><span className="eyebrow">{selectedProject.id}</span><h2>{selectedProject.name}</h2><p>{selectedProject.description}</p></div>
-            <div className="project-detail-actions">
-              <span className={`project-status ${selectedProject.status.toLowerCase().replace(" ", "-")}`}>{selectedProject.status}</span>
-              <button className="detail-icon-action" type="button" onClick={() => setActionsOpen((current) => !current)} aria-label="Project actions" aria-expanded={actionsOpen}><MoreVertical size={20} /></button>
-              {actionsOpen ? (
-                <div className="project-action-menu">
-                  <button type="button" onClick={() => setActionsOpen(false)}><Plus size={16} /> Add Issue</button>
-                  <button type="button" onClick={() => setActionsOpen(false)}><FileOutput size={16} /> Generate Project CR Form</button>
-                </div>
-              ) : null}
-            </div>
-          </div>
-          <SummaryStrip
-            className="project-summary-strip"
-            items={[
-              { label: "Owner", value: selectedProject.owner },
-              { label: "Created", value: selectedProject.created },
-              { label: "Issues", value: selectedProject.issues.length },
-              { label: "CR SAP", value: new Set(selectedProject.issues.map((issue) => issue.cr).filter(Boolean)).size }
-            ]}
-          />
-          <div className="project-detail-section"><div className="project-section-title"><h3>Linked Issues</h3></div><ProjectLinkedIssues issues={selectedProject.issues} onOpenIssue={onOpenIssue} /></div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 export function App() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -176,7 +66,8 @@ export function App() {
   useEffect(() => {
     workspaceRef.current?.scrollTo({ top: 0, left: 0 });
   }, [view]);
-  const [managedUsers, setManagedUsers] = useState<ManagedUser[]>([]);
+  const [projectEditorDetail, setProjectEditorDetail] = useState<ProjectDetailModel | null>(null);
+  const [projectFormDirty, setProjectFormDirty] = useState(false);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [systems, setSystems] = useState<SapSystemConfig[]>([]);
   const [trend, setTrend] = useState<StatusTrendData | null>(null);
@@ -229,8 +120,6 @@ export function App() {
     setTrend(trendData);
     setSystems(systemData.rows);
   }
-
-  async function loadManagedUsers() { const result = await fetchUsers(); setManagedUsers(result.users); }
 
   async function loadReport(nextFilters = filters) {
     const requestId = ++reportRequestId.current;
@@ -355,36 +244,29 @@ export function App() {
     loadIssues(issueFilters, { preserveSelection: true }).catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }
 
-  async function openIssueFromProjectLink(issueKey: string) {
-    const nextFilters: IssueFilters = {
-      ...issueFilters,
-      status: "all",
-      q: issueKey,
-      page: 1,
-      pageSize: issuePagination.pageSize
-    };
+  async function openIssueFromProjectLink(issueId: number) {
+    if (!navigateTo("issue-display")) return;
+    setExpandedSidebarGroup("issue");
+    setSelectedIssueId(issueId);
     try {
-      const issueData = await fetchIssueList(nextFilters);
-      const issue = findIssueByKey(issueData.rows, issueKey);
-      if (!issue) {
-        showToast("error", `Issue ${issueKey} tidak ditemukan.`);
-        return;
-      }
-      if (!navigateTo("issue-display")) return;
-      setExpandedSidebarGroup("issue");
-      setIssueFilters(nextFilters);
-      setDraftIssueFilters(nextFilters);
-      setIssues(issueData.rows);
-      setIssuePagination({
-        page: issueData.page,
-        pageSize: issueData.pageSize,
-        total: issueData.total,
-        totalPages: issueData.totalPages
-      });
-      setSelectedIssueId(issue.id);
-      await fetchIssueDetail(issue.id).then(setIssueDetail);
+      await Promise.all([
+        fetchIssueDetail(issueId).then(setIssueDetail),
+        loadIssues(issueFilters, { preserveSelection: true })
+      ]);
     } catch (err) {
       showToast("error", err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function openProjectEditor(projectId: number) {
+    setError("");
+    try {
+      const project = await fetchProjectDetail(projectId);
+      setProjectEditorDetail(project);
+      setProjectFormDirty(false);
+      setView("project-change");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -394,7 +276,12 @@ export function App() {
       const confirmed = window.confirm("Perubahan Issue yang belum disimpan akan hilang. Lanjut pindah menu?");
       if (!confirmed) return false;
     }
+    if ((view === "project-create" || view === "project-change") && projectFormDirty) {
+      const confirmed = window.confirm("Perubahan Project yang belum disimpan akan hilang. Lanjut pindah menu?");
+      if (!confirmed) return false;
+    }
     setIssueFormDirty(false);
+    setProjectFormDirty(false);
     setView(nextView);
     return true;
   }
@@ -438,8 +325,6 @@ export function App() {
     }, REPORT_DB_REFRESH_MS);
     return () => window.clearInterval(interval);
   }, [view, issueFilters, selectedIssueId]);
-
-  useEffect(() => { if (view === "user-management" && authUser?.role === "ADMIN") loadManagedUsers().catch((err) => setError(err instanceof Error ? err.message : String(err))); }, [view, authUser?.role]);
 
   useEffect(() => {
     const enabledCodes = systems.filter((system) => system.enabled).map((system) => system.code);
@@ -570,19 +455,25 @@ export function App() {
             </div>
           ) : null}
         </div>
-        <div className={`sidebar-group ${view.startsWith("project-") ? "active" : ""}`}>
+        {PROJECTS_ENABLED ? <div className={`sidebar-group ${view.startsWith("project-") ? "active" : ""}`}>
           <button className={view.startsWith("project-") ? "active" : ""} onClick={() => setExpandedSidebarGroup((current) => nextExpandedSidebarGroup(current, "project"))}>
             <FolderKanban size={18} /> Project
           </button>
           {expandedSidebarGroup === "project" ? (
             <div className="sidebar-submenu">
               <button className={view === "project-report" ? "active" : ""} onClick={() => navigateTo("project-report")}><FileSearch size={15} /> Report</button>
-              <button className={view === "project-create" ? "active" : ""} onClick={() => navigateTo("project-create")}><Plus size={15} /> Create</button>
-              <button className={view === "project-change" ? "active" : ""} onClick={() => navigateTo("project-change")}><PencilLine size={15} /> Change</button>
+              <button className={view === "project-create" ? "active" : ""} onClick={() => {
+                setProjectEditorDetail(null);
+                navigateTo("project-create");
+              }}><Plus size={15} /> Create</button>
+              <button className={view === "project-change" ? "active" : ""} onClick={() => {
+                setProjectEditorDetail(null);
+                navigateTo("project-change");
+              }}><PencilLine size={15} /> Change</button>
             </div>
           ) : null}
-        </div>
-        {authUser.role === "ADMIN" ? <button className={view === "user-management" ? "active" : ""} onClick={() => navigateTo("user-management")}><Users size={18} /> User Management</button> : null}
+        </div> : null}
+        {USER_MANAGEMENT_ENABLED && authUser.role === "ADMIN" ? <button className={view === "user-management" ? "active" : ""} onClick={() => navigateTo("user-management")}><Users size={18} /> User Management</button> : null}
         </div>
         <div className="sidebar-footer">
           <div className="sidebar-session">
@@ -666,7 +557,13 @@ export function App() {
           <SyncRunSummary loading={loading} systems={runningSyncSystems} result={syncResult} />
         ) : null}
 
-        {view === "user-management" ? <UserManagement users={managedUsers} onRefresh={loadManagedUsers} /> : view === "dashboard" ? (
+        {view === "user-management" ? <UserManagementWorkspace
+          currentUser={authUser}
+          onSessionInvalidated={() => {
+            setAuthUser(null);
+            setView("dashboard");
+          }}
+        /> : view === "dashboard" ? (
           <Dashboard
             dashboard={dashboard}
             requests={requests}
@@ -766,11 +663,52 @@ export function App() {
             }}
           />
         ) : view === "project-report" ? (
-          <ProjectPrototype mode="report" onOpenIssue={openIssueFromProjectLink} />
+          <ProjectReport
+            userRole={authUser.role}
+            onCreate={() => {
+              setProjectEditorDetail(null);
+              navigateTo("project-create");
+            }}
+            onChange={openProjectEditor}
+            onOpenIssue={openIssueFromProjectLink}
+            onDeleted={() => {
+              showToast("success", "Project deleted.");
+              setProjectEditorDetail(null);
+              setView("project-report");
+            }}
+          />
         ) : view === "project-create" ? (
-          <ProjectPrototype mode="create" onOpenIssue={openIssueFromProjectLink} />
+          <ProjectEditor
+            mode="create"
+            onDirtyChange={setProjectFormDirty}
+            onCancel={() => navigateTo("project-report")}
+            onSaved={(saved) => {
+              setProjectFormDirty(false);
+              setProjectEditorDetail(saved);
+              showToast("success", "Project created.");
+              setView("project-change");
+            }}
+          />
         ) : view === "project-change" ? (
-          <ProjectPrototype mode="change" onOpenIssue={openIssueFromProjectLink} />
+          projectEditorDetail ? <ProjectEditor
+            mode="change"
+            detail={projectEditorDetail}
+            onDirtyChange={setProjectFormDirty}
+            onCancel={() => navigateTo("project-report")}
+            onSaved={(saved) => {
+              setProjectFormDirty(false);
+              setProjectEditorDetail(saved);
+              showToast("success", "Project saved.");
+            }}
+          /> : <ProjectReport
+            userRole={authUser.role}
+            onChange={openProjectEditor}
+            onOpenIssue={openIssueFromProjectLink}
+            onDeleted={() => {
+              showToast("success", "Project deleted.");
+              setView("project-report");
+            }}
+          />
         ) : (
           <ChangeIssue
             initialIssueId={changeIssueInitialId}
