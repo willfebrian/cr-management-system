@@ -7,6 +7,8 @@ import { startCrAutoSyncScheduler } from "./sync/crAutoSyncScheduler.js";
 import { authRoutes } from "./routes/authRoutes.js";
 import { requireAuth } from "./auth/middleware.js";
 import { userRoutes } from "./routes/userRoutes.js";
+import { projectRoutes } from "./routes/projectRoutes.js";
+import { ProjectRepositoryError } from "./db/projectRepository.js";
 
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -18,7 +20,7 @@ app.use((_req, res, next) => {
   res.header("Access-Control-Allow-Origin", config.clientOrigin);
   res.header("Access-Control-Allow-Headers", "Content-Type, Cookie");
   res.header("Access-Control-Allow-Credentials", "true");
-  res.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
   next();
 });
 app.options("*", (_req, res) => res.sendStatus(204));
@@ -26,6 +28,7 @@ app.options("*", (_req, res) => res.sendStatus(204));
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 app.use("/api/auth", authRoutes);
 app.use("/api/users", requireAuth, userRoutes);
+app.use("/api/projects", projectRoutes);
 app.use("/api", requireAuth, crRoutes);
 app.use(express.static(clientDist));
 
@@ -36,6 +39,9 @@ app.get("*", (_req, res, next) => {
 
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const message = error instanceof Error ? error.message : String(error);
+  if (error instanceof ProjectRepositoryError) {
+    return res.status(error.status).json({ ok: false, message, code: error.code });
+  }
   res.status(500).json({ ok: false, message });
 });
 

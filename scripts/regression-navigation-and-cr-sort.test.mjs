@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [app, styles, api, authService, authRoutes, crRepository] = await Promise.all([
+const [app, styles, api, authService, authRoutes, crRepository, projectActions] = await Promise.all([
   readFile(new URL("../src/client/pages/App.tsx", import.meta.url), "utf8"),
   readFile(new URL("../src/client/styles.css", import.meta.url), "utf8"),
   readFile(new URL("../src/client/api.ts", import.meta.url), "utf8"),
   readFile(new URL("../src/server/auth/authService.ts", import.meta.url), "utf8"),
   readFile(new URL("../src/server/routes/authRoutes.ts", import.meta.url), "utf8"),
   readFile(new URL("../src/server/db/crRepository.ts", import.meta.url), "utf8"),
+  readFile(new URL("../src/client/components/projects/ProjectActions.tsx", import.meta.url), "utf8"),
 ]);
 
 assert.match(crRepository, /ORDER BY\s+trkorr DESC/i, "CR Transport report must sort by TRKORR descending");
@@ -34,9 +35,9 @@ assert.ok(
 );
 assert.match(app, /LogOut/, "Logout action must use an icon");
 assert.match(app, /Last login:/i, "Sidebar footer must show last login");
-assert.match(app, /MoreVertical/, "Project detail must expose a more-actions button");
-assert.match(app, /project-action-menu/, "Project actions must be grouped in a dropdown");
-assert.match(app, /Generate Project CR Form/, "Project action menu must keep CR form generation");
+assert.match(projectActions, /Cancel Project/, "Project actions must expose cancellation");
+assert.match(projectActions, /Delete Project/, "Project actions must expose admin deletion");
+assert.doesNotMatch(app + projectActions, /Generate Project CR Form/, "Project document generation stays deferred until a template exists");
 assert.doesNotMatch(app, /prototype-note/, "Project report must not show prototype-only UI");
 assert.doesNotMatch(app, /project-page-heading/, "Project pages must not duplicate the shared page heading");
 for (const control of ["Source Systems", "Sync Mode", "Lookback Days", "Sync CR"]) {

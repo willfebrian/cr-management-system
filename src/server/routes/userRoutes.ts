@@ -1,10 +1,222 @@
-import { Router } from "express";
-import { hashPassword } from "../auth/authService";
+import { Router, type NextFunction, type Request, type Response } from "express";
 import { requireAdmin } from "../auth/middleware";
-import { pool } from "../db/pool";
-export const userRoutes = Router();
-userRoutes.use(requireAdmin);
-userRoutes.get("/", async (_req, res, next) => { try { const result = await pool.query("SELECT id, username, role, is_active, must_change_password, last_login_at, created_at FROM app_users ORDER BY username"); res.json({ users: result.rows }); } catch (e) { next(e); } });
-userRoutes.post("/", async (req, res, next) => { try { const username = String(req.body?.username || "").trim().toUpperCase(); const password = String(req.body?.password || ""); const role = req.body?.role === "ADMIN" ? "ADMIN" : "USER"; if (!username || password.length < 8) return res.status(400).json({ message: "Username wajib dan password minimal 8 karakter" }); const result = await pool.query("INSERT INTO app_users (username, password_hash, role) VALUES ($1, $2, $3) RETURNING id, username, role, is_active, must_change_password", [username, await hashPassword(password), role]); res.status(201).json({ user: result.rows[0] }); } catch (e: any) { if (e?.code === "23505") return res.status(409).json({ message: "Username sudah ada" }); next(e); } });
-userRoutes.patch("/:id/password", async (req, res, next) => { try { const password = String(req.body?.password || ""); if (password.length < 8) return res.status(400).json({ message: "Password minimal 8 karakter" }); await pool.query("UPDATE app_users SET password_hash = $1, must_change_password = true, password_changed_at = null, updated_at = now() WHERE id = $2", [await hashPassword(password), Number(req.params.id)]); res.json({ ok: true }); } catch (e) { next(e); } });
-userRoutes.patch("/:id/status", async (req, res, next) => { try { await pool.query("UPDATE app_users SET is_active = $1, updated_at = now() WHERE id = $2", [Boolean(req.body?.isActive), Number(req.params.id)]); res.json({ ok: true }); } catch (e) { next(e); } });
+import type {
+  ManagedUserListFilters,
+  ManagementActor,
+  UserRole
+} from "../../shared/userManagementTypes";
+import {
+  archiveManagedUser,
+  createManagedUser,
+  getManagedUserAudit,
+  listManagedUsers,
+  resetManagedUserPassword,
+  restoreManagedUser,
+  revokeManagedUserSessions,
+  setManagedUserStatus,
+  updateManagedUserProfile
+} from "../users/userManagementService";
+import { UserManagementError } from "../users/userManagementDomain";
+
+type UserManagementService = {
+  listManagedUsers: typeof listManagedUsers;
+  getManagedUserAudit: typeof getManagedUserAudit;
+  createManagedUser: typeof createManagedUser;
+  updateManagedUserProfile: typeof updateManagedUserProfile;
+  setManagedUserStatus: typeof setManagedUserStatus;
+  resetManagedUserPassword: typeof resetManagedUserPassword;
+  revokeManagedUserSessions: typeof revokeManagedUserSessions;
+  archiveManagedUser: typeof archiveManagedUser;
+  restoreManagedUser: typeof restoreManagedUser;
+};
+
+const defaultService: UserManagementService = {
+  listManagedUsers,
+  getManagedUserAudit,
+  createManagedUser,
+  updateManagedUserProfile,
+  setManagedUserStatus,
+  resetManagedUserPassword,
+  revokeManagedUserSessions,
+  archiveManagedUser,
+  restoreManagedUser
+};
+
+function actorFrom(req: Request): ManagementActor {
+  const user = req.authUser!;
+  return { id: user.id, username: user.username, role: user.role };
+}
+
+function parseUserId(req: Request): number {
+  const userId = Number(req.params.id);
+  if (!Number.isSafeInteger(userId) || userId <= 0) {
+    throw new UserManagementError("User ID tidak valid");
+  }
+  return userId;
+}
+
+function optionalInteger(value: unknown, field: string): number | undefined {
+  if (value == null || value === "") return undefined;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new UserManagementError(`${field} tidak valid`);
+  }
+  return parsed;
+}
+
+function parseFilters(req: Request): ManagedUserListFilters {
+  const role = req.query.role;
+  const status = req.query.status;
+  const scope = req.query.scope;
+  if (role != null && role !== "ADMIN" && role !== "USER") {
+    throw new UserManagementError("Role filter tidak valid");
+  }
+  if (status != null && status !== "active" && status !== "inactive") {
+    throw new UserManagementError("Status filter tidak valid");
+  }
+  if (scope != null && scope !== "current" && scope !== "archived") {
+    throw new UserManagementError("Scope filter tidak valid");
+  }
+  return {
+    q: req.query.q == null ? undefined : String(req.query.q),
+    role: role as UserRole | undefined,
+    status: status as "active" | "inactive" | undefined,
+    scope: scope as "current" | "archived" | undefined,
+    page: optionalInteger(req.query.page, "Page"),
+    pageSize: optionalInteger(req.query.pageSize, "Page size")
+  };
+}
+
+function handleError(error: unknown, res: Response, next: NextFunction): void {
+  if (error instanceof UserManagementError) {
+    res.status(error.statusCode).json({
+      message: error.message,
+      code: error.code,
+      ...error.details
+    });
+    return;
+  }
+  next(error);
+}
+
+type AsyncHandler = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => Promise<void>;
+
+function route(handler: AsyncHandler) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    handler(req, res, next).catch((error) => handleError(error, res, next));
+  };
+}
+
+export function createUserRoutes(service: UserManagementService = defaultService): Router {
+  const router = Router();
+  router.use(requireAdmin);
+
+  router.get("/", route(async (req, res) => {
+    res.json(await service.listManagedUsers(parseFilters(req), actorFrom(req)));
+  }));
+
+  router.get("/:id/audit", route(async (req, res) => {
+    const audit = await service.getManagedUserAudit(parseUserId(req), actorFrom(req));
+    res.json({ audit });
+  }));
+
+  router.post("/", route(async (req, res) => {
+    const role = req.body?.role;
+    const isActive = req.body?.isActive;
+    if (role !== "ADMIN" && role !== "USER") {
+      throw new UserManagementError("Role tidak valid");
+    }
+    if (isActive != null && typeof isActive !== "boolean") {
+      throw new UserManagementError("Status tidak valid");
+    }
+    const user = await service.createManagedUser(
+      {
+        username: String(req.body?.username ?? ""),
+        password: String(req.body?.password ?? ""),
+        role,
+        isActive
+      },
+      actorFrom(req)
+    );
+    res.status(201).json({ user });
+  }));
+
+  router.patch("/:id/profile", route(async (req, res) => {
+    const role = req.body?.role;
+    if (role != null && role !== "ADMIN" && role !== "USER") {
+      throw new UserManagementError("Role tidak valid");
+    }
+    const user = await service.updateManagedUserProfile(
+      parseUserId(req),
+      {
+        username: req.body?.username == null ? undefined : String(req.body.username),
+        role
+      },
+      actorFrom(req)
+    );
+    res.json({ user });
+  }));
+
+  router.patch("/:id/status", route(async (req, res) => {
+    if (typeof req.body?.isActive !== "boolean") {
+      throw new UserManagementError("Status tidak valid");
+    }
+    const user = await service.setManagedUserStatus(
+      parseUserId(req),
+      req.body.isActive,
+      actorFrom(req)
+    );
+    res.json({ user });
+  }));
+
+  router.patch("/:id/password", route(async (req, res) => {
+    await service.resetManagedUserPassword(
+      parseUserId(req),
+      String(req.body?.password ?? ""),
+      actorFrom(req)
+    );
+    res.json({ ok: true });
+  }));
+
+  router.post("/:id/revoke-sessions", route(async (req, res) => {
+    await service.revokeManagedUserSessions(parseUserId(req), actorFrom(req));
+    res.json({ ok: true });
+  }));
+
+  router.delete("/:id", route(async (req, res) => {
+    await service.archiveManagedUser(
+      parseUserId(req),
+      String(req.body?.reason ?? ""),
+      actorFrom(req)
+    );
+    res.json({ ok: true });
+  }));
+
+  router.post("/:id/restore", route(async (req, res) => {
+    const role = req.body?.role;
+    if (role !== "ADMIN" && role !== "USER") {
+      throw new UserManagementError("Role tidak valid");
+    }
+    if (typeof req.body?.isActive !== "boolean") {
+      throw new UserManagementError("Status tidak valid");
+    }
+    const user = await service.restoreManagedUser(
+      parseUserId(req),
+      {
+        password: String(req.body?.password ?? ""),
+        role,
+        isActive: req.body.isActive
+      },
+      actorFrom(req)
+    );
+    res.json({ user });
+  }));
+
+  return router;
+}
+
+export const userRoutes = createUserRoutes();

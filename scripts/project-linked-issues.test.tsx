@@ -31,6 +31,6 @@ test("resolves only the exact issue key", () => {
 });
 
 test("uses the shared summary strip for project metadata", () => {
-  const app = readFileSync(new URL("../src/client/pages/App.tsx", import.meta.url), "utf8");
-  assert.match(app, /<SummaryStrip[^>]*className="project-summary-strip"/);
+  const projectDetail = readFileSync(new URL("../src/client/components/projects/ProjectDetail.tsx", import.meta.url), "utf8");
+  assert.match(projectDetail, /<SummaryStrip[^>]*className="project-summary-strip"/);
 });

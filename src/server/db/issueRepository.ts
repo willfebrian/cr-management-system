@@ -1,4 +1,5 @@
 import { pool } from "./pool.js";
+import { findActiveProjectForIssue, ProjectRepositoryError } from "./projectRepository.js";
 
 export type IssueFilters = {
   status?: string;
@@ -1036,8 +1037,16 @@ export async function deleteIssue(id: number) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const current = await client.query("SELECT id FROM issue_headers WHERE id = $1 LIMIT 1", [issueId]);
+    const current = await client.query("SELECT id FROM issue_headers WHERE id = $1 FOR UPDATE", [issueId]);
     if (!current.rows[0]) throw new Error("Issue not found.");
+    const activeProject = await findActiveProjectForIssue(issueId, client);
+    if (activeProject) {
+      throw new ProjectRepositoryError(
+        `Issue cannot be deleted because it is linked to active Project ${activeProject.projectKey}. Remove the Issue from that Project first.`,
+        409,
+        "ISSUE_PROJECT_CONFLICT"
+      );
+    }
     await closeIssueCrLinkHistory(client, issueId, "deleted", "Issue deleted");
     const deleted = await client.query(`
       DELETE FROM issue_headers

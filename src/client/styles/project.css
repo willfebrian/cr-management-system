@@ -1,0 +1,334 @@
+.project-report-shell,
+.project-editor {
+  color: var(--text, #142033);
+  min-width: 0;
+}
+
+.project-report-toolbar,
+.project-editor-header,
+.project-detail-header,
+.project-section-heading,
+.project-editor-actions,
+.project-actions,
+.project-dialog footer {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.project-report-toolbar h1,
+.project-editor-header h2,
+.project-detail-header h2,
+.project-section-heading h3 {
+  margin: 0;
+}
+
+.project-eyebrow {
+  color: var(--accent, #1665d8);
+  font-size: .75rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  margin: 0 0 .25rem;
+  text-transform: uppercase;
+}
+
+.project-report-filters,
+.project-form-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 1rem 0;
+}
+
+.project-field {
+  display: grid;
+  gap: .35rem;
+  min-width: 0;
+}
+
+.project-field > span {
+  font-size: .8rem;
+  font-weight: 650;
+}
+
+.project-field input,
+.project-field select,
+.project-field textarea {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #d8e0ea);
+  border-radius: .45rem;
+  box-sizing: border-box;
+  color: inherit;
+  font: inherit;
+  min-width: 0;
+  padding: .65rem .75rem;
+  width: 100%;
+}
+
+.project-field-wide {
+  grid-column: 1 / -1;
+}
+
+.project-primary {
+  background: var(--accent, #1665d8);
+  border-color: transparent;
+  color: #fff;
+}
+
+.project-danger {
+  color: var(--danger, #b42318);
+}
+
+.project-report-workspace {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(15rem, 22rem) minmax(0, 1fr);
+  min-width: 0;
+}
+
+.project-list {
+  border: 1px solid var(--border, #d8e0ea);
+  border-radius: .65rem;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.project-list > button {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border, #d8e0ea);
+  color: inherit;
+  display: grid;
+  gap: .3rem;
+  padding: .85rem 1rem;
+  text-align: left;
+  width: 100%;
+}
+
+.project-list > button.is-selected {
+  background: color-mix(in srgb, var(--accent, #1665d8) 9%, transparent);
+  box-shadow: inset 3px 0 var(--accent, #1665d8);
+}
+
+.project-list > button > span:first-child {
+  display: flex;
+  gap: .75rem;
+  justify-content: space-between;
+}
+
+.project-list small,
+.project-issue-summary small,
+.project-linked-row small,
+.project-section-heading p,
+.project-muted {
+  color: var(--muted, #637083);
+  display: block;
+  margin: 0;
+}
+
+.project-pagination {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: .75rem;
+}
+
+.project-detail-pane,
+.project-detail,
+.project-editor {
+  min-width: 0;
+  position: relative;
+}
+
+.project-detail {
+  display: block;
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+}
+
+.project-list {
+  max-height: none;
+}
+
+.project-change-action {
+  position: absolute;
+  right: 0;
+  top: 0;
+  z-index: 1;
+}
+
+.project-detail-header {
+  border-bottom: 1px solid var(--border, #d8e0ea);
+  padding-bottom: 1rem;
+}
+
+.project-status {
+  border-radius: 999px;
+  font-size: .75rem;
+  font-weight: 700;
+  padding: .35rem .65rem;
+  text-transform: capitalize;
+}
+
+.project-status-planned { background: #edf2f7; }
+.project-status-in_progress { background: #e7f0ff; color: #174ea6; }
+.project-status-on_hold { background: #fff4d6; color: #7a4e00; }
+.project-status-completed { background: #e8f7ee; color: #146c3a; }
+.project-status-cancelled { background: #fdecec; color: #9f1c1c; }
+
+.project-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+}
+
+.project-summary > div {
+  border-right: 1px solid var(--border, #d8e0ea);
+  padding: 1rem;
+}
+
+.project-summary > div:last-child {
+  border-right: 0;
+}
+
+.project-summary dt {
+  color: var(--muted, #637083);
+  font-size: .75rem;
+}
+
+.project-summary dd {
+  font-weight: 650;
+  margin: .2rem 0 0;
+}
+
+.project-cancel-note,
+.project-error,
+.project-read-only,
+.project-conflict {
+  border-radius: .45rem;
+  padding: .65rem .8rem;
+}
+
+.project-cancel-note,
+.project-read-only {
+  background: #fff4d6;
+}
+
+.project-error,
+.project-conflict {
+  background: #fdecec;
+  color: #9f1c1c;
+}
+
+.project-linked-list,
+.project-issue-picker {
+  margin-top: 1.25rem;
+}
+
+.project-linked-row,
+.project-selected-issue,
+.project-issue-option {
+  align-items: center;
+  border-top: 1px solid var(--border, #d8e0ea);
+  display: grid;
+  gap: .75rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: .8rem 0;
+}
+
+.project-linked-row > p,
+.project-issue-option > .project-conflict {
+  grid-column: 2 / -1;
+  margin: 0;
+}
+
+.project-issue-summary {
+  display: grid;
+  gap: .15rem;
+  min-width: 0;
+}
+
+.project-issue-options {
+  border: 1px solid var(--border, #d8e0ea);
+  border-radius: .45rem;
+  margin-top: .75rem;
+  max-height: 18rem;
+  overflow: auto;
+  padding: 0 .75rem;
+}
+
+.project-editor-actions {
+  background: var(--surface, #fff);
+  bottom: 0;
+  border-top: 1px solid var(--border, #d8e0ea);
+  margin-top: 1.5rem;
+  padding: .9rem 0;
+  position: sticky;
+}
+
+.project-dialog {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #d8e0ea);
+  border-radius: .65rem;
+  box-shadow: 0 1rem 3rem rgb(20 32 51 / 18%);
+  left: 50%;
+  max-width: 32rem;
+  padding: 1.25rem;
+  position: fixed;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: calc(100vw - 2rem);
+  z-index: 50;
+}
+
+.project-state {
+  color: var(--muted, #637083);
+  padding: 2rem;
+  text-align: center;
+}
+
+@media (max-width: 800px) {
+  .project-report-workspace,
+  .project-report-filters,
+  .project-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .project-field-wide {
+    grid-column: auto;
+  }
+
+  .project-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .project-summary > div:nth-child(2) {
+    border-right: 0;
+  }
+}
+
+@media (max-width: 520px) {
+  .project-report-toolbar,
+  .project-editor-header,
+  .project-detail-header,
+  .project-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .project-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .project-summary > div {
+    border-right: 0;
+  }
+
+  .project-linked-row,
+  .project-selected-issue,
+  .project-issue-option {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
