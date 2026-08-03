@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Save } from "lucide-react";
 import type {
   EditableProjectStatus,
   ProjectDetail,
@@ -201,7 +202,7 @@ export function ProjectEditorView(props: ProjectEditorViewProps) {
     props.onSave();
   };
   return <form className="project-editor" onSubmit={submit}>
-    <header className="project-editor-header">
+    <header className="project-editor-header project-form-card">
       <div>
         <p className="project-eyebrow">{props.mode === "create" ? "Create" : "Change"} Project</p>
         <h2>{props.mode === "create" ? "New Project" : draft.projectName}</h2>
@@ -209,6 +210,7 @@ export function ProjectEditorView(props: ProjectEditorViewProps) {
       {readOnly && <span className="project-read-only">Cancelled Projects are read-only</span>}
     </header>
     {props.error && <p className="project-error" role="alert">{props.error}</p>}
+    <section className="project-form-card" aria-label="Project information">
     <div className="project-form-grid">
       <label className="project-field project-field-wide">
         <span>Project Name</span>
@@ -235,6 +237,7 @@ export function ProjectEditorView(props: ProjectEditorViewProps) {
         <textarea value={draft.description} disabled={readOnly} rows={4} onChange={(event) => update("description", event.currentTarget.value)} />
       </label>
     </div>
+    </section>
     <ProjectIssuePicker
       query={props.issueQuery}
       options={props.issueOptions}
@@ -246,9 +249,9 @@ export function ProjectEditorView(props: ProjectEditorViewProps) {
       onRemove={props.onRemoveIssue}
     />
     <footer className="project-editor-actions">
-      <button type="button" onClick={props.onCancel}>{readOnly ? "Back" : "Cancel"}</button>
-      {!readOnly && <button className="project-primary" type="submit" disabled={props.saving}>
-        {props.saving ? "Saving…" : "Save Project"}
+      <button className="project-button" type="button" onClick={props.onCancel}>{readOnly ? "Back" : "Cancel"}</button>
+      {!readOnly && <button className="project-button project-button--primary" type="submit" disabled={props.saving}>
+        <Save size={16} aria-hidden="true" /> {props.saving ? "Saving…" : "Save Project"}
       </button>}
     </footer>
   </form>;

@@ -6,6 +6,9 @@ const app = await readFile(new URL("../src/client/pages/App.tsx", import.meta.ur
 const userWorkspace = await readFile(new URL("../src/client/components/users/UserManagementWorkspace.tsx", import.meta.url), "utf8");
 const userStyles = await readFile(new URL("../src/client/styles/user-management.css", import.meta.url), "utf8");
 const projectReport = await readFile(new URL("../src/client/components/projects/ProjectReport.tsx", import.meta.url), "utf8");
+const projectEditor = await readFile(new URL("../src/client/components/projects/ProjectEditor.tsx", import.meta.url), "utf8");
+const projectIssuePicker = await readFile(new URL("../src/client/components/projects/ProjectIssuePicker.tsx", import.meta.url), "utf8");
+const projectActions = await readFile(new URL("../src/client/components/projects/ProjectActions.tsx", import.meta.url), "utf8");
 const projectStyles = await readFile(new URL("../src/client/styles/project.css", import.meta.url), "utf8");
 
 for (const token of [
@@ -50,5 +53,19 @@ assert.match(projectReport, /<span>Status<\/span><select/);
 assert.match(projectReport, /<option value="cancelled">Cancelled<\/option>/);
 assert.match(projectStyles, /\.project-report-filters,/);
 assert.match(projectStyles, /\.project-field select,/);
+assert.doesNotMatch(projectReport, /className="project-primary"/);
+assert.doesNotMatch(projectEditor, /className="project-primary"/);
+assert.doesNotMatch(projectActions, /className="project-danger"/);
+assert.match(projectReport, /className="project-button project-button--primary"/);
+assert.match(projectEditor, /className="project-button project-button--primary"/);
+assert.match(projectIssuePicker, /className="project-count-badge"/);
+assert.match(projectStyles, /\.project-button--primary\s*\{[^}]*background:\s*var\(--color-primary\)/is);
+assert.match(projectStyles, /\.project-editor-actions\s*\{[^}]*justify-content:\s*flex-end/is);
+assert.match(projectStyles, /\.project-issue-picker\s*\{[^}]*display:\s*grid/is);
+assert.match(projectStyles, /\.project-issue-action\s*\{[^}]*width:\s*112px/is);
+assert.match(projectStyles, /\.project-issue-action\s+\.project-button\s*\{[^}]*min-height:\s*34px/is);
+assert.match(projectStyles, /grid-template-columns:\s*minmax\(0,\s*1fr\)\s+112px/is);
+assert.match(projectStyles, /\.project-form-card,/);
+assert.doesNotMatch(projectStyles, /var\(--accent|var\(--surface,|var\(--border,|var\(--text,|var\(--muted,/);
 
 console.log("Shared visual tokens and generated-template exceptions are preserved.");

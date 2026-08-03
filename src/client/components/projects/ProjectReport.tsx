@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ChevronLeft, ChevronRight, PencilLine, Plus } from "lucide-react";
 import type { ProjectDetail as ProjectDetailModel, ProjectListResult, ProjectStatus } from "../../../shared/projectTypes.js";
 import { fetchProjectDetail, fetchProjects } from "../../api/projectApi.js";
 import { ProjectDetail } from "./ProjectDetail.js";
@@ -71,12 +72,14 @@ export function ProjectReport(props: ProjectReportProps) {
         <p className="project-eyebrow">Portfolio</p>
         <h1>Projects</h1>
       </div>
-      {props.onCreate && <button className="project-primary" type="button" onClick={props.onCreate}>Create Project</button>}
+      {props.onCreate && <button className="project-button project-button--primary" type="button" onClick={props.onCreate}>
+        <Plus size={16} aria-hidden="true" /> Create Project
+      </button>}
     </header>
     <div className="project-report-filters">
       <label className="project-field"><span>Search</span><input value={q} onChange={(event) => { setQ(event.currentTarget.value); setPage(1); }} /></label>
       <label className="project-field"><span>Status</span><select value={status} onChange={(event) => { setStatus(event.currentTarget.value as ProjectStatus | "all"); setPage(1); }}>
-        <option value="all">All</option>
+        <option value="all">All statuses</option>
         <option value="planned">Planned</option>
         <option value="in_progress">In Progress</option>
         <option value="on_hold">On Hold</option>
@@ -129,30 +132,36 @@ export function ProjectReportView({ state, onSelect, onChange, onOpenIssue, user
         <small>{project.ownerName} · {project.issueCount} Issues</small>
       </button>)}
       <footer className="project-pagination">
-        <button type="button" disabled={state.result.page <= 1} onClick={onPrevious}>Previous</button>
+        <button className="project-button project-button--quiet" type="button" disabled={state.result.page <= 1} onClick={onPrevious}>
+          <ChevronLeft size={15} aria-hidden="true" /> Previous
+        </button>
         <span>{state.result.page} / {state.result.totalPages}</span>
-        <button type="button" disabled={state.result.page >= state.result.totalPages} onClick={onNext}>Next</button>
+        <button className="project-button project-button--quiet" type="button" disabled={state.result.page >= state.result.totalPages} onClick={onNext}>
+          Next <ChevronRight size={15} aria-hidden="true" />
+        </button>
       </footer>
     </aside>
     <main className="project-detail-pane">
       {state.detailLoading && <p className="project-state">Loading Project detail…</p>}
       {state.detail && <>
-        {state.detail.project.projectStatus !== "cancelled" && onChange && <button
-          className="project-change-action"
-          type="button"
-          onClick={() => onChange(state.detail!.project.id)}
-        >Change Project</button>}
-        {userRole && <ProjectActions
-          project={state.detail.project}
-          userRole={userRole}
-          onChanged={(detail) => {
-            if (detail) {
-              onSelect?.(detail.project.id);
-              return;
-            }
-            onDeleted?.();
-          }}
-        />}
+        <div className="project-detail-controls">
+          {state.detail.project.projectStatus !== "cancelled" && onChange && <button
+            className="project-button"
+            type="button"
+            onClick={() => onChange(state.detail!.project.id)}
+          ><PencilLine size={15} aria-hidden="true" /> Change Project</button>}
+          {userRole && <ProjectActions
+            project={state.detail.project}
+            userRole={userRole}
+            onChanged={(detail) => {
+              if (detail) {
+                onSelect?.(detail.project.id);
+                return;
+              }
+              onDeleted?.();
+            }}
+          />}
+        </div>
         <ProjectDetail detail={state.detail} onOpenIssue={onOpenIssue} />
       </>}
     </main>

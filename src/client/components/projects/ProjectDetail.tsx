@@ -1,4 +1,5 @@
 import type { ProjectDetail as ProjectDetailModel } from "../../../shared/projectTypes.js";
+import { ChevronRight } from "lucide-react";
 import { SummaryStrip } from "../SummaryStrip.js";
 
 type ProjectDetailProps = {
@@ -47,7 +48,7 @@ export function ProjectDetail({ detail, onOpenIssue }: ProjectDetailProps) {
           type="button"
           disabled={!issue.issueId || !onOpenIssue}
           onClick={() => issue.issueId && onOpenIssue?.(issue.issueId)}
-        >{issue.issueKey}</button>
+        >{issue.issueKey}<ChevronRight size={15} aria-hidden="true" /></button>
         <div>
           <strong>{issue.issueName}</strong>
           <small>{issue.issueStatus || "unknown"}{issue.primaryCr ? ` · ${issue.primaryCr}` : ""}</small>

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Ban, Trash2 } from "lucide-react";
 import type { ProjectDetail, ProjectRow } from "../../../shared/projectTypes.js";
 import { cancelProject, deleteProject } from "../../api/projectApi.js";
 
@@ -50,22 +51,22 @@ export function ProjectActions({ project, userRole, onChanged }: ProjectActionsP
   }
 
   return <div className="project-actions">
-    <button type="button" onClick={() => { setDialog("cancel"); setError(""); }}>Cancel Project</button>
-    {userRole === "ADMIN" && <button className="project-danger" type="button" onClick={() => { setDialog("delete"); setError(""); }}>Delete Project</button>}
-    {dialog === "cancel" && <div className="project-dialog" role="dialog" aria-modal="true" aria-label="Cancel Project">
+    <button className="project-button" type="button" onClick={() => { setDialog("cancel"); setError(""); }}><Ban size={15} aria-hidden="true" /> Cancel Project</button>
+    {userRole === "ADMIN" && <button className="project-button project-button--danger" type="button" onClick={() => { setDialog("delete"); setError(""); }}><Trash2 size={15} aria-hidden="true" /> Delete Project</button>}
+    {dialog === "cancel" && <div className="project-dialog-backdrop"><div className="project-dialog" role="dialog" aria-modal="true" aria-label="Cancel Project">
       <h3>Cancel {project.projectKey}</h3>
       <p>Cancellation releases active Issue links and preserves them in history.</p>
       <label className="project-field"><span>Reason</span><textarea value={reason} onChange={(event) => setReason(event.currentTarget.value)} /></label>
       {error && <p className="project-error" role="alert">{error}</p>}
-      <footer><button type="button" onClick={() => setDialog(null)}>Back</button><button type="button" disabled={busy} onClick={submitCancel}>Confirm cancellation</button></footer>
-    </div>}
-    {dialog === "delete" && <div className="project-dialog" role="dialog" aria-modal="true" aria-label="Delete Project">
+      <footer><button className="project-button" type="button" onClick={() => setDialog(null)}>Back</button><button className="project-button project-button--primary" type="button" disabled={busy} onClick={submitCancel}>Confirm cancellation</button></footer>
+    </div></div>}
+    {dialog === "delete" && <div className="project-dialog-backdrop"><div className="project-dialog" role="dialog" aria-modal="true" aria-label="Delete Project">
       <h3>Delete {project.projectKey}</h3>
       <p>This removes the Project, not its Issues or SAP CRs. Type the exact Project key.</p>
       <label className="project-field"><span>{project.projectKey}</span><input value={confirmation} onChange={(event) => setConfirmation(event.currentTarget.value)} /></label>
       {error && <p className="project-error" role="alert">{error}</p>}
-      <footer><button type="button" onClick={() => setDialog(null)}>Back</button><button className="project-danger" type="button" disabled={busy || !canConfirmProjectDelete(confirmation, project.projectKey)} onClick={submitDelete}>Confirm delete</button></footer>
-    </div>}
+      <footer><button className="project-button" type="button" onClick={() => setDialog(null)}>Back</button><button className="project-button project-button--danger" type="button" disabled={busy || !canConfirmProjectDelete(confirmation, project.projectKey)} onClick={submitDelete}>Confirm delete</button></footer>
+    </div></div>}
   </div>;
 }
 

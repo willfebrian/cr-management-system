@@ -39,3 +39,22 @@ test("labels and disables Issues owned by another active Project", () => {
   assert.match(markup, /disabled=""/);
   assert.match(markup, /Remove 26003-01/);
 });
+
+test("separates search results from selected Issues with stable row actions", () => {
+  const markup = renderToStaticMarkup(<ProjectIssuePicker
+    query="260"
+    options={[available, owned]}
+    selected={[available]}
+    loading={false}
+    readOnly={false}
+    onQueryChange={() => undefined}
+    onAdd={() => undefined}
+    onRemove={() => undefined}
+  />);
+
+  assert.match(markup, />Search Results</);
+  assert.match(markup, />Selected Issues</);
+  assert.match(markup, /class="project-issue-results"/);
+  assert.match(markup, /class="project-selected-section"/);
+  assert.equal(markup.match(/class="project-issue-action"/g)?.length, 3);
+});
