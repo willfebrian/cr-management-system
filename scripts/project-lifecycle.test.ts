@@ -76,8 +76,15 @@ test("delete preserves snapshots, removes no Issue, and returns the deleted Proj
     async query(sql: string) {
       calls.push(compact(sql));
       if (/FROM project_headers[\s\S]*FOR UPDATE/.test(sql)) {
-        return { rows: [{ id: 2, project_key: "PRJ-26002", project_name: "Core" }] };
+        return { rows: [{
+          id: 2,
+          project_no: 26002,
+          project_key: "PRJ-26002",
+          project_name: "Core",
+          project_status: "cancelled"
+        }] };
       }
+      if (/MAX\(project_no\)/.test(sql)) return { rows: [{ max_project_no: 26002 }] };
       if (/DELETE FROM project_headers/.test(sql)) return { rows: [{ id: 2 }] };
       return { rows: [] };
     },
@@ -90,6 +97,52 @@ test("delete preserves snapshots, removes no Issue, and returns the deleted Proj
     assert.ok(calls.some((sql) => /DELETE FROM project_headers/.test(sql)));
     assert.ok(calls.every((sql) => !/DELETE FROM issue_headers/.test(sql)));
     assert.equal(calls.at(-1), "COMMIT");
+  } finally {
+    pool.connect = originalConnect;
+  }
+});
+
+test("delete rejects a non-cancelled Project and an older cancelled Project", async () => {
+  const originalConnect = pool.connect;
+  const scenarios = [
+    { status: "in_progress", projectNo: 26002, highestNo: 26002 },
+    { status: "cancelled", projectNo: 26001, highestNo: 26002 }
+  ];
+
+  try {
+    for (const scenario of scenarios) {
+      const calls: string[] = [];
+      const client = {
+        async query(sql: string) {
+          calls.push(compact(sql));
+          if (/FROM project_headers[\s\S]*FOR UPDATE/.test(sql)) {
+            return { rows: [{
+              id: 2,
+              project_no: scenario.projectNo,
+              project_key: `PRJ-${scenario.projectNo}`,
+              project_name: "Core",
+              project_status: scenario.status
+            }] };
+          }
+          if (/MAX\(project_no\)/.test(sql)) {
+            return { rows: [{ max_project_no: scenario.highestNo }] };
+          }
+          if (/DELETE FROM project_headers/.test(sql)) return { rows: [{ id: 2 }] };
+          return { rows: [] };
+        },
+        release() {}
+      };
+      (pool as any).connect = async () => client;
+
+      await assert.rejects(
+        deleteProject(2, { ...actor, role: "ADMIN" }),
+        (error: unknown) => error instanceof ProjectRepositoryError
+          && error.status === 409
+          && error.code === "PROJECT_DELETE_NOT_ALLOWED"
+      );
+      assert.ok(calls.every((sql) => !/DELETE FROM project_headers/.test(sql)));
+      assert.equal(calls.at(-1), "ROLLBACK");
+    }
   } finally {
     pool.connect = originalConnect;
   }

@@ -3,6 +3,11 @@ import { requireAdmin, requireAuth } from "../auth/middleware.js";
 import * as projectRepository from "../db/projectRepository.js";
 import { ProjectRepositoryError } from "../db/projectRepository.js";
 import type { ProjectFilters, ProjectStatus } from "../../shared/projectTypes.js";
+import {
+  buildProjectCrTransportDocument,
+  getProjectCrTransportReadiness,
+  ProjectCrTransportReadinessError
+} from "../templates/projectCrTransportService.js";
 
 type ProjectRepositoryContract = Pick<
   typeof projectRepository,
@@ -17,6 +22,10 @@ type ProjectRepositoryContract = Pick<
 
 type ProjectRouteDependencies = {
   repository: ProjectRepositoryContract;
+  documentService?: {
+    getReadiness(projectId: number): ReturnType<typeof getProjectCrTransportReadiness>;
+    buildDocument(projectId: number): ReturnType<typeof buildProjectCrTransportDocument>;
+  };
   requireAuth: RequestHandler;
   requireAdmin: RequestHandler;
 };
@@ -24,6 +33,10 @@ type ProjectRouteDependencies = {
 export function createProjectRoutes(dependencies: ProjectRouteDependencies) {
   const routes = Router();
   const repository = dependencies.repository;
+  const documentService = dependencies.documentService || {
+    getReadiness: getProjectCrTransportReadiness,
+    buildDocument: buildProjectCrTransportDocument
+  };
   routes.use(dependencies.requireAuth);
 
   routes.get("/", handle(async (req, res) => {
@@ -47,6 +60,17 @@ export function createProjectRoutes(dependencies: ProjectRouteDependencies) {
 
   routes.get("/owner-options", handle(async (req, res) => {
     res.json({ rows: await repository.searchProjectOwners(text(req.query.q) || "") });
+  }));
+
+  routes.get("/:id/cr-transport-readiness", handle(async (req, res) => {
+    res.json(await documentService.getReadiness(Number(req.params.id)));
+  }));
+
+  routes.get("/:id/cr-transport-document", handle(async (req, res) => {
+    const document = await documentService.buildDocument(Number(req.params.id));
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    res.setHeader("Content-Disposition", `attachment; filename="${document.filename.replace(/[\r\n\"]/g, "-")}"`);
+    res.send(document.buffer);
   }));
 
   routes.get("/:id", handle(async (req, res) => {
@@ -78,6 +102,10 @@ export function createProjectRoutes(dependencies: ProjectRouteDependencies) {
 
 export const projectRoutes = createProjectRoutes({
   repository: projectRepository,
+  documentService: {
+    getReadiness: getProjectCrTransportReadiness,
+    buildDocument: buildProjectCrTransportDocument
+  },
   requireAuth,
   requireAdmin
 });
@@ -89,6 +117,9 @@ function handle(handler: (req: Request, res: Response) => Promise<void>): Reques
 }
 
 function sendProjectError(error: unknown, res: Response, next: NextFunction) {
+  if (error instanceof ProjectCrTransportReadinessError) {
+    return res.status(409).json({ message: error.message, readiness: error.readiness });
+  }
   if (error instanceof ProjectRepositoryError) {
     return res.status(error.status).json({ message: error.message, code: error.code });
   }

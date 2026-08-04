@@ -37,7 +37,8 @@ assert.match(app, /LogOut/, "Logout action must use an icon");
 assert.match(app, /Last login:/i, "Sidebar footer must show last login");
 assert.match(projectActions, /Cancel Project/, "Project actions must expose cancellation");
 assert.match(projectActions, /Delete Project/, "Project actions must expose admin deletion");
-assert.doesNotMatch(app + projectActions, /Generate Project CR Form/, "Project document generation stays deferred until a template exists");
+assert.match(projectActions, /Generate CR Transport/, "Project actions must expose Project CR Transport generation");
+assert.match(projectActions, /CR Transport Project belum dapat dibuat/, "Incomplete Project data must open a blocking readiness dialog");
 assert.doesNotMatch(app, /prototype-note/, "Project report must not show prototype-only UI");
 assert.doesNotMatch(app, /project-page-heading/, "Project pages must not duplicate the shared page heading");
 for (const control of ["Source Systems", "Sync Mode", "Lookback Days", "Sync CR"]) {

@@ -88,8 +88,8 @@ BEGIN
     ALTER TABLE cr_transport_lifecycle
       ADD CONSTRAINT chk_cr_transport_lifecycle_confirmed_step
       CHECK (
-        NOT (evidence_source = 'confirmed' AND transport_status = 'imported')
-        OR transport_step = 'I'
+        transport_status <> 'imported'
+        OR (evidence_source = 'confirmed' AND transport_step = 'I')
       ) NOT VALID;
   END IF;
 END $$;
@@ -190,6 +190,10 @@ return { processed, orphanLogs, rejectedLogs };
 Run: `npx tsx --test scripts/cr-lifecycle-import-policy.test.ts`
 
 Expected: PASS.
+
+- [ ] **Step 6: Preserve a successful import across failed retries**
+
+Add regression coverage using the TRDK907763 sequence: QA step I RC `0000` at `20160104162856`, followed by QA step I RC `0016` at `20160105084724`. Select the successful row. If all step-I attempts failed, continue selecting the latest failed attempt.
 
 ---
 

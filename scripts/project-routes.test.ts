@@ -115,6 +115,36 @@ test("maps validation, missing, and assignment-conflict errors to their API stat
   });
 });
 
+test("returns Project readiness and downloads the Project CR Transport document", async () => {
+  const readiness = { ready: true, missingCount: 0, groups: [] };
+  const routes = createProjectRoutes({
+    repository: {
+      listProjects: async () => ({ rows: [], page: 1, pageSize: 25, total: 0, totalPages: 1 }),
+      getProjectDetail: async () => detail,
+      searchProjectIssueOptions: async () => [], searchProjectOwners: async () => [],
+      saveProject: async () => detail, cancelProject: async () => detail,
+      deleteProject: async (id) => ({ ok: true as const, id })
+    },
+    documentService: {
+      getReadiness: async () => readiness,
+      buildDocument: async () => ({ filename: "CR Transport Project PRJ-26002.docx", buffer: Buffer.from("docx") })
+    },
+    requireAuth: testAuth,
+    requireAdmin: testAdmin
+  });
+  await withServer(routes, async (baseUrl) => {
+    const headers = { "x-test-user": "USER" };
+    const readinessResponse = await fetch(`${baseUrl}/api/projects/2/cr-transport-readiness`, { headers });
+    assert.equal(readinessResponse.status, 200);
+    assert.deepEqual(await readinessResponse.json(), readiness);
+    const documentResponse = await fetch(`${baseUrl}/api/projects/2/cr-transport-document`, { headers });
+    assert.equal(documentResponse.status, 200);
+    assert.match(documentResponse.headers.get("content-type") || "", /wordprocessingml/);
+    assert.match(documentResponse.headers.get("content-disposition") || "", /CR Transport Project PRJ-26002\.docx/);
+    assert.equal(await documentResponse.text(), "docx");
+  });
+});
+
 function testAuth(req: Request, res: Response, next: NextFunction) {
   const role = req.get("x-test-user");
   if (!role) return res.status(401).json({ message: "Authentication required" });

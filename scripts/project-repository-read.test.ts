@@ -26,6 +26,7 @@ test("lists Projects with parameterized filters and pagination metadata", async 
         owner_person_id: 8,
         owner_name_snapshot: "Rina",
         project_status: "in_progress",
+        can_delete: false,
         issue_count: 3,
         created_by_snapshot: "ADMIN",
         created_at: "2026-07-01T00:00:00.000Z",
@@ -39,6 +40,7 @@ test("lists Projects with parameterized filters and pagination metadata", async 
     const result = await listProjects({ q: "x' OR true --", status: "in_progress", page: 2, pageSize: 10 });
     assert.equal(result.rows[0]?.projectKey, "PRJ-26002");
     assert.equal(result.rows[0]?.issueCount, 3);
+    assert.equal(result.rows[0]?.canDelete, false);
     assert.deepEqual({ page: result.page, pageSize: result.pageSize, total: result.total, totalPages: result.totalPages }, {
       page: 2,
       pageSize: 10,
@@ -59,6 +61,7 @@ test("returns cancelled Project relationship history rather than current links",
       return { rows: [{
         id: 4, project_no: 26004, project_key: "PRJ-26004", project_name: "Cancelled",
         owner_person_id: 8, owner_name_snapshot: "Rina", project_status: "cancelled",
+        can_delete: true,
         issue_count: 0, created_by_snapshot: "ADMIN", created_at: "2026-07-01",
         updated_by_snapshot: "ADMIN", updated_at: "2026-07-03", cancelled_reason: "Duplicate"
       }] };
@@ -74,6 +77,7 @@ test("returns cancelled Project relationship history rather than current links",
   };
   try {
     const detail = await getProjectDetail(4);
+    assert.equal(detail.project.canDelete, true);
     assert.equal(detail.issues[0]?.relationStatus, "cancelled");
     assert.equal(detail.issues[0]?.issueKey, "26001-01");
     assert.equal(detail.statusHistory[0]?.toStatus, "cancelled");

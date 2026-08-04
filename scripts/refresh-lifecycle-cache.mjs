@@ -22,17 +22,24 @@ try {
     const result = await pool.query(`
       INSERT INTO cr_transport_lifecycle (
         source_system_code, trkorr, target_system_code, transport_status, evidence_source,
-        import_date, import_time, message, last_checked_at, updated_at
+        imported_at, import_date, import_time, return_code, transport_step,
+        message, last_checked_at, updated_at
       )
       SELECT
         'DEV',
         dev.trkorr,
         $1,
-        CASE WHEN target.trkorr IS NULL THEN 'pending' ELSE 'imported' END,
-        CASE WHEN target.trkorr IS NULL THEN 'unknown' ELSE 'inferred' END,
-        CASE WHEN target.trkorr IS NULL THEN NULL ELSE target.changed_date END,
-        CASE WHEN target.trkorr IS NULL THEN NULL ELSE target.changed_time END,
-        CASE WHEN target.trkorr IS NULL THEN 'No matching parent CR found in target cache.' ELSE 'Inferred from matching parent CR in target cache.' END,
+        'pending',
+        'unknown',
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        CASE WHEN target.trkorr IS NULL
+          THEN 'No matching parent CR found in target cache.'
+          ELSE 'Matching parent CR found in target cache without confirmed TPALOG step I.'
+        END,
         now(),
         now()
       FROM cr_requests dev
@@ -45,27 +52,62 @@ try {
         AND dev.status_group = 'released'
       ON CONFLICT (source_system_code, trkorr, target_system_code) DO UPDATE SET
         transport_status = CASE
-          WHEN cr_transport_lifecycle.evidence_source = 'confirmed' THEN cr_transport_lifecycle.transport_status
+          WHEN cr_transport_lifecycle.evidence_source = 'confirmed'
+            AND cr_transport_lifecycle.transport_step = 'I'
+          THEN cr_transport_lifecycle.transport_status
           ELSE EXCLUDED.transport_status
         END,
         evidence_source = CASE
-          WHEN cr_transport_lifecycle.evidence_source = 'confirmed' THEN cr_transport_lifecycle.evidence_source
+          WHEN cr_transport_lifecycle.evidence_source = 'confirmed'
+            AND cr_transport_lifecycle.transport_step = 'I'
+          THEN cr_transport_lifecycle.evidence_source
           ELSE EXCLUDED.evidence_source
         END,
+        imported_at = CASE
+          WHEN cr_transport_lifecycle.evidence_source = 'confirmed'
+            AND cr_transport_lifecycle.transport_step = 'I'
+          THEN cr_transport_lifecycle.imported_at
+          ELSE EXCLUDED.imported_at
+        END,
         import_date = CASE
-          WHEN cr_transport_lifecycle.evidence_source = 'confirmed' THEN cr_transport_lifecycle.import_date
+          WHEN cr_transport_lifecycle.evidence_source = 'confirmed'
+            AND cr_transport_lifecycle.transport_step = 'I'
+          THEN cr_transport_lifecycle.import_date
           ELSE EXCLUDED.import_date
         END,
         import_time = CASE
-          WHEN cr_transport_lifecycle.evidence_source = 'confirmed' THEN cr_transport_lifecycle.import_time
+          WHEN cr_transport_lifecycle.evidence_source = 'confirmed'
+            AND cr_transport_lifecycle.transport_step = 'I'
+          THEN cr_transport_lifecycle.import_time
           ELSE EXCLUDED.import_time
         END,
+        return_code = CASE
+          WHEN cr_transport_lifecycle.evidence_source = 'confirmed'
+            AND cr_transport_lifecycle.transport_step = 'I'
+          THEN cr_transport_lifecycle.return_code
+          ELSE EXCLUDED.return_code
+        END,
+        transport_step = CASE
+          WHEN cr_transport_lifecycle.evidence_source = 'confirmed'
+            AND cr_transport_lifecycle.transport_step = 'I'
+          THEN cr_transport_lifecycle.transport_step
+          ELSE EXCLUDED.transport_step
+        END,
         message = CASE
-          WHEN cr_transport_lifecycle.evidence_source = 'confirmed' THEN cr_transport_lifecycle.message
+          WHEN cr_transport_lifecycle.evidence_source = 'confirmed'
+            AND cr_transport_lifecycle.transport_step = 'I'
+          THEN cr_transport_lifecycle.message
           ELSE EXCLUDED.message
         END,
         last_checked_at = now(),
         updated_at = now()
+      WHERE NOT (
+        cr_transport_lifecycle.transport_status = 'imported'
+        AND (
+          cr_transport_lifecycle.evidence_source IS DISTINCT FROM 'confirmed'
+          OR cr_transport_lifecycle.transport_step IS DISTINCT FROM 'I'
+        )
+      )
     `, [targetSystemCode]);
     results.push({ targetSystemCode, affected: result.rowCount });
   }

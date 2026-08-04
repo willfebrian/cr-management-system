@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { ProjectDetail as ProjectDetailModel } from "../../../shared/projectTypes.js";
 import { ChevronRight } from "lucide-react";
 import { SummaryStrip } from "../SummaryStrip.js";
@@ -5,9 +6,10 @@ import { SummaryStrip } from "../SummaryStrip.js";
 type ProjectDetailProps = {
   detail: ProjectDetailModel;
   onOpenIssue?: (issueId: number) => void;
+  actions?: ReactNode;
 };
 
-export function ProjectDetail({ detail, onOpenIssue }: ProjectDetailProps) {
+export function ProjectDetail({ detail, onOpenIssue, actions }: ProjectDetailProps) {
   const { project } = detail;
   return <article className="project-detail">
     <header className="project-detail-header">
@@ -16,9 +18,12 @@ export function ProjectDetail({ detail, onOpenIssue }: ProjectDetailProps) {
         <h2>{project.projectName}</h2>
         {project.description && <p>{project.description}</p>}
       </div>
-      <span className={`project-status project-status-${project.projectStatus}`}>
-        {project.projectStatus.replace("_", " ")}
-      </span>
+      <div className="project-detail-header-actions">
+        <span className={`project-status project-status-${project.projectStatus}`}>
+          {project.projectStatus.replace("_", " ")}
+        </span>
+        {actions}
+      </div>
     </header>
     <SummaryStrip
       className="project-summary-strip"

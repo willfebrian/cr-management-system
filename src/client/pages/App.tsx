@@ -87,6 +87,7 @@ export function App() {
   const [issueDetail, setIssueDetail] = useState<IssueDetail | null>(null);
   const [changeIssueInitialId, setChangeIssueInitialId] = useState<number | null>(null);
   const [changeIssueInitialAction, setChangeIssueInitialAction] = useState<"" | "cancel" | "delete">("");
+  const [changeIssueInitialItem, setChangeIssueInitialItem] = useState<IncompleteItem | null>(null);
   const [expandedSidebarGroup, setExpandedSidebarGroup] = useState<SidebarGroup | null>(null);
   const [syncSystems, setSyncSystems] = useState<string[]>(["DEV", "QA", "PRD"]);
   const [syncMode, setSyncMode] = useState<"incremental" | "full_period">("incremental");
@@ -256,6 +257,14 @@ export function App() {
     } catch (err) {
       showToast("error", err instanceof Error ? err.message : String(err));
     }
+  }
+
+  function openIncompleteIssueFromProject(issueId: number, item: IncompleteItem) {
+    if (!navigateTo("issue-change")) return;
+    setExpandedSidebarGroup("issue");
+    setChangeIssueInitialId(issueId);
+    setChangeIssueInitialAction("");
+    setChangeIssueInitialItem(item);
   }
 
   async function openProjectEditor(projectId: number) {
@@ -437,6 +446,7 @@ export function App() {
               <button className={view === "issue-display" ? "active" : ""} onClick={() => {
                 setChangeIssueInitialId(null);
                 setChangeIssueInitialAction("");
+                setChangeIssueInitialItem(null);
                 if (!navigateTo("issue-display")) return;
                 loadIssues(issueFilters).catch((err) => setError(err instanceof Error ? err.message : String(err)));
               }}>
@@ -445,11 +455,13 @@ export function App() {
               <button className={view === "issue-create" ? "active" : ""} onClick={() => {
                 setChangeIssueInitialId(null);
                 setChangeIssueInitialAction("");
+                setChangeIssueInitialItem(null);
                 navigateTo("issue-create");
               }}><Plus size={15} /> Create</button>
               <button className={view === "issue-change" ? "active" : ""} onClick={() => {
                 setChangeIssueInitialId(null);
                 setChangeIssueInitialAction("");
+                setChangeIssueInitialItem(null);
                 navigateTo("issue-change");
               }}><PencilLine size={15} /> Change</button>
             </div>
@@ -611,11 +623,13 @@ export function App() {
             onChangeIssue={(issueId) => {
               setChangeIssueInitialId(issueId);
               setChangeIssueInitialAction("");
+              setChangeIssueInitialItem(null);
               navigateTo("issue-change");
             }}
             onIssueAction={(issueId, action) => {
               setChangeIssueInitialId(issueId);
               setChangeIssueInitialAction(action);
+              setChangeIssueInitialItem(null);
               navigateTo("issue-change");
             }}
             onGenerateCrForm={async (issueId) => {
@@ -671,6 +685,7 @@ export function App() {
             }}
             onChange={openProjectEditor}
             onOpenIssue={openIssueFromProjectLink}
+            onOpenIncompleteItem={openIncompleteIssueFromProject}
             onDeleted={() => {
               showToast("success", "Project deleted.");
               setProjectEditorDetail(null);
@@ -704,6 +719,7 @@ export function App() {
             userRole={authUser.role}
             onChange={openProjectEditor}
             onOpenIssue={openIssueFromProjectLink}
+            onOpenIncompleteItem={openIncompleteIssueFromProject}
             onDeleted={() => {
               showToast("success", "Project deleted.");
               setView("project-report");
@@ -713,6 +729,7 @@ export function App() {
           <ChangeIssue
             initialIssueId={changeIssueInitialId}
             initialAction={changeIssueInitialAction}
+            initialIncompleteItem={changeIssueInitialItem}
             refreshToken={syncRefreshToken}
             onNotify={showToast}
             onDirtyChange={setIssueFormDirty}
@@ -2349,6 +2366,7 @@ function IssueEditor({
 function ChangeIssue({
   initialIssueId,
   initialAction = "",
+  initialIncompleteItem = null,
   refreshToken = 0,
   onSave,
   onCancel,
@@ -2358,6 +2376,7 @@ function ChangeIssue({
 }: {
   initialIssueId?: number | null;
   initialAction?: "" | "cancel" | "delete";
+  initialIncompleteItem?: IncompleteItem | null;
   refreshToken?: number;
   onSave: (payload: IssueSavePayload) => Promise<void>;
   onCancel: (id: number, reason: string) => Promise<void>;
@@ -2395,6 +2414,11 @@ function ChangeIssue({
       .catch((err) => onNotify("error", err instanceof Error ? err.message : String(err)))
       .finally(() => setSearching(false));
   }, [initialIssueId, onNotify]);
+
+  useEffect(() => {
+    if (!initialIncompleteItem || !initialIssueId || changeDetail?.issue?.id !== initialIssueId) return;
+    setNavigationRequest((current) => ({ sequence: (current?.sequence || 0) + 1, item: initialIncompleteItem }));
+  }, [changeDetail?.issue?.id, initialIncompleteItem, initialIssueId]);
 
   useEffect(() => {
     if (!refreshToken || !changeDetail?.issue?.id) return;

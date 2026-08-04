@@ -27,6 +27,7 @@ export type ProjectRow = {
   ownerPersonId: number;
   ownerName: string;
   projectStatus: ProjectStatus;
+  canDelete: boolean;
   issueCount: number;
   createdBy: string;
   createdAt: string;
@@ -95,4 +96,28 @@ export type ProjectSavePayload = {
   ownerPersonId: number;
   projectStatus: EditableProjectStatus;
   issueIds: number[];
+};
+
+export type ProjectCrReadinessSection = "project" | "initiation" | "qa" | "prd" | "cr";
+
+export type ProjectCrReadinessItem = {
+  id: string;
+  label: string;
+  section: ProjectCrReadinessSection;
+  issueId?: number;
+  issueKey?: string;
+  crSap?: string;
+  targetId?: string;
+};
+
+export type ProjectCrReadinessGroup = {
+  section: ProjectCrReadinessSection;
+  title: string;
+  items: ProjectCrReadinessItem[];
+};
+
+export type ProjectCrReadiness = {
+  ready: boolean;
+  missingCount: number;
+  groups: ProjectCrReadinessGroup[];
 };

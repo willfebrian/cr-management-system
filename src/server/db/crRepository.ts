@@ -1,5 +1,10 @@
 import { pool } from "./pool.js";
 import type { CrCreationLog, CrDetailResult, CrHeader, CrObject, CrObjectKey, TransportImportLog } from "../sap/crExtractor.js";
+import { dedupeLatestConfirmedImportLogs } from "../sync/transportLifecyclePolicy.js";
+
+export type CrRepositoryDb = {
+  query: (text: string, values?: unknown[]) => Promise<{ rows: any[]; rowCount?: number | null }>;
+};
 
 export async function getDashboard() {
   const [{ rows: statusRows }, { rows: agingRows }, { rows: landscapeRows }, { rows: funnelRows }, { rows: activityRows }, { rows: syncRows }, { rows: healthRows }] = await Promise.all([
@@ -504,22 +509,32 @@ function combineDateAndTime(date?: string, time?: string) {
   return `${normalizedDate}T${normalizedTime}+07:00`;
 }
 
-export async function refreshTransportLifecycleFromCache(sourceSystemCode = "DEV") {
+export async function refreshTransportLifecycleFromCache(
+  sourceSystemCode = "DEV",
+  db: CrRepositoryDb = pool as CrRepositoryDb
+) {
   for (const targetSystemCode of ["QA", "PRD"]) {
-    await pool.query(`
+    await db.query(`
       INSERT INTO cr_transport_lifecycle (
         source_system_code, trkorr, target_system_code, transport_status, evidence_source,
-        import_date, import_time, message, last_checked_at, updated_at
+        imported_at, import_date, import_time, return_code, transport_step,
+        message, last_checked_at, updated_at
       )
       SELECT
         $1,
         dev.trkorr,
         $2,
-        CASE WHEN target.trkorr IS NULL THEN 'pending' ELSE 'imported' END,
-        CASE WHEN target.trkorr IS NULL THEN 'unknown' ELSE 'inferred' END,
-        CASE WHEN target.trkorr IS NULL THEN NULL ELSE target.changed_date END,
-        CASE WHEN target.trkorr IS NULL THEN NULL ELSE target.changed_time END,
-        CASE WHEN target.trkorr IS NULL THEN 'No matching parent CR found in target cache.' ELSE 'Inferred from matching parent CR in target cache.' END,
+        'pending',
+        'unknown',
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        CASE
+          WHEN target.trkorr IS NULL THEN 'No matching parent CR found in target cache.'
+          ELSE 'Matching parent CR found in target cache without confirmed TPALOG step I.'
+        END,
         now(),
         now()
       FROM cr_requests dev
@@ -533,41 +548,77 @@ export async function refreshTransportLifecycleFromCache(sourceSystemCode = "DEV
         AND upper(dev.owner) = 'TRSTDEV'
       ON CONFLICT (source_system_code, trkorr, target_system_code) DO UPDATE SET
         transport_status = CASE
-          WHEN cr_transport_lifecycle.evidence_source = 'confirmed' THEN cr_transport_lifecycle.transport_status
+          WHEN cr_transport_lifecycle.evidence_source = 'confirmed'
+            AND cr_transport_lifecycle.transport_step = 'I'
+          THEN cr_transport_lifecycle.transport_status
           ELSE EXCLUDED.transport_status
         END,
         evidence_source = CASE
-          WHEN cr_transport_lifecycle.evidence_source = 'confirmed' THEN cr_transport_lifecycle.evidence_source
+          WHEN cr_transport_lifecycle.evidence_source = 'confirmed'
+            AND cr_transport_lifecycle.transport_step = 'I'
+          THEN cr_transport_lifecycle.evidence_source
           ELSE EXCLUDED.evidence_source
         END,
+        imported_at = CASE
+          WHEN cr_transport_lifecycle.evidence_source = 'confirmed'
+            AND cr_transport_lifecycle.transport_step = 'I'
+          THEN cr_transport_lifecycle.imported_at
+          ELSE EXCLUDED.imported_at
+        END,
         import_date = CASE
-          WHEN cr_transport_lifecycle.evidence_source = 'confirmed' THEN cr_transport_lifecycle.import_date
+          WHEN cr_transport_lifecycle.evidence_source = 'confirmed'
+            AND cr_transport_lifecycle.transport_step = 'I'
+          THEN cr_transport_lifecycle.import_date
           ELSE EXCLUDED.import_date
         END,
         import_time = CASE
-          WHEN cr_transport_lifecycle.evidence_source = 'confirmed' THEN cr_transport_lifecycle.import_time
+          WHEN cr_transport_lifecycle.evidence_source = 'confirmed'
+            AND cr_transport_lifecycle.transport_step = 'I'
+          THEN cr_transport_lifecycle.import_time
           ELSE EXCLUDED.import_time
         END,
+        return_code = CASE
+          WHEN cr_transport_lifecycle.evidence_source = 'confirmed'
+            AND cr_transport_lifecycle.transport_step = 'I'
+          THEN cr_transport_lifecycle.return_code
+          ELSE EXCLUDED.return_code
+        END,
+        transport_step = CASE
+          WHEN cr_transport_lifecycle.evidence_source = 'confirmed'
+            AND cr_transport_lifecycle.transport_step = 'I'
+          THEN cr_transport_lifecycle.transport_step
+          ELSE EXCLUDED.transport_step
+        END,
         message = CASE
-          WHEN cr_transport_lifecycle.evidence_source = 'confirmed' THEN cr_transport_lifecycle.message
+          WHEN cr_transport_lifecycle.evidence_source = 'confirmed'
+            AND cr_transport_lifecycle.transport_step = 'I'
+          THEN cr_transport_lifecycle.message
           ELSE EXCLUDED.message
         END,
         last_checked_at = now(),
         updated_at = now()
+      WHERE NOT (
+        cr_transport_lifecycle.transport_status = 'imported'
+        AND (
+          cr_transport_lifecycle.evidence_source IS DISTINCT FROM 'confirmed'
+          OR cr_transport_lifecycle.transport_step IS DISTINCT FROM 'I'
+        )
+      )
     `, [sourceSystemCode, targetSystemCode]);
   }
 }
 
 export async function upsertConfirmedTransportLogs(targetSystemCode: string, logs: TransportImportLog[]) {
   const orphanLogs: TransportImportLog[] = [];
+  const { accepted, rejected: rejectedLogs } = dedupeLatestConfirmedImportLogs(logs);
   let processed = 0;
-  for (const log of dedupeLatestTransportLogs(logs)) {
+  for (const log of accepted) {
     const parsed = parseSapTimestamp(log.timestamp);
     const status = transportStatusFromReturnCode(log.returnCode);
     const result = await pool.query(`
       INSERT INTO cr_transport_lifecycle (
         source_system_code, trkorr, target_system_code, transport_status, evidence_source,
-        imported_at, import_date, import_time, return_code, message, last_checked_at, updated_at
+        imported_at, import_date, import_time, return_code, transport_step, message, last_checked_at, updated_at
       )
       SELECT
         'DEV',
@@ -579,6 +630,7 @@ export async function upsertConfirmedTransportLogs(targetSystemCode: string, log
         $5::date,
         $6::time,
         $7,
+        'I',
         $8,
         now(),
         now()
@@ -594,6 +646,7 @@ export async function upsertConfirmedTransportLogs(targetSystemCode: string, log
         import_date = EXCLUDED.import_date,
         import_time = EXCLUDED.import_time,
         return_code = EXCLUDED.return_code,
+        transport_step = EXCLUDED.transport_step,
         message = EXCLUDED.message,
         last_checked_at = now(),
         updated_at = now()
@@ -615,7 +668,7 @@ export async function upsertConfirmedTransportLogs(targetSystemCode: string, log
       await markOrphanTransportRecovered(targetSystemCode, log.trkorr, "Lifecycle imported after DEV parent was available.");
     }
   }
-  return { processed, orphanLogs };
+  return { processed, orphanLogs, rejectedLogs };
 }
 
 export async function listImportedLifecycleNeedingConfirmation(targetSystemCode: string, limit = 50) {
@@ -646,6 +699,95 @@ export async function listImportedLifecycleNeedingConfirmation(targetSystemCode:
     LIMIT $2
   `, [targetSystemCode, limit]);
   return rows;
+}
+
+export type LegacyTransportLifecycleCandidate = {
+  trkorr: string;
+  target_system_code: "QA" | "PRD";
+  transport_step: string | null;
+};
+
+export async function listLegacyTransportLifecycleCandidates(
+  targetSystemCode: string,
+  limit = 50,
+  db: CrRepositoryDb = pool as CrRepositoryDb
+) {
+  const { rows } = await db.query(`
+    SELECT lifecycle.trkorr,
+           lifecycle.target_system_code,
+           lifecycle.transport_step
+    FROM cr_transport_lifecycle lifecycle
+    JOIN cr_requests dev
+      ON dev.sap_system_code = lifecycle.source_system_code
+      AND dev.trkorr = lifecycle.trkorr
+      AND dev.parent_request IS NULL
+      AND upper(dev.owner) = 'TRSTDEV'
+    WHERE lifecycle.source_system_code = 'DEV'
+      AND lifecycle.target_system_code = $1
+      AND lifecycle.transport_status = 'imported'
+      AND (
+        lifecycle.evidence_source IS DISTINCT FROM 'confirmed'
+        OR lifecycle.transport_step IS DISTINCT FROM 'I'
+      )
+    ORDER BY lifecycle.last_checked_at NULLS FIRST, lifecycle.trkorr DESC
+    LIMIT $2
+  `, [targetSystemCode, limit]);
+  return rows as LegacyTransportLifecycleCandidate[];
+}
+
+export async function downgradeLegacyTransportLifecycle(
+  targetSystemCode: string,
+  trkorr: string,
+  message: string,
+  db: CrRepositoryDb = pool as CrRepositoryDb
+) {
+  const result = await db.query(`
+    UPDATE cr_transport_lifecycle
+    SET transport_status = 'pending',
+        evidence_source = 'unknown',
+        transport_step = NULL,
+        imported_at = NULL,
+        import_date = NULL,
+        import_time = NULL,
+        return_code = NULL,
+        message = $3,
+        last_checked_at = now(),
+        updated_at = now()
+    WHERE source_system_code = 'DEV'
+      AND target_system_code = $1
+      AND trkorr = $2
+      AND transport_status = 'imported'
+      AND (
+        evidence_source IS DISTINCT FROM 'confirmed'
+        OR transport_step IS DISTINCT FROM 'I'
+      )
+  `, [targetSystemCode, trkorr, message]);
+  return Number(result.rowCount || 0) > 0;
+}
+
+export async function countLegacyTransportLifecycleCandidates(
+  db: CrRepositoryDb = pool as CrRepositoryDb
+) {
+  const { rows } = await db.query(`
+    SELECT COUNT(*)::int AS total
+    FROM cr_transport_lifecycle
+    WHERE source_system_code = 'DEV'
+      AND transport_status = 'imported'
+      AND (
+        evidence_source IS DISTINCT FROM 'confirmed'
+        OR transport_step IS DISTINCT FROM 'I'
+      )
+  `);
+  return Number(rows[0]?.total || 0);
+}
+
+export async function validateConfirmedTransportStepConstraint(
+  db: CrRepositoryDb = pool as CrRepositoryDb
+) {
+  await db.query(`
+    ALTER TABLE cr_transport_lifecycle
+    VALIDATE CONSTRAINT chk_cr_transport_lifecycle_confirmed_step
+  `);
 }
 
 export async function hasDevParentCr(trkorr: string) {
@@ -1008,30 +1150,6 @@ async function insertObjectKey(key: CrObjectKey, sapSystemCode: string) {
     `,
     [sapSystemCode, key.trkorr, key.position, key.pgmid || null, key.objectType || null, key.objectName || null, key.tableKey || null]
   );
-}
-
-function dedupeLatestTransportLogs(logs: TransportImportLog[]) {
-  const grouped = new Map<string, TransportImportLog[]>();
-  for (const log of logs.filter((item) => isTransportRequestId(item.trkorr))) {
-    const key = String(log.trkorr || "").trim().toUpperCase();
-    grouped.set(key, [...(grouped.get(key) || []), log]);
-  }
-
-  return [...grouped.values()].map((requestLogs) => {
-    const importStepLogs = requestLogs.filter((log) => String(log.step || "").trim().toUpperCase() === "I");
-    return latestTransportLog(importStepLogs.length ? importStepLogs : requestLogs);
-  }).filter(Boolean) as TransportImportLog[];
-}
-
-function latestTransportLog(logs: TransportImportLog[]) {
-  return logs.reduce<TransportImportLog | null>((latest, log) => {
-    if (!latest || String(log.timestamp || "") >= String(latest.timestamp || "")) return log;
-    return latest;
-  }, null);
-}
-
-function isTransportRequestId(value?: string) {
-  return /^[A-Z0-9]{3}K\d{6}$/i.test(String(value || "").trim());
 }
 
 function parseSapTimestamp(value?: string) {

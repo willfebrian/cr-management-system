@@ -72,15 +72,16 @@ For both QA and PRD:
 4. Upsert only valid import logs and persist `transport_step = 'I'`.
 5. Report rejected non-import rows in the sync summary if any reach the repository boundary.
 
+Import state is monotonic per target. If at least one step-I attempt has a successful return code (`0000` through `0004`), the latest successful attempt represents the current imported lifecycle. A later failed retry remains SAP audit evidence but cannot downgrade that target from imported to failed. When no attempt has ever succeeded, the latest failed step-I attempt represents the current failed lifecycle.
+
 This provides defense in depth: an extractor or RFC filter defect cannot promote step `U`, `E`, or another step to imported.
 
 ### Legacy reconciliation
 
-Reconciliation operates independently for QA and PRD and only selects legacy-risk records:
+Reconciliation operates independently for QA and PRD and selects every imported record that lacks valid confirmed step-I evidence:
 
-- `evidence_source = 'confirmed'`
 - `transport_status = 'imported'`
-- `transport_step IS NULL OR transport_step <> 'I'`
+- `evidence_source IS DISTINCT FROM 'confirmed' OR transport_step IS DISTINCT FROM 'I'`
 
 For each candidate:
 
@@ -93,7 +94,7 @@ The deployment process runs the reconciliation job once after applying the schem
 
 ## Cache Behavior
 
-`refreshTransportLifecycleFromCache` must not promote matching target-cache headers to imported. It preserves valid confirmed step-I rows. A legacy confirmed row with a null or non-I step is skipped without updating timestamps or metadata until live reconciliation succeeds; this prevents an SAP connection failure from being interpreted as evidence that the import did not happen.
+`refreshTransportLifecycleFromCache` must not promote matching target-cache headers to imported. It preserves valid confirmed step-I rows. Any imported legacy row without confirmed step-I evidence, including inferred rows, is skipped without updating timestamps or metadata until live reconciliation succeeds; this prevents an SAP connection failure from being interpreted as evidence that the import did not happen.
 
 The cache refresh may create or retain pending placeholders, but only the confirmed TPALOG flow may promote them to imported. Once reconciliation downgrades an invalid legacy row to pending, target-cache matching cannot promote it again. Existing valid confirmed step-I rows are never downgraded by cache refresh.
 
