@@ -5,7 +5,6 @@ import {
   getLastSuccessfulSyncRun,
   hasDevParentCr,
   insertCrStatusSnapshot,
-  listImportedLifecycleNeedingConfirmation,
   markOrphanTransportRecoveryFailed,
   refreshTransportLifecycleFromCache,
   replaceCrObjects,
@@ -14,7 +13,12 @@ import {
   upsertCrHeader
 } from "../db/crRepository.js";
 import { config, getSapCrSystem } from "../config.js";
-import { readCrCreationLogs, readCrDetail, readCrList, readTransportImportLogs, readTransportImportLogsByRequest } from "../sap/crExtractor.js";
+import { readCrCreationLogs, readCrDetail, readCrList, readTransportImportLogs } from "../sap/crExtractor.js";
+import {
+  reconcileLegacyTransportLifecycle,
+  type LifecycleReconciliationTargetResult,
+  type TransportTargetSystemCode
+} from "./transportLifecycleReconciler.js";
 
 export type SyncMode = "incremental" | "full_period";
 
@@ -54,7 +58,12 @@ export type RunCrSyncResult = {
     orphanImportsFound?: number;
     orphanImportsRecovered?: number;
     orphanImportsFailed?: number;
-    confirmationCandidates?: number;
+    rejectedNonImportRows?: number;
+    legacyCandidates?: number;
+    legacyConfirmed?: number;
+    legacyDowngraded?: number;
+    reconciliationFailures?: number;
+    constraintValidated?: boolean;
     message?: string;
     period?: SyncPeriod;
   }>;
@@ -204,6 +213,7 @@ export async function runCrSync(options: RunCrSyncOptions): Promise<RunCrSyncRes
         orphanImportsFound: lifecycleUpsert.orphanLogs.length,
         orphanImportsRecovered: recovery.recovered,
         orphanImportsFailed: recovery.failed,
+        rejectedNonImportRows: lifecycleUpsert.rejectedLogs.length,
         period
       });
     } catch (error) {
@@ -217,9 +227,11 @@ export async function runCrSync(options: RunCrSyncOptions): Promise<RunCrSyncRes
   }
 
   await refreshTransportLifecycleFromCache("DEV");
-  if (syncMode === "full_period") {
-    lifecycleResults.push(...await reconfirmInferredLifecycleFromSap(systemCodes));
-  }
+  lifecycleResults.push(...await runLifecycleReconciliationForSync({
+    syncMode,
+    systemCodes,
+    limitPerTarget: Math.min(config.orphanRecovery.maxPerSync, 200)
+  }));
 
   return {
     ok: results.some((result) => result.status === "success"),
@@ -232,44 +244,34 @@ export async function runCrSync(options: RunCrSyncOptions): Promise<RunCrSyncRes
   };
 }
 
-async function reconfirmInferredLifecycleFromSap(systemCodes: string[]) {
-  const results: RunCrSyncResult["lifecycleResults"] = [];
-  const maxPerTarget = Math.max(0, Number(config.orphanRecovery.maxPerSync || 50));
-  if (!maxPerTarget) return results;
+type LifecycleReconciler = typeof reconcileLegacyTransportLifecycle;
 
-  for (const targetSystemCode of ["QA", "PRD"]) {
-    if (!systemCodes.includes(targetSystemCode)) continue;
-    const candidates = await listImportedLifecycleNeedingConfirmation(targetSystemCode, Math.min(maxPerTarget, 200));
-    if (!candidates.length) continue;
+export async function runLifecycleReconciliationForSync(
+  options: {
+    syncMode: SyncMode;
+    systemCodes: string[];
+    limitPerTarget: number;
+  },
+  reconcile: LifecycleReconciler = reconcileLegacyTransportLifecycle
+): Promise<RunCrSyncResult["lifecycleResults"]> {
+  if (options.syncMode !== "full_period") return [];
+  const selected = (["QA", "PRD"] as TransportTargetSystemCode[])
+    .filter((code) => options.systemCodes.includes(code));
+  if (!selected.length || options.limitPerTarget <= 0) return [];
 
-    let confirmed = 0;
-    let failed = 0;
-    for (const candidate of candidates) {
-      try {
-        const logs = await readTransportImportLogsByRequest({
-          targetSystemCode,
-          trkorr: candidate.trkorr,
-          rowCount: 50
-        });
-        if (!logs.length) continue;
-        const upsert = await upsertConfirmedTransportLogs(targetSystemCode, logs);
-        confirmed += upsert.processed;
-      } catch {
-        failed += 1;
-      }
-    }
-
-    results.push({
-      targetSystemCode,
-      evidenceSource: "confirmed",
-      logCount: confirmed,
-      confirmationCandidates: candidates.length,
-      orphanImportsFailed: failed,
-      message: `Reconfirmed ${confirmed} of ${candidates.length} inferred lifecycle record(s) from SAP TPALOG.`
-    });
-  }
-
-  return results;
+  const reconciliation = await reconcile({
+    targetSystemCodes: selected,
+    limitPerTarget: options.limitPerTarget
+  });
+  return reconciliation.targets.map((target: LifecycleReconciliationTargetResult) => ({
+    targetSystemCode: target.targetSystemCode,
+    evidenceSource: "confirmed" as const,
+    legacyCandidates: target.candidates,
+    legacyConfirmed: target.confirmed,
+    legacyDowngraded: target.downgraded,
+    reconciliationFailures: target.failed,
+    constraintValidated: reconciliation.constraintValidated
+  }));
 }
 
 export function normalizeSystemCodes(value: unknown) {
@@ -427,7 +429,7 @@ function isScopedParentRequest(
   );
 }
 
-function shouldRefreshDetail(
+export function shouldRefreshDetail(
   signature: {
     status_code?: string | null;
     status_group?: string | null;
@@ -448,7 +450,10 @@ function shouldRefreshDetail(
   if (String(signature.status_group || "") !== String(request.statusGroup || "")) return true;
   if (String(signature.changed_date || "") !== String(request.changedDate || "")) return true;
   if (normalizeSapTime(signature.changed_time) !== normalizeSapTime(request.changedTime)) return true;
-  return false;
+  // E071 object entries can be added or deleted without changing the parent
+  // E070 header timestamp, so every request in the selected sync period must
+  // still reconcile its detail against SAP.
+  return true;
 }
 
 function normalizeSapTime(value?: string | null) {

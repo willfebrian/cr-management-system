@@ -10,7 +10,7 @@ import type { CrDetail, IssueDetail } from "../../shared/types.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..", "..", "..");
 
-type ZipEntry = {
+export type ZipEntry = {
   name: string;
   data: Buffer;
 };
@@ -241,7 +241,7 @@ function enlargeProductionApprovalRows(xml: string) {
   });
 }
 
-function replaceAllTextAcrossRuns(xml: string, placeholder: string, value: string) {
+export function replaceAllTextAcrossRuns(xml: string, placeholder: string, value: string) {
   let rendered = replaceTextInsideTextNodes(xml, placeholder, value);
   return replaceParagraphs(rendered, (paragraph) => {
     let nextParagraph = paragraph;
@@ -320,7 +320,7 @@ function splitRuns(xml: string) {
   return tokens;
 }
 
-function extractRunText(runXml: string) {
+export function extractRunText(runXml: string) {
   const parts: string[] = [];
   const tokenRegex = /<w:(t|tab|br)(?:\s[^>]*)?\/>|<w:t[^>]*>([\s\S]*?)<\/w:t>/g;
   let match: RegExpExecArray | null;
@@ -345,7 +345,7 @@ function setRunText(runXml: string, value: string) {
   return withoutText.replace(/(<w:r[^>]*>)/, `$1${textXml}`);
 }
 
-function stripHighlight(runXml: string) {
+export function stripHighlight(runXml: string) {
   return runXml.replace(/<w:highlight[^>]*\/>/g, "");
 }
 
@@ -367,7 +367,7 @@ function formatDateDmy(value?: string) {
   return `${String(date.getDate()).padStart(2, "0")}.${String(date.getMonth() + 1).padStart(2, "0")}.${date.getFullYear()}`;
 }
 
-function sanitizeFilename(value: string) {
+export function sanitizeFilename(value: string) {
   return value.replace(/[<>:"/\\|?*\u0000-\u001F]/g, "-").replace(/\s+/g, " ").trim();
 }
 
@@ -388,7 +388,7 @@ function decodeXml(value: string) {
     .replace(/&apos;/g, "'");
 }
 
-function readZipEntries(zipPath: string) {
+export function readZipEntries(zipPath: string) {
   const buffer = readTemplateBuffer(zipPath);
   const eocdOffset = findEndOfCentralDirectory(buffer);
   const entryCount = buffer.readUInt16LE(eocdOffset + 10);
@@ -417,7 +417,7 @@ function readZipEntries(zipPath: string) {
   return entries;
 }
 
-function writeZipEntries(entries: ZipEntry[]) {
+export function writeZipEntries(entries: ZipEntry[]) {
   const localParts: Buffer[] = [];
   const centralParts: Buffer[] = [];
   let offset = 0;

@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, PencilLine, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import type { ProjectDetail as ProjectDetailModel, ProjectListResult, ProjectStatus } from "../../../shared/projectTypes.js";
 import { fetchProjectDetail, fetchProjects } from "../../api/projectApi.js";
 import { ProjectDetail } from "./ProjectDetail.js";
 import { ProjectActions } from "./ProjectActions.js";
+import type { IncompleteItem } from "../../issueIncomplete.js";
 
 export type ProjectReportState =
   | { kind: "loading" }
@@ -21,6 +22,7 @@ type ProjectReportProps = {
   onCreate?: () => void;
   onChange?: (projectId: number) => void;
   onOpenIssue?: (issueId: number) => void;
+  onOpenIncompleteItem?: (issueId: number, item: IncompleteItem) => void;
   userRole?: "ADMIN" | "USER";
   onDeleted?: () => void;
 };
@@ -92,6 +94,7 @@ export function ProjectReport(props: ProjectReportProps) {
       onSelect={select}
       onChange={props.onChange}
       onOpenIssue={props.onOpenIssue}
+      onOpenIncompleteItem={props.onOpenIncompleteItem}
       userRole={props.userRole}
       onDeleted={() => {
         setRefreshToken((value) => value + 1);
@@ -108,13 +111,14 @@ type ProjectReportViewProps = {
   onSelect?: (projectId: number) => void;
   onChange?: (projectId: number) => void;
   onOpenIssue?: (issueId: number) => void;
+  onOpenIncompleteItem?: (issueId: number, item: IncompleteItem) => void;
   userRole?: "ADMIN" | "USER";
   onDeleted?: () => void;
   onPrevious?: () => void;
   onNext?: () => void;
 };
 
-export function ProjectReportView({ state, onSelect, onChange, onOpenIssue, userRole, onDeleted, onPrevious, onNext }: ProjectReportViewProps) {
+export function ProjectReportView({ state, onSelect, onChange, onOpenIssue, onOpenIncompleteItem, userRole, onDeleted, onPrevious, onNext }: ProjectReportViewProps) {
   if (state.kind === "loading") return <p className="project-state">Loading Projects…</p>;
   if (state.kind === "empty") return <p className="project-state">No Projects found.</p>;
   if (state.kind === "error") return <p className="project-error" role="alert">{state.message}</p>;
@@ -144,15 +148,16 @@ export function ProjectReportView({ state, onSelect, onChange, onOpenIssue, user
     <main className="project-detail-pane">
       {state.detailLoading && <p className="project-state">Loading Project detail…</p>}
       {state.detail && <>
-        <div className="project-detail-controls">
-          {state.detail.project.projectStatus !== "cancelled" && onChange && <button
-            className="project-button"
-            type="button"
-            onClick={() => onChange(state.detail!.project.id)}
-          ><PencilLine size={15} aria-hidden="true" /> Change Project</button>}
-          {userRole && <ProjectActions
+        <ProjectDetail
+          detail={state.detail}
+          onOpenIssue={onOpenIssue}
+          actions={userRole ? <ProjectActions
             project={state.detail.project}
             userRole={userRole}
+            onChange={state.detail.project.projectStatus !== "cancelled" && onChange
+              ? () => onChange(state.detail!.project.id)
+              : undefined}
+            onOpenIncompleteItem={onOpenIncompleteItem}
             onChanged={(detail) => {
               if (detail) {
                 onSelect?.(detail.project.id);
@@ -160,9 +165,8 @@ export function ProjectReportView({ state, onSelect, onChange, onOpenIssue, user
               }
               onDeleted?.();
             }}
-          />}
-        </div>
-        <ProjectDetail detail={state.detail} onOpenIssue={onOpenIssue} />
+          /> : undefined}
+        />
       </>}
     </main>
   </div>;

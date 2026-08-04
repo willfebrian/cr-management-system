@@ -4,6 +4,7 @@ import type {
   ProjectIssueOption,
   ProjectListResult,
   ProjectOwnerOption,
+  ProjectCrReadiness,
   ProjectSavePayload
 } from "../../shared/projectTypes.js";
 
@@ -45,6 +46,23 @@ export async function cancelProject(id: number, reason: string): Promise<Project
 
 export async function deleteProject(id: number): Promise<{ ok: true; id: number }> {
   return fetchProjectJson(`/api/projects/${id}`, { method: "DELETE" });
+}
+
+export async function fetchProjectCrTransportReadiness(id: number): Promise<ProjectCrReadiness> {
+  return fetchProjectJson(`/api/projects/${id}/cr-transport-readiness`);
+}
+
+export async function downloadProjectCrTransport(id: number): Promise<{ blob: Blob; filename: string }> {
+  const response = await fetch(`/api/projects/${id}/cr-transport-document`, { credentials: "include" });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    const error = new Error(body?.message || `Request failed: ${response.status}`) as Error & { readiness?: ProjectCrReadiness };
+    error.readiness = body?.readiness;
+    throw error;
+  }
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] || `CR Transport Project ${id}.docx`;
+  return { blob: await response.blob(), filename };
 }
 
 async function fetchProjectJson<T>(url: string, init: RequestInit = {}): Promise<T> {

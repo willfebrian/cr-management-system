@@ -48,6 +48,9 @@ export async function listProjects(filters: ProjectFilters = {}): Promise<Projec
   const { rows } = await pool.query(`
     SELECT h.*,
            COUNT(l.id)::int AS issue_count,
+           (h.project_status = 'cancelled' AND h.project_no = (
+             SELECT MAX(candidate.project_no) FROM project_headers candidate
+           )) AS can_delete,
            COUNT(*) OVER()::int AS total_count
     FROM project_headers h
     LEFT JOIN project_issue_links l ON l.project_id = h.id
@@ -69,7 +72,11 @@ export async function listProjects(filters: ProjectFilters = {}): Promise<Projec
 export async function getProjectDetail(id: number): Promise<ProjectDetail> {
   const projectId = requireId(id, "Project");
   const header = await pool.query(`
-    SELECT h.*, COUNT(l.id)::int AS issue_count
+    SELECT h.*,
+           COUNT(l.id)::int AS issue_count,
+           (h.project_status = 'cancelled' AND h.project_no = (
+             SELECT MAX(candidate.project_no) FROM project_headers candidate
+           )) AS can_delete
     FROM project_headers h
     LEFT JOIN project_issue_links l ON l.project_id = h.id
     WHERE h.id = $1
@@ -466,14 +473,26 @@ export async function deleteProject(id: number, actor: AuthUser): Promise<{ ok: 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext('project_number'))");
     const currentResult = await client.query(`
-      SELECT id, project_key, project_name
+      SELECT id, project_no, project_key, project_name, project_status
       FROM project_headers
       WHERE id = $1
       FOR UPDATE
     `, [projectId]);
     const current = currentResult.rows[0];
     if (!current) throw new ProjectRepositoryError("Project not found", 404, "PROJECT_NOT_FOUND");
+    const highestResult = await client.query("SELECT MAX(project_no) AS max_project_no FROM project_headers");
+    if (
+      current.project_status !== "cancelled"
+      || Number(current.project_no) !== Number(highestResult.rows[0]?.max_project_no)
+    ) {
+      throw new ProjectRepositoryError(
+        "Only the latest cancelled Project can be deleted",
+        409,
+        "PROJECT_DELETE_NOT_ALLOWED"
+      );
+    }
     await client.query(`
       UPDATE project_issue_link_history
       SET relation_status = 'deleted',
@@ -530,6 +549,7 @@ function mapProjectRow(row: QueryResultRow): ProjectRow {
     ownerPersonId: Number(row.owner_person_id),
     ownerName: row.owner_name_snapshot,
     projectStatus: row.project_status,
+    canDelete: row.can_delete === true,
     issueCount: Number(row.issue_count || 0),
     createdBy: row.created_by_snapshot,
     createdAt: iso(row.created_at),

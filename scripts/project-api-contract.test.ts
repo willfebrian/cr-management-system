@@ -54,7 +54,7 @@ test("creates, changes, cancels, and deletes Projects with the exact payload con
   }
 });
 
-test("surfaces server conflict messages and exposes no Project document generation API", async () => {
+test("surfaces server conflict messages", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => Response.json(
     { message: "Issue belongs to PRJ-26009" },
@@ -62,8 +62,28 @@ test("surfaces server conflict messages and exposes no Project document generati
   );
   try {
     await assert.rejects(projectApi.fetchProjectDetail(7), /PRJ-26009/);
-    assert.equal("generateProjectDocument" in projectApi, false);
-    assert.equal("downloadProjectCrTransport" in projectApi, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("checks readiness and downloads a Project CR Transport document", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = async (input) => {
+    calls.push(String(input));
+    if (String(input).endsWith("readiness")) return Response.json({ ready: true, missingCount: 0, groups: [] });
+    return new Response(new Blob(["docx"]), { headers: { "Content-Disposition": "attachment; filename=project.docx" } });
+  };
+  try {
+    assert.equal((await projectApi.fetchProjectCrTransportReadiness(7)).ready, true);
+    const download = await projectApi.downloadProjectCrTransport(7);
+    assert.equal(download.filename, "project.docx");
+    assert.equal(await download.blob.text(), "docx");
+    assert.deepEqual(calls, [
+      "/api/projects/7/cr-transport-readiness",
+      "/api/projects/7/cr-transport-document"
+    ]);
   } finally {
     globalThis.fetch = originalFetch;
   }
