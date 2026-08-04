@@ -93,9 +93,9 @@ The deployment process runs the reconciliation job once after applying the schem
 
 ## Cache Behavior
 
-`refreshTransportLifecycleFromCache` must no longer preserve an invalid confirmed row merely because its evidence label says `confirmed`. Preservation requires a valid stored step `I`.
+`refreshTransportLifecycleFromCache` must not promote matching target-cache headers to imported. It preserves valid confirmed step-I rows. A legacy confirmed row with a null or non-I step is skipped without updating timestamps or metadata until live reconciliation succeeds; this prevents an SAP connection failure from being interpreted as evidence that the import did not happen.
 
-The cache refresh may create or retain pending placeholders, but only the confirmed TPALOG flow may promote them to imported. Existing valid confirmed step-I rows are never downgraded by cache refresh.
+The cache refresh may create or retain pending placeholders, but only the confirmed TPALOG flow may promote them to imported. Once reconciliation downgrades an invalid legacy row to pending, target-cache matching cannot promote it again. Existing valid confirmed step-I rows are never downgraded by cache refresh.
 
 ## Reporting and Observability
 
