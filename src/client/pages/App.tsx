@@ -2164,7 +2164,7 @@ function IssueEditor({
         </button>
         {expandedPhases.dev ? (
           <div className="phase-pair-grid">
-            <ValueHelpField label="DEV Tester" kind="people" personMode="full_name" value={form.participants?.dev_tester || ""} onChange={(value) => updateParticipant("dev_tester", value)} placeholder="Full name" disabled={devDisabled} incompleteTarget="issue-dev-tester" />
+            <ValueHelpField label="DEV Tester" kind="people" role="tester" personMode="full_name" value={form.participants?.dev_tester || ""} onChange={(value) => updateParticipant("dev_tester", value)} placeholder="Full name" disabled={devDisabled} incompleteTarget="issue-dev-tester" />
             <TimestampInput label="Testing Date" value={form.timeline?.dev_tested_date} onChange={(value) => updateTimeline("dev_tested_date", value)} disabled={devDisabled} incompleteTarget="issue-dev-testing-date" />
             <ValueHelpField label="DEV Evaluator" kind="people" role="evaluator" personMode="full_name" value={form.participants?.dev_evaluator || ""} onChange={(value) => updateParticipant("dev_evaluator", value)} placeholder="Full name" disabled={devDisabled} incompleteTarget="issue-dev-evaluator" />
             <TimestampInput label="Evaluation Date" value={form.timeline?.dev_evaluated_date} onChange={(value) => updateTimeline("dev_evaluated_date", value)} disabled={devDisabled} incompleteTarget="issue-dev-evaluation-date" />
@@ -2186,9 +2186,9 @@ function IssueEditor({
         </button>
         {expandedPhases.qa ? (
           <div className="phase-pair-grid">
-            <ValueHelpField label="QA Transporter" kind="people" personMode="full_name" value={form.participants?.qa_transporter || ""} onChange={(value) => updateParticipant("qa_transporter", value)} placeholder="Full name" disabled={qaDisabled} incompleteTarget="issue-qa-transporter" />
+            <ValueHelpField label="QA Transporter" kind="people" role="transporter" personMode="full_name" value={form.participants?.qa_transporter || ""} onChange={(value) => updateParticipant("qa_transporter", value)} placeholder="Full name" disabled={qaDisabled} incompleteTarget="issue-qa-transporter" />
             <label>Transport Date<input className="readonly-input" value={formatIssueTimestamp(primaryCr?.qa_import_date, primaryCr?.qa_import_time)} readOnly /></label>
-            <ValueHelpField label="QA Tester" kind="people" personMode="full_name" value={form.participants?.qa_tester || ""} onChange={(value) => updateParticipant("qa_tester", value)} placeholder="Full name" disabled={qaDisabled} incompleteTarget="issue-qa-tester" />
+            <ValueHelpField label="QA Tester" kind="people" role="tester" personMode="full_name" value={form.participants?.qa_tester || ""} onChange={(value) => updateParticipant("qa_tester", value)} placeholder="Full name" disabled={qaDisabled} incompleteTarget="issue-qa-tester" />
             <TimestampInput label="Testing Date" value={form.timeline?.qa_tested_date} onChange={(value) => updateTimeline("qa_tested_date", value)} disabled={qaDisabled} incompleteTarget="issue-qa-testing-date" />
             <ValueHelpField label="QA Evaluator" kind="people" role="evaluator" personMode="full_name" value={form.participants?.qa_evaluator || ""} onChange={(value) => updateParticipant("qa_evaluator", value)} placeholder="Full name" disabled={qaDisabled} incompleteTarget="issue-qa-evaluator" />
             <TimestampInput label="Evaluation Date" value={form.timeline?.qa_evaluated_date} onChange={(value) => updateTimeline("qa_evaluated_date", value)} disabled={qaDisabled} incompleteTarget="issue-qa-evaluation-date" />
@@ -2216,7 +2216,7 @@ function IssueEditor({
             <TimestampInput label="Evaluation Date" value={form.timeline?.prd_evaluated_date} onChange={(value) => updateTimeline("prd_evaluated_date", value)} disabled={prdRequestDisabled} incompleteTarget="issue-prd-evaluation-date" />
             <ValueHelpField label="Approver" kind="people" role="approver" personMode="full_name" value={form.participants?.approval || ""} onChange={(value) => updateParticipant("approval", value)} placeholder="Full name" disabled={prdRequestDisabled} incompleteTarget="issue-approver" />
             <TimestampInput label="Approval Date" value={form.timeline?.approval_date} onChange={(value) => updateTimeline("approval_date", value)} disabled={prdRequestDisabled} incompleteTarget="issue-approval-date" />
-            <ValueHelpField label="PRD Transporter" kind="people" personMode="full_name" value={form.participants?.executor || ""} onChange={(value) => updateParticipant("executor", value)} placeholder="Full name" disabled={prdTransportDisabled} incompleteTarget="issue-prd-transporter" />
+            <ValueHelpField label="PRD Transporter" kind="people" role="transporter" personMode="full_name" value={form.participants?.executor || ""} onChange={(value) => updateParticipant("executor", value)} placeholder="Full name" disabled={prdTransportDisabled} incompleteTarget="issue-prd-transporter" />
             <label>Transport Date<input className="readonly-input" value={formatIssueTimestamp(primaryCr?.prd_import_date, primaryCr?.prd_import_time)} readOnly /></label>
           </div>
         ) : null}
