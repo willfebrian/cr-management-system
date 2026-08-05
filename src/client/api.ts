@@ -306,13 +306,23 @@ export async function searchOutlookEmail(subject: string): Promise<{ rows: Outlo
         signal: controller.signal
       });
       clearTimeout(timeoutId);
-      if (localRes.ok) {
-        const data = await localRes.json();
-        if (data && Array.isArray(data.rows)) {
-          return data;
+      
+      const data = await localRes.json();
+      
+      if (!localRes.ok) {
+        if (data && data.error) {
+          throw new Error(data.error); // Throw application error from Agent to UI
         }
+        continue;
       }
-    } catch (err) {
+      
+      if (data && Array.isArray(data.rows)) {
+        return data;
+      }
+    } catch (err: any) {
+      if (err.message && err.message.includes("Gagal mengambil email")) {
+        throw err; // Stop loop and fallback, throw directly to UI!
+      }
       console.warn(`Local Agent fetch failed for ${url}:`, err);
     }
   }
