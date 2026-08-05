@@ -472,51 +472,6 @@ export function MasterDataWorkspace() {
                   </div>
                 </div>
               </div>
-
-              <div style={{ paddingTop: "1.5rem", borderTop: "1px solid var(--color-border, #e5e7eb)" }}>
-                <h4 style={{ margin: "0 0 1rem 0", fontSize: "1rem", color: "var(--color-text-heading, #111827)" }}>Linux Server Internal Exchange EWS Configuration</h4>
-                <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-                  <div>
-                    <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "600", color: "var(--color-text, #374151)", fontSize: "0.875rem" }}>
-                      Internal Exchange Host
-                    </label>
-                    <input
-                      type="text"
-                      value={settings.exchange_host}
-                      onChange={(e) => setSettings({ ...settings, exchange_host: e.target.value })}
-                      placeholder="e.g. mail.trst.co.id"
-                      style={{ width: "100%", padding: "0.625rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", fontSize: "0.875rem" }}
-                    />
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-                    <div>
-                      <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "600", color: "var(--color-text, #374151)", fontSize: "0.875rem" }}>
-                        Exchange Service User (Optional)
-                      </label>
-                      <input
-                        type="text"
-                        value={settings.exchange_user}
-                        onChange={(e) => setSettings({ ...settings, exchange_user: e.target.value })}
-                        placeholder="e.g. domain\svc-crmanagement"
-                        style={{ width: "100%", padding: "0.625rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", fontSize: "0.875rem" }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "600", color: "var(--color-text, #374151)", fontSize: "0.875rem" }}>
-                        Exchange Service Password (Optional)
-                      </label>
-                      <input
-                        type="password"
-                        value={settings.exchange_pass}
-                        onChange={(e) => setSettings({ ...settings, exchange_pass: e.target.value })}
-                        placeholder="••••••••"
-                        style={{ width: "100%", padding: "0.625rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", fontSize: "0.875rem" }}
-                      />
-                    </div>
-                  </div>
-                  <small style={{ color: "var(--color-text-muted, #6b7280)", display: "block" }}>Used on Linux server to authenticate with internal Exchange Server 2017. Users using the web will never be prompted for password.</small>
-                </div>
-              </div>
             </div>
 
             <div style={{ marginTop: "2rem", paddingTop: "1.5rem", borderTop: "1px solid var(--color-border, #e5e7eb)", display: "flex", justifyContent: "flex-end" }}>

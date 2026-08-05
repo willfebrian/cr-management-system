@@ -6,10 +6,11 @@ const execFileAsync = promisify(execFile);
 const PORT = process.env.AGENT_PORT || 18888;
 
 const server = http.createServer(async (req, res) => {
-  // CORS Headers
+  // CORS & Chrome Private Network Access (PNA) Headers
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Private-Network", "true");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Access-Control-Allow-Private-Network");
 
   if (req.method === "OPTIONS") {
     res.writeHead(204);
@@ -110,6 +111,6 @@ const server = http.createServer(async (req, res) => {
   res.end(JSON.stringify({ error: "Not Found" }));
 });
 
-server.listen(PORT, "127.0.0.1", () => {
-  console.log(`[CR Outlook Agent] Running locally at http://127.0.0.1:${PORT}`);
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`[CR Outlook Agent] Running locally on port ${PORT}`);
 });

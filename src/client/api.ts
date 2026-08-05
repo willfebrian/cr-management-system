@@ -302,12 +302,12 @@ export async function searchOutlookEmail(subject: string): Promise<{ rows: Outlo
     clearTimeout(timeoutId);
     if (localRes.ok) {
       const data = await localRes.json();
-      if (data && Array.isArray(data.rows) && data.rows.length > 0) {
+      if (data && Array.isArray(data.rows)) {
         return data;
       }
     }
   } catch {
-    // Local Agent not active, proceed to central backend fallback
+    // Local Agent not active on client laptop, proceed to central backend fallback
   }
 
   // 2. Central Server Backend Fallback
