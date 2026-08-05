@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchAdminPeople, fetchAdminSettings, updateAdminPerson, updateAdminSettings, createAdminPerson, deleteAdminPerson, type AdminPersonRow } from "../api";
-import { Check, Loader2, Save, X, Trash2 } from "lucide-react";
+import { Check, Loader2, Save, X, Trash2, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 
 export function MasterDataWorkspace() {
   const [activeTab, setActiveTab] = useState<"people" | "settings">("people");
@@ -14,6 +14,13 @@ export function MasterDataWorkspace() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [newPersonData, setNewPersonData] = useState({ full_name: "", nickname: "", email: "" });
+  const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [deleteConfirmPerson, setDeleteConfirmPerson] = useState<AdminPersonRow | null>(null);
+
+  function showToast(type: "success" | "error", message: string) {
+    setToast({ type, message });
+    window.setTimeout(() => setToast(null), 4000);
+  }
 
   useEffect(() => {
     Promise.all([fetchAdminPeople(), fetchAdminSettings()])
@@ -48,7 +55,7 @@ export function MasterDataWorkspace() {
     } catch (err) {
       // Revert on error
       setPeople((prev) => prev.map((p) => (p.id === id ? { ...p, [field]: !value } : p)));
-      alert("Failed to update person role");
+      showToast("error", "Failed to update person role");
     }
   }
 
@@ -60,8 +67,9 @@ export function MasterDataWorkspace() {
       setPeople((prev) => [newPerson, ...prev]);
       setShowAddModal(false);
       setNewPersonData({ full_name: "", nickname: "", email: "" });
+      showToast("success", "New person added successfully!");
     } catch (err) {
-      alert(`Failed to create new person: ${err instanceof Error ? err.message : String(err)}`);
+      showToast("error", `Failed to create new person: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setSaving(false);
     }
@@ -88,17 +96,22 @@ export function MasterDataWorkspace() {
       });
     } catch (err) {
       setPeople((prev) => prev.map((p) => (p.id === id ? { ...p, [field]: person[field] } : p)));
-      alert(`Failed to update ${field}`);
+      showToast("error", `Failed to update ${field}`);
     }
   }
 
-  async function handleDeletePerson(id: number) {
-    if (!confirm("Are you sure you want to delete this person?")) return;
+  async function confirmDeletePerson() {
+    if (!deleteConfirmPerson) return;
     try {
-      await deleteAdminPerson(id);
-      setPeople((prev) => prev.filter((p) => p.id !== id));
+      setSaving(true);
+      await deleteAdminPerson(deleteConfirmPerson.id);
+      setPeople((prev) => prev.filter((p) => p.id !== deleteConfirmPerson.id));
+      showToast("success", `Person "${deleteConfirmPerson.full_name || deleteConfirmPerson.nickname}" deleted successfully!`);
+      setDeleteConfirmPerson(null);
     } catch (err) {
-      alert(`Failed to delete person: ${err instanceof Error ? err.message : String(err)}`);
+      showToast("error", `Failed to delete person: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -106,9 +119,9 @@ export function MasterDataWorkspace() {
     setSaving(true);
     try {
       await updateAdminSettings(settings);
-      alert("Settings saved successfully!");
+      showToast("success", "Settings saved successfully!");
     } catch (err) {
-      alert("Failed to save settings");
+      showToast("error", "Failed to save settings");
     } finally {
       setSaving(false);
     }
@@ -277,7 +290,7 @@ export function MasterDataWorkspace() {
                       <input type="checkbox" checked={p.is_transporter} onChange={(e) => togglePersonFlag(p.id, "is_transporter", e.target.checked)} style={{ cursor: "pointer", width: "1.1rem", height: "1.1rem", accentColor: "var(--color-primary, #2563eb)" }} />
                     </td>
                     <td style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", textAlign: "center" }}>
-                      <button onClick={() => handleDeletePerson(p.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted, #9ca3af)", padding: "0.25rem" }} title="Delete Person">
+                      <button onClick={() => setDeleteConfirmPerson(p)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted, #9ca3af)", padding: "0.25rem", transition: "color 0.2s" }} onMouseEnter={(e) => e.currentTarget.style.color = "#ef4444"} onMouseLeave={(e) => e.currentTarget.style.color = "var(--color-text-muted, #9ca3af)"} title="Delete Person">
                         <Trash2 size={16} />
                       </button>
                     </td>
@@ -361,6 +374,31 @@ export function MasterDataWorkspace() {
               <button type="submit" disabled={saving} style={{ padding: "0.625rem 1rem", borderRadius: "4px", background: "var(--color-primary, #2563eb)", color: "white", border: "none", cursor: "pointer" }}>{saving ? "Saving..." : "Save Person"}</button>
             </div>
           </form>
+        </div>
+      )}
+
+      {deleteConfirmPerson && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+          <div style={{ background: "var(--color-bg, #ffffff)", padding: "1.75rem", borderRadius: "12px", width: "100%", maxWidth: "420px", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem", color: "#dc2626" }}>
+              <AlertTriangle size={24} />
+              <h3 style={{ margin: 0, fontSize: "1.125rem", fontWeight: "600", color: "var(--color-text-heading, #111827)" }}>Confirm Delete</h3>
+            </div>
+            <p style={{ color: "var(--color-text-muted, #4b5563)", fontSize: "0.875rem", lineHeight: "1.5", marginBottom: "1.5rem" }}>
+              Are you sure you want to delete <strong>"{deleteConfirmPerson.full_name || deleteConfirmPerson.nickname}"</strong>? This action cannot be undone.
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem" }}>
+              <button type="button" onClick={() => setDeleteConfirmPerson(null)} disabled={saving} style={{ padding: "0.5rem 1rem", borderRadius: "6px", background: "transparent", border: "1px solid var(--color-border, #d1d5db)", cursor: "pointer", fontSize: "0.875rem", fontWeight: "500" }}>Cancel</button>
+              <button type="button" onClick={confirmDeletePerson} disabled={saving} style={{ padding: "0.5rem 1rem", borderRadius: "6px", background: "#dc2626", color: "white", border: "none", cursor: "pointer", fontSize: "0.875rem", fontWeight: "600" }}>{saving ? "Deleting..." : "Yes, Delete"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className={`toast ${toast.type}`} role="status">
+          {toast.type === "success" ? <CheckCircle2 size={18} /> : <XCircle size={18} />}
+          <span>{toast.message}</span>
         </div>
       )}
     </div>
