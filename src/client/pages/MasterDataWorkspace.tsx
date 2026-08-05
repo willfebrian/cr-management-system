@@ -229,9 +229,9 @@ export function MasterDataWorkspace() {
                         onBlur={(e) => updatePersonText(p.id, "full_name", e.target.value)}
                         placeholder="e.g. John Doe"
                         style={{ padding: "0.5rem 0.625rem", borderRadius: "4px", border: "1px solid transparent", background: "transparent", color: "var(--color-text, #111827)", fontSize: "0.875rem", width: "100%", transition: "all 0.2s" }}
-                        onFocus={(e) => { e.target.style.border = "1px solid var(--color-primary, #2563eb)"; e.target.style.background = "var(--color-bg, #ffffff)"; }}
-                        onMouseLeave={(e) => { if (document.activeElement !== e.target) { e.target.style.border = "1px solid transparent"; e.target.style.background = "transparent"; } }}
-                        onMouseEnter={(e) => { if (document.activeElement !== e.target) { e.target.style.border = "1px solid var(--color-border, #d1d5db)"; e.target.style.background = "var(--color-bg, #ffffff)"; } }}
+                        onFocus={(e) => { e.currentTarget.style.border = "1px solid var(--color-primary, #2563eb)"; e.currentTarget.style.background = "var(--color-bg, #ffffff)"; }}
+                        onMouseLeave={(e) => { if (document.activeElement !== e.currentTarget) { e.currentTarget.style.border = "1px solid transparent"; e.currentTarget.style.background = "transparent"; } }}
+                        onMouseEnter={(e) => { if (document.activeElement !== e.currentTarget) { e.currentTarget.style.border = "1px solid var(--color-border, #d1d5db)"; e.currentTarget.style.background = "var(--color-bg, #ffffff)"; } }}
                       />
                     </td>
                     <td style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", verticalAlign: "middle" }}>
@@ -241,9 +241,9 @@ export function MasterDataWorkspace() {
                         onBlur={(e) => updatePersonText(p.id, "nickname", e.target.value)}
                         placeholder="e.g. johndoe"
                         style={{ padding: "0.5rem 0.625rem", borderRadius: "4px", border: "1px solid transparent", background: "transparent", color: "var(--color-text, #111827)", fontSize: "0.875rem", width: "100%", transition: "all 0.2s" }}
-                        onFocus={(e) => { e.target.style.border = "1px solid var(--color-primary, #2563eb)"; e.target.style.background = "var(--color-bg, #ffffff)"; }}
-                        onMouseLeave={(e) => { if (document.activeElement !== e.target) { e.target.style.border = "1px solid transparent"; e.target.style.background = "transparent"; } }}
-                        onMouseEnter={(e) => { if (document.activeElement !== e.target) { e.target.style.border = "1px solid var(--color-border, #d1d5db)"; e.target.style.background = "var(--color-bg, #ffffff)"; } }}
+                        onFocus={(e) => { e.currentTarget.style.border = "1px solid var(--color-primary, #2563eb)"; e.currentTarget.style.background = "var(--color-bg, #ffffff)"; }}
+                        onMouseLeave={(e) => { if (document.activeElement !== e.currentTarget) { e.currentTarget.style.border = "1px solid transparent"; e.currentTarget.style.background = "transparent"; } }}
+                        onMouseEnter={(e) => { if (document.activeElement !== e.currentTarget) { e.currentTarget.style.border = "1px solid var(--color-border, #d1d5db)"; e.currentTarget.style.background = "var(--color-bg, #ffffff)"; } }}
                       />
                     </td>
                     <td style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", verticalAlign: "middle" }}>
@@ -253,9 +253,9 @@ export function MasterDataWorkspace() {
                         onBlur={(e) => updatePersonText(p.id, "email", e.target.value)}
                         placeholder="e.g. name@company.com"
                         style={{ padding: "0.5rem 0.625rem", borderRadius: "4px", border: "1px solid transparent", background: "transparent", color: "var(--color-text, #111827)", width: "100%", fontSize: "0.875rem", transition: "all 0.2s" }}
-                        onFocus={(e) => { e.target.style.border = "1px solid var(--color-primary, #2563eb)"; e.target.style.background = "var(--color-bg, #ffffff)"; }}
-                        onMouseLeave={(e) => { if (document.activeElement !== e.target) { e.target.style.border = "1px solid transparent"; e.target.style.background = "transparent"; } }}
-                        onMouseEnter={(e) => { if (document.activeElement !== e.target) { e.target.style.border = "1px solid var(--color-border, #d1d5db)"; e.target.style.background = "var(--color-bg, #ffffff)"; } }}
+                        onFocus={(e) => { e.currentTarget.style.border = "1px solid var(--color-primary, #2563eb)"; e.currentTarget.style.background = "var(--color-bg, #ffffff)"; }}
+                        onMouseLeave={(e) => { if (document.activeElement !== e.currentTarget) { e.currentTarget.style.border = "1px solid transparent"; e.currentTarget.style.background = "transparent"; } }}
+                        onMouseEnter={(e) => { if (document.activeElement !== e.currentTarget) { e.currentTarget.style.border = "1px solid var(--color-border, #d1d5db)"; e.currentTarget.style.background = "var(--color-bg, #ffffff)"; } }}
                       />
                     </td>
                     <td style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", verticalAlign: "middle" }}>

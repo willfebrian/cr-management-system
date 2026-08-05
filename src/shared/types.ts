@@ -90,11 +90,14 @@ export type StatusTrendData = {
 
 export type SapSystemConfig = {
   code: string;
-  is_requester: boolean;
-  is_abaper: boolean;
-  is_tester: boolean;
-  is_evaluator: boolean;
-  is_approver: boolean;
+  enabled?: boolean;
+  server?: string;
+  owner?: string;
+  is_requester?: boolean;
+  is_abaper?: boolean;
+  is_tester?: boolean;
+  is_evaluator?: boolean;
+  is_approver?: boolean;
 };
 
 export type CrRequest = {
