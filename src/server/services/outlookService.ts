@@ -16,6 +16,14 @@ export type OutlookEmailMatch = {
 export async function searchOutlookEmails(querySubject: string): Promise<OutlookEmailMatch[]> {
   if (!querySubject || !querySubject.trim()) return [];
 
+  // Outlook COM/MAPI is only available on Windows OS where Outlook Desktop Client is installed
+  if (process.platform !== "win32") {
+    throw new Error(
+      "Outlook Desktop MAPI integration requires running on a Windows environment with Microsoft Outlook installed. " +
+      "On Linux servers, Outlook Desktop MAPI is not supported. Please run the backend locally on Windows or paste email text directly into Problem Analysis."
+    );
+  }
+
   // Get active group emails from DB
   const { rows: groupRows } = await pool.query<{ email_address: string }>(
     `SELECT email_address FROM issue_group_emails WHERE is_active = TRUE`
