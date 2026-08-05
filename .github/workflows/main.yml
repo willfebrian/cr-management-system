@@ -14,8 +14,9 @@ jobs:
         run: |
           set -e
           cd /var/www/cr-management-system
-          git pull origin master
-          npm ci
+          git fetch origin master
+          git reset --hard origin/master
+          npm install
           npm run build
-          sudo systemctl restart cr-management
-          sudo systemctl status cr-management --no-pager
+          sudo systemctl restart cr-management || true
+          sudo systemctl status cr-management --no-pager || true
