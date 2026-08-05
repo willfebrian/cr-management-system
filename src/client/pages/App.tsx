@@ -1726,9 +1726,9 @@ function IssueEditor({
 
     if (hasExistingName || hasExistingProblem || hasExistingImpact) {
       setAiOverwriteSelections({
-        issueName: hasExistingName,
-        problemAnalysis: hasExistingProblem,
-        impactAnalysis: hasExistingImpact
+        issueName: true,
+        problemAnalysis: true,
+        impactAnalysis: true
       });
       setShowAiOverwriteModal(true);
       return;

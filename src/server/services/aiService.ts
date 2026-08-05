@@ -94,9 +94,9 @@ ${emailContext}`;
     const cleanedJson = rawContent.replace(/```json\s*/gi, "").replace(/```\s*/gi, "").trim();
     const parsed = JSON.parse(cleanedJson);
     return {
-      issueName: parsed.issueName || "",
-      problemAnalysis: parsed.problemAnalysis || rawContent,
-      impactAnalysis: parsed.impactAnalysis || ""
+      issueName: parsed.issueName || parsed.issue_name || "",
+      problemAnalysis: parsed.problemAnalysis || parsed.problem_analysis || rawContent,
+      impactAnalysis: parsed.impactAnalysis || parsed.impact_analysis || ""
     };
   } catch {
     // Fallback if parsing failed
