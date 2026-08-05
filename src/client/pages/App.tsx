@@ -1702,13 +1702,29 @@ function IssueEditor({
     setGeneratingAi(true);
     try {
       const result = await generateAnalysis(fetchedEmailContext, form.emailSubject, form.issueName);
-      if (selections.issueName && result.issueName) update("issueName", result.issueName);
-      if (selections.problemAnalysis && result.problemAnalysis) update("problemAnalysis", result.problemAnalysis);
-      if (selections.impactAnalysis && result.impactAnalysis) update("impactAnalysis", result.impactAnalysis);
-      onNotify?.("success", "Analysis generated successfully with OpenRouter AI!");
+      
+      let updatedCount = 0;
+      if (selections.issueName && result.issueName) {
+        update("issueName", result.issueName);
+        updatedCount++;
+      }
+      if (selections.problemAnalysis && result.problemAnalysis) {
+        update("problemAnalysis", result.problemAnalysis);
+        updatedCount++;
+      }
+      if (selections.impactAnalysis && result.impactAnalysis) {
+        update("impactAnalysis", result.impactAnalysis);
+        updatedCount++;
+      }
+
+      if (updatedCount > 0) {
+        onNotify?.("success", `Generated AI analysis for ${updatedCount} field(s) successfully!`);
+      } else {
+        onNotify?.("error", "AI generation returned empty results. Please try clicking Generate AI again.");
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      onNotify?.("error", `AI Generation failed: ${msg}`);
+      onNotify?.("error", `AI Generation Error: ${msg}`);
     } finally {
       setGeneratingAi(false);
     }

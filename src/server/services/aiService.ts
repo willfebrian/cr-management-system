@@ -76,34 +76,56 @@ ${emailContext}`;
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt }
       ],
-      temperature: 0.3,
-      response_format: { type: "json_object" }
+      temperature: 0.3
     })
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`OpenRouter API error (${response.status}): ${errorText}`);
+    throw new Error(`OpenRouter API Error (${response.status}): ${errorText}`);
   }
 
   const data = await response.json();
-  const rawContent = data.choices?.[0]?.message?.content || "";
+  if (data.error) {
+    throw new Error(`OpenRouter Error: ${data.error.message || JSON.stringify(data.error)}`);
+  }
+
+  const rawContent = data.choices?.[0]?.message?.content?.trim() || "";
+
+  if (!rawContent) {
+    throw new Error(`AI Model (${model}) returned an empty response. Please try clicking Generate AI again.`);
+  }
 
   try {
     // Strip markdown JSON wrapping if present
     const cleanedJson = rawContent.replace(/```json\s*/gi, "").replace(/```\s*/gi, "").trim();
     const parsed = JSON.parse(cleanedJson);
+    
+    const issueName = parsed.issueName || parsed.issue_name || "";
+    const problemAnalysis = parsed.problemAnalysis || parsed.problem_analysis || "";
+    const impactAnalysis = parsed.impactAnalysis || parsed.impact_analysis || "";
+
+    if (!problemAnalysis && !impactAnalysis && !issueName) {
+      throw new Error(`AI response JSON did not contain expected fields. Raw output: ${rawContent.slice(0, 150)}...`);
+    }
+
     return {
-      issueName: parsed.issueName || parsed.issue_name || "",
-      problemAnalysis: parsed.problemAnalysis || parsed.problem_analysis || rawContent,
-      impactAnalysis: parsed.impactAnalysis || parsed.impact_analysis || ""
+      issueName,
+      problemAnalysis: problemAnalysis || rawContent,
+      impactAnalysis
     };
-  } catch {
-    // Fallback if parsing failed
-    return {
-      issueName: "",
-      problemAnalysis: rawContent,
-      impactAnalysis: ""
-    };
+  } catch (err: any) {
+    if (err.message && err.message.startsWith("AI response JSON")) {
+      throw err;
+    }
+    // If JSON parsing fails but we have text, return text in problemAnalysis
+    if (rawContent && rawContent.length > 10) {
+      return {
+        issueName: "",
+        problemAnalysis: rawContent,
+        impactAnalysis: ""
+      };
+    }
+    throw new Error(`Failed to parse AI response: ${err.message}. Raw output: ${rawContent.slice(0, 100)}...`);
   }
 }
