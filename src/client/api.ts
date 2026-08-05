@@ -293,21 +293,28 @@ export type OutlookSearchEmailResult = {
 
 export async function searchOutlookEmail(subject: string): Promise<{ rows: OutlookSearchEmailResult[] }> {
   // 1. Try Local Client Agent on user's Windows laptop (Passwordless local MAPI)
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000);
-    const localRes = await fetch(`http://127.0.0.1:18888/api/fetch-outlook?q=${encodeURIComponent(subject)}`, {
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
-    if (localRes.ok) {
-      const data = await localRes.json();
-      if (data && Array.isArray(data.rows)) {
-        return data;
+  const agentUrls = [
+    `http://127.0.0.1:18888/api/fetch-outlook?q=${encodeURIComponent(subject)}`,
+    `http://localhost:18888/api/fetch-outlook?q=${encodeURIComponent(subject)}`
+  ];
+
+  for (const url of agentUrls) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const localRes = await fetch(url, {
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      if (localRes.ok) {
+        const data = await localRes.json();
+        if (data && Array.isArray(data.rows)) {
+          return data;
+        }
       }
+    } catch (err) {
+      console.warn(`Local Agent fetch failed for ${url}:`, err);
     }
-  } catch {
-    // Local Agent not active on client laptop, proceed to central backend fallback
   }
 
   // 2. Central Server Backend Fallback
