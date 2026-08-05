@@ -301,7 +301,7 @@ export async function searchOutlookEmail(subject: string): Promise<{ rows: Outlo
   for (const url of agentUrls) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
       const localRes = await fetch(url, {
         signal: controller.signal
       });
