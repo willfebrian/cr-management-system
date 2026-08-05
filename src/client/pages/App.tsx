@@ -2113,44 +2113,44 @@ function IssueEditor({
               <p style={{ margin: 0 }}>Initial issue details, analysis, requester, ABAPer, and supporting references.</p>
             </div>
           </button>
-          {expandedPhases.initiation && (
-            <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); handleFetchEmailContent(); }}
-                disabled={formDisabled || fetchingEmail || !form.emailSubject?.trim()}
-                style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.5rem 0.75rem", borderRadius: "6px", background: "var(--color-primary, #2563eb)", color: "white", border: "none", cursor: (formDisabled || fetchingEmail || !form.emailSubject?.trim()) ? "not-allowed" : "pointer", fontSize: "0.8125rem", fontWeight: "600", whiteSpace: "nowrap", transition: "all 0.2s", opacity: (formDisabled || fetchingEmail || !form.emailSubject?.trim()) ? 0.6 : 1 }}
-                title="Fetch email content from Outlook Desktop"
-              >
-                {fetchingEmail ? <Loader2 className="spinner" size={14} /> : <Mail size={14} />}
-                {fetchingEmail ? "Fetching..." : "Fetch Email"}
-              </button>
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); handleGenerateAiAnalysis(); }}
-                disabled={formDisabled || !fetchedEmailContext || generatingAi}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "0.375rem",
-                  padding: "0.5rem 0.75rem",
-                  borderRadius: "6px",
-                  background: (!fetchedEmailContext || formDisabled || generatingAi) ? "var(--color-bg-subtle, #e5e7eb)" : "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
-                  color: (!fetchedEmailContext || formDisabled || generatingAi) ? "var(--color-text-muted, #9ca3af)" : "#ffffff",
-                  border: "none",
-                  cursor: (!fetchedEmailContext || formDisabled || generatingAi) ? "not-allowed" : "pointer",
-                  fontSize: "0.8125rem",
-                  fontWeight: "600",
-                  transition: "all 0.2s"
-                }}
-                title={!fetchedEmailContext ? "Fetch email content first to enable AI generation" : "Generate Problem & Impact Analysis using OpenRouter AI"}
-              >
-                {generatingAi ? <Loader2 className="spinner" size={14} /> : <Sparkles size={14} />}
-                {generatingAi ? "Generating..." : "Generate AI"}
-              </button>
-            </div>
-          )}
-          <span className="phase-title-actions">
+          <span className="phase-title-actions" style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginLeft: "auto" }}>
+            {expandedPhases.initiation && (
+              <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); handleFetchEmailContent(); }}
+                  disabled={formDisabled || fetchingEmail || !form.emailSubject?.trim()}
+                  style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.5rem 0.75rem", borderRadius: "6px", background: "var(--color-primary, #2563eb)", color: "white", border: "none", cursor: (formDisabled || fetchingEmail || !form.emailSubject?.trim()) ? "not-allowed" : "pointer", fontSize: "0.8125rem", fontWeight: "600", whiteSpace: "nowrap", transition: "all 0.2s", opacity: (formDisabled || fetchingEmail || !form.emailSubject?.trim()) ? 0.6 : 1 }}
+                  title="Fetch email content from Outlook Desktop"
+                >
+                  {fetchingEmail ? <Loader2 className="spinner" size={14} /> : <Mail size={14} />}
+                  {fetchingEmail ? "Fetching..." : "Fetch Email"}
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); handleGenerateAiAnalysis(); }}
+                  disabled={formDisabled || !fetchedEmailContext || generatingAi}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.375rem",
+                    padding: "0.5rem 0.75rem",
+                    borderRadius: "6px",
+                    background: (!fetchedEmailContext || formDisabled || generatingAi) ? "var(--color-bg-subtle, #e5e7eb)" : "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
+                    color: (!fetchedEmailContext || formDisabled || generatingAi) ? "var(--color-text-muted, #9ca3af)" : "#ffffff",
+                    border: "none",
+                    cursor: (!fetchedEmailContext || formDisabled || generatingAi) ? "not-allowed" : "pointer",
+                    fontSize: "0.8125rem",
+                    fontWeight: "600",
+                    transition: "all 0.2s"
+                  }}
+                  title={!fetchedEmailContext ? "Fetch email content first to enable AI generation" : "Generate Problem & Impact Analysis using OpenRouter AI"}
+                >
+                  {generatingAi ? <Loader2 className="spinner" size={14} /> : <Sparkles size={14} />}
+                  {generatingAi ? "Generating..." : "Generate AI"}
+                </button>
+              </div>
+            )}
             <button type="button" onClick={() => togglePhase("initiation")} className="phase-chevron" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)", fontSize: "0.8125rem", fontWeight: "600" }}>
               {expandedPhases.initiation ? "Hide" : "Show"}
             </button>

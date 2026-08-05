@@ -49,38 +49,83 @@ const server = http.createServer(async (req, res) => {
         $namespace = $outlook.GetNamespace("MAPI")
         $inbox = $namespace.GetDefaultFolder(6)
         $items = $inbox.Items
-        $items.Sort("[ReceivedTime]", $true)
+        
+        try { $items.Sort("[ReceivedTime]", $true) } catch {}
 
-        $query = $env:SEARCH_SUBJECT.Trim().ToLower()
+        function Clean-Subject($str) {
+          if (-not $str) { return "" }
+          $cleaned = $str -replace '(?i)^\\s*(re|fw|fwd|fe|tr|vs|sv)\\s*:\\s*', ''
+          $cleaned = $cleaned -replace '(?i)^\\s*\\[(external|balas|forward)\\]\\s*', ''
+          $cleaned = $cleaned -replace '(?i)^\\s*(re|fw|fwd|fe|tr|vs|sv)\\s*:\\s*', ''
+          return $cleaned.Trim().ToLower()
+        }
+
+        function To-B64($str) {
+          if (-not $str) { return "" }
+          $s = [string]$str
+          if ($s.Length -gt 15000) { $s = $s.Substring(0, 15000) }
+          $bytes = [System.Text.Encoding]::UTF8.GetBytes($s)
+          return [System.Convert]::ToBase64String($bytes)
+        }
+
+        $rawQuery = $env:SEARCH_SUBJECT.Trim().ToLower()
+        $cleanQuery = Clean-Subject $env:SEARCH_SUBJECT
         $matches = @()
 
         foreach ($item in $items) {
           if ($matches.Count -ge 5) { break }
-          $subject = ""
-          try { $subject = $item.Subject } catch {}
-          if ($subject -and $subject.ToLower().Contains($query)) {
-            $to = ""
-            try { $to = $item.To } catch {}
-            $senderEmail = ""
-            try { $senderEmail = $item.SenderEmailAddress } catch {}
-            $senderName = ""
-            try { $senderName = $item.SenderName } catch {}
-            $body = ""
-            try { $body = $item.Body } catch {}
+          try {
+            $subject = ""
+            try { $subject = $item.Subject } catch {}
+            if (-not $subject) { continue }
 
-            $matches += [PSCustomObject]@{
-              receivedAt = $item.ReceivedTime.ToString("yyyy-MM-dd HH:mm:ss")
-              senderName = $senderName
-              senderEmail = $senderEmail
-              to = $to
-              subject = $subject
-              body = $body
+            $subLower = $subject.ToLower()
+            $cleanSub = Clean-Subject $subject
+
+            $isMatch = $subLower.Contains($rawQuery) -or $cleanSub.Contains($cleanQuery) -or ($cleanQuery.Length -gt 3 -and $cleanQuery.Contains($cleanSub))
+
+            if (-not $isMatch -and $cleanQuery.Length -gt 3) {
+              $words = $cleanQuery -split '\\s+' | Where-Object { $_.Length -gt 2 }
+              if ($words.Count -gt 0) {
+                $allWordsFound = $true
+                foreach ($w in $words) {
+                  if (-not $cleanSub.Contains($w)) {
+                    $allWordsFound = $false
+                    break
+                  }
+                }
+                if ($allWordsFound) { $isMatch = $true }
+              }
             }
+
+            if ($isMatch) {
+              $to = ""
+              try { $to = $item.To } catch {}
+              $senderEmail = ""
+              try { $senderEmail = $item.SenderEmailAddress } catch {}
+              $senderName = ""
+              try { $senderName = $item.SenderName } catch {}
+              $body = ""
+              try { $body = $item.Body } catch {}
+              $recTime = ""
+              try { $recTime = $item.ReceivedTime.ToString("yyyy-MM-dd HH:mm:ss") } catch { $recTime = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss") }
+
+              $matches += [PSCustomObject]@{
+                receivedAt = $recTime
+                senderName = To-B64 $senderName
+                senderEmail = To-B64 $senderEmail
+                to = To-B64 $to
+                subject = To-B64 $subject
+                body = To-B64 $body
+              }
+            }
+          } catch {
+            # Skip any item that throws COM exception
           }
         }
         $matches | ConvertTo-Json -Compress
       } catch {
-        Write-Error "OUTLOOK_NOT_OPEN"
+        Write-Error $_.Exception.Message
       }
     `;
 
@@ -99,15 +144,29 @@ const server = http.createServer(async (req, res) => {
       let rows = [];
       if (stdout && stdout.trim()) {
         const parsed = JSON.parse(stdout.trim());
-        rows = Array.isArray(parsed) ? parsed : [parsed];
+        const list = Array.isArray(parsed) ? parsed : [parsed];
+        rows = list.map(r => ({
+          receivedAt: r.receivedAt || "",
+          senderName: Buffer.from(r.senderName || "", "base64").toString("utf-8"),
+          senderEmail: Buffer.from(r.senderEmail || "", "base64").toString("utf-8"),
+          to: Buffer.from(r.to || "", "base64").toString("utf-8"),
+          subject: Buffer.from(r.subject || "", "base64").toString("utf-8"),
+          body: Buffer.from(r.body || "", "base64").toString("utf-8")
+        }));
       }
 
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ rows, source: "local-outlook-agent" }));
     } catch (error) {
       console.error("Local Agent PowerShell Error:", error);
-      res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Gagal mengambil email: Aplikasi Microsoft Outlook Desktop belum dibuka di laptop Anda. Silakan buka aplikasi Microsoft Outlook Desktop terlebih dahulu, lalu coba lagi." }));
+      const errMsg = (error && error.stderr) ? error.stderr.toString() : String(error);
+      if (errMsg.includes("0x800401F3") || errMsg.includes("Invalid class string") || errMsg.includes("GetDefaultFolder")) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Gagal mengambil email: Aplikasi Microsoft Outlook Desktop belum dibuka di laptop Anda. Silakan buka aplikasi Microsoft Outlook Desktop terlebih dahulu, lalu coba lagi." }));
+      } else {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: `Outlook Search Error: ${errMsg.slice(0, 300)}` }));
+      }
     }
     return;
   }

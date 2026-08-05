@@ -551,10 +551,11 @@ button > svg {
 
 .report-layout {
   display: grid;
-  grid-template-columns: minmax(520px, 1.4fr) minmax(360px, 0.9fr);
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
   gap: 16px;
   align-items: stretch;
   min-height: 0;
+  width: 100%;
 }
 
 .report-layout.detail-closed {
@@ -562,17 +563,19 @@ button > svg {
 }
 
 .filterbar {
-  display: grid;
-  grid-template-columns: auto minmax(260px, 1fr) 160px 160px;
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   align-items: center;
   margin-bottom: 14px;
+  width: 100%;
 }
 
 .filterbar input,
 .filterbar select {
   height: 38px;
-  min-width: 0;
+  min-width: 110px;
+  flex: 1 1 auto;
   border: 1px solid #cfd7e2;
   border-radius: 6px;
   padding: 8px 10px;
@@ -582,14 +585,18 @@ button > svg {
 }
 
 .report-topbar {
-  display: grid;
-  grid-template-columns: minmax(260px, 0.8fr) minmax(520px, 1.5fr);
-  align-items: start;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  width: 100%;
 }
 
 .page-identity {
   min-width: 0;
   max-width: 620px;
+  flex: 1 1 260px;
 }
 
 .page-identity .page-description {
@@ -1540,9 +1547,11 @@ button > svg {
 
 .phase-title {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
+  flex-wrap: wrap;
+  width: 100%;
 }
 
 @keyframes spin {

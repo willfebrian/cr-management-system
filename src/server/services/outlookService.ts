@@ -24,47 +24,92 @@ export async function searchOutlookEmails(querySubject: string): Promise<Outlook
   }
 
   // Windows Desktop MAPI COM Object Implementation
-  const script = `
-    $ErrorActionPreference = 'Stop'
-    try {
-      $outlook = New-Object -ComObject Outlook.Application
-      $namespace = $outlook.GetNamespace("MAPI")
-      $inbox = $namespace.GetDefaultFolder(6)
-      $items = $inbox.Items
-      $items.Sort("[ReceivedTime]", $true)
+    const script = `
+      $ErrorActionPreference = 'Stop'
+      try {
+        $outlook = New-Object -ComObject Outlook.Application
+        $namespace = $outlook.GetNamespace("MAPI")
+        $inbox = $namespace.GetDefaultFolder(6)
+        $items = $inbox.Items
+        
+        try { $items.Sort("[ReceivedTime]", $true) } catch {}
 
-      $query = $env:SEARCH_SUBJECT.Trim().ToLower()
-      $matches = @()
+        function Clean-Subject($str) {
+          if (-not $str) { return "" }
+          $cleaned = $str -replace '(?i)^\\s*(re|fw|fwd|fe|tr|vs|sv)\\s*:\\s*', ''
+          $cleaned = $cleaned -replace '(?i)^\\s*\\[(external|balas|forward)\\]\\s*', ''
+          $cleaned = $cleaned -replace '(?i)^\\s*(re|fw|fwd|fe|tr|vs|sv)\\s*:\\s*', ''
+          return $cleaned.Trim().ToLower()
+        }
 
-      foreach ($item in $items) {
-        if ($matches.Count -ge 5) { break }
-        $subject = ""
-        try { $subject = $item.Subject } catch {}
-        if ($subject -and $subject.ToLower().Contains($query)) {
-          $to = ""
-          try { $to = $item.To } catch {}
-          $senderEmail = ""
-          try { $senderEmail = $item.SenderEmailAddress } catch {}
-          $senderName = ""
-          try { $senderName = $item.SenderName } catch {}
-          $body = ""
-          try { $body = $item.Body } catch {}
+        function To-B64($str) {
+          if (-not $str) { return "" }
+          $s = [string]$str
+          if ($s.Length -gt 15000) { $s = $s.Substring(0, 15000) }
+          $bytes = [System.Text.Encoding]::UTF8.GetBytes($s)
+          return [System.Convert]::ToBase64String($bytes)
+        }
 
-          $matches += [PSCustomObject]@{
-            receivedAt = $item.ReceivedTime.ToString("yyyy-MM-dd HH:mm:ss")
-            senderName = $senderName
-            senderEmail = $senderEmail
-            to = $to
-            subject = $subject
-            body = $body
+        $rawQuery = $env:SEARCH_SUBJECT.Trim().ToLower()
+        $cleanQuery = Clean-Subject $env:SEARCH_SUBJECT
+        $matches = @()
+
+        foreach ($item in $items) {
+          if ($matches.Count -ge 5) { break }
+          try {
+            $subject = ""
+            try { $subject = $item.Subject } catch {}
+            if (-not $subject) { continue }
+
+            $subLower = $subject.ToLower()
+            $cleanSub = Clean-Subject $subject
+
+            $isMatch = $subLower.Contains($rawQuery) -or $cleanSub.Contains($cleanQuery) -or ($cleanQuery.Length -gt 3 -and $cleanQuery.Contains($cleanSub))
+
+            if (-not $isMatch -and $cleanQuery.Length -gt 3) {
+              $words = $cleanQuery -split '\\s+' | Where-Object { $_.Length -gt 2 }
+              if ($words.Count -gt 0) {
+                $allWordsFound = $true
+                foreach ($w in $words) {
+                  if (-not $cleanSub.Contains($w)) {
+                    $allWordsFound = $false
+                    break
+                  }
+                }
+                if ($allWordsFound) { $isMatch = $true }
+              }
+            }
+
+            if ($isMatch) {
+              $to = ""
+              try { $to = $item.To } catch {}
+              $senderEmail = ""
+              try { $senderEmail = $item.SenderEmailAddress } catch {}
+              $senderName = ""
+              try { $senderName = $item.SenderName } catch {}
+              $body = ""
+              try { $body = $item.Body } catch {}
+              $recTime = ""
+              try { $recTime = $item.ReceivedTime.ToString("yyyy-MM-dd HH:mm:ss") } catch { $recTime = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss") }
+
+              $matches += [PSCustomObject]@{
+                receivedAt = $recTime
+                senderName = To-B64 $senderName
+                senderEmail = To-B64 $senderEmail
+                to = To-B64 $to
+                subject = To-B64 $subject
+                body = To-B64 $body
+              }
+            }
+          } catch {
+            # Skip any item that throws COM exception
           }
         }
+        $matches | ConvertTo-Json -Compress
+      } catch {
+        Write-Error $_.Exception.Message
       }
-      $matches | ConvertTo-Json -Compress
-    } catch {
-      Write-Error "OUTLOOK_NOT_OPEN"
-    }
-  `;
+    `;
 
   try {
     const { stdout } = await execFileAsync("powershell", [
@@ -78,9 +123,19 @@ export async function searchOutlookEmails(querySubject: string): Promise<Outlook
       maxBuffer: 10 * 1024 * 1024
     });
 
-    if (!stdout || !stdout.trim()) return [];
-    const parsed = JSON.parse(stdout.trim());
-    const results = Array.isArray(parsed) ? parsed : [parsed];
+    let results: OutlookEmailMatch[] = [];
+    if (stdout && stdout.trim()) {
+      const parsed = JSON.parse(stdout.trim());
+      const list = Array.isArray(parsed) ? parsed : [parsed];
+      results = list.map((r: any) => ({
+        receivedAt: r.receivedAt || "",
+        senderName: Buffer.from(r.senderName || "", "base64").toString("utf-8"),
+        senderEmail: Buffer.from(r.senderEmail || "", "base64").toString("utf-8"),
+        to: Buffer.from(r.to || "", "base64").toString("utf-8"),
+        subject: Buffer.from(r.subject || "", "base64").toString("utf-8"),
+        body: Buffer.from(r.body || "", "base64").toString("utf-8")
+      }));
+    }
     return results;
   } catch (error) {
     console.error("Error querying Outlook via PowerShell:", error);
