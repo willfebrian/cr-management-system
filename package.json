@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",
+    "dev": "npx concurrently \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "tsx watch src/server/index.ts",
     "dev:client": "vite --host 127.0.0.1 --port 5173",
     "test": "npm run test:baseline && npm run test:project && npm run test:users && npm run test:integration",

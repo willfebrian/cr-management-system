@@ -13,6 +13,7 @@ export function MasterDataWorkspace() {
     ai_instruction_impact: "",
     openrouter_api_key: "",
     openrouter_model: "openrouter/auto",
+    exchange_host: "",
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -42,6 +43,7 @@ export function MasterDataWorkspace() {
           ai_instruction_impact: settingsRes.ai_instruction_impact || "",
           openrouter_api_key: settingsRes.openrouter_api_key || "",
           openrouter_model: settingsRes.openrouter_model || "openrouter/auto",
+          exchange_host: settingsRes.exchange_host || "",
         });
       })
       .finally(() => setLoading(false));
@@ -506,6 +508,23 @@ export function MasterDataWorkspace() {
                     />
                     <small style={{ color: "var(--color-text-muted, #6b7280)", display: "block", marginTop: "0.25rem" }}>Default: <code>openrouter/auto</code> (or <code>anthropic/claude-3.5-sonnet</code>, <code>google/gemini-2.5-flash</code>, etc.)</small>
                   </div>
+                </div>
+              </div>
+
+              <div style={{ paddingTop: "1rem", borderTop: "1px solid var(--color-border, #e5e7eb)" }}>
+                <h4 style={{ margin: "0 0 1rem 0", fontSize: "1rem", color: "var(--color-text-heading, #111827)" }}>Linux Server Internal Exchange EWS Configuration</h4>
+                <div>
+                  <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "600", color: "var(--color-text, #374151)", fontSize: "0.875rem" }}>
+                    Internal Exchange Host (Optional for Linux Server)
+                  </label>
+                  <input
+                    type="text"
+                    value={settings.exchange_host}
+                    onChange={(e) => setSettings({ ...settings, exchange_host: e.target.value })}
+                    placeholder="e.g. mail.trst.co.id"
+                    style={{ width: "100%", padding: "0.625rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", fontSize: "0.875rem" }}
+                  />
+                  <small style={{ color: "var(--color-text-muted, #6b7280)", display: "block", marginTop: "0.25rem" }}>Internal company Exchange Server 2017 EWS endpoint (e.g., <code>mail.trst.co.id</code>). Used when application is deployed on internal Linux servers.</small>
                 </div>
               </div>
             </div>
