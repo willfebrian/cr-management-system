@@ -1545,6 +1545,16 @@ button > svg {
   gap: 16px;
 }
 
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.spinner {
+  animation: spin 0.75s linear infinite;
+  display: inline-block;
+}
+
 .phase-title > div {
   flex: 1;
   min-width: 0;
