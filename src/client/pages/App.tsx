@@ -1659,6 +1659,12 @@ function IssueEditor({
   const [fetchingEmail, setFetchingEmail] = useState(false);
   const [fetchedEmailContext, setFetchedEmailContext] = useState<string | null>(null);
   const [generatingAi, setGeneratingAi] = useState(false);
+  const [showAiOverwriteModal, setShowAiOverwriteModal] = useState(false);
+  const [aiOverwriteSelections, setAiOverwriteSelections] = useState<{
+    issueName: boolean;
+    problemAnalysis: boolean;
+    impactAnalysis: boolean;
+  }>({ issueName: true, problemAnalysis: true, impactAnalysis: true });
 
   async function handleFetchEmailContent() {
     if (!form.emailSubject?.trim()) {
@@ -1691,23 +1697,44 @@ function IssueEditor({
     }
   }
 
-  async function handleGenerateAiAnalysis() {
-    if (!fetchedEmailContext) {
-      onNotify?.("error", "No email context available. Please fetch email content first.");
-      return;
-    }
+  async function executeAiGeneration(selections: { issueName: boolean; problemAnalysis: boolean; impactAnalysis: boolean }) {
+    if (!fetchedEmailContext) return;
     setGeneratingAi(true);
     try {
-      const result = await generateAnalysis(fetchedEmailContext, form.emailSubject);
-      update("problemAnalysis", result.problemAnalysis);
-      update("impactAnalysis", result.impactAnalysis);
-      onNotify?.("success", "Problem and Impact Analysis generated successfully with OpenRouter AI!");
+      const result = await generateAnalysis(fetchedEmailContext, form.emailSubject, form.issueName);
+      if (selections.issueName && result.issueName) update("issueName", result.issueName);
+      if (selections.problemAnalysis && result.problemAnalysis) update("problemAnalysis", result.problemAnalysis);
+      if (selections.impactAnalysis && result.impactAnalysis) update("impactAnalysis", result.impactAnalysis);
+      onNotify?.("success", "Analysis generated successfully with OpenRouter AI!");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       onNotify?.("error", `AI Generation failed: ${msg}`);
     } finally {
       setGeneratingAi(false);
     }
+  }
+
+  async function handleGenerateAiAnalysis() {
+    if (!fetchedEmailContext) {
+      onNotify?.("error", "No email context available. Please fetch email content first.");
+      return;
+    }
+    
+    const hasExistingName = Boolean(form.issueName?.trim());
+    const hasExistingProblem = Boolean(form.problemAnalysis?.trim());
+    const hasExistingImpact = Boolean(form.impactAnalysis?.trim());
+
+    if (hasExistingName || hasExistingProblem || hasExistingImpact) {
+      setAiOverwriteSelections({
+        issueName: hasExistingName,
+        problemAnalysis: hasExistingProblem,
+        impactAnalysis: hasExistingImpact
+      });
+      setShowAiOverwriteModal(true);
+      return;
+    }
+
+    await executeAiGeneration({ issueName: true, problemAnalysis: true, impactAnalysis: true });
   }
 
   const [templatePreview, setTemplatePreview] = useState<{ title: string; body: string; bodyHtml?: string } | null>(null);
@@ -2062,16 +2089,57 @@ function IssueEditor({
       ) : null}
 
       <section className="panel editor-section issue-phase-card">
-        <button className="phase-title phase-toggle" type="button" onClick={() => togglePhase("initiation")}>
-          <ChevronDown size={18} />
-          <div>
-            <h2>Issue Initiation</h2>
-            <p>Initial issue details, analysis, requester, ABAPer, and supporting references.</p>
-          </div>
+        <div className="phase-title phase-toggle" style={{ cursor: "default", display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+          <button type="button" onClick={() => togglePhase("initiation")} style={{ display: "flex", alignItems: "flex-start", background: "none", border: "none", padding: 0, margin: 0, textAlign: "left", cursor: "pointer", color: "inherit", font: "inherit" }}>
+            <ChevronDown size={18} style={{ marginTop: "0.25rem", marginRight: "0.75rem", transform: expandedPhases.initiation ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.2s" }} />
+            <div>
+              <h2 style={{ margin: "0 0 0.25rem 0" }}>Issue Initiation</h2>
+              <p style={{ margin: 0 }}>Initial issue details, analysis, requester, ABAPer, and supporting references.</p>
+            </div>
+          </button>
+          {expandedPhases.initiation && (
+            <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); handleFetchEmailContent(); }}
+                disabled={formDisabled || fetchingEmail || !form.emailSubject?.trim()}
+                style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.5rem 0.75rem", borderRadius: "6px", background: "var(--color-primary, #2563eb)", color: "white", border: "none", cursor: (formDisabled || fetchingEmail || !form.emailSubject?.trim()) ? "not-allowed" : "pointer", fontSize: "0.8125rem", fontWeight: "600", whiteSpace: "nowrap", transition: "all 0.2s", opacity: (formDisabled || fetchingEmail || !form.emailSubject?.trim()) ? 0.6 : 1 }}
+                title="Fetch email content from Outlook Desktop"
+              >
+                {fetchingEmail ? <Loader2 className="spinner" size={14} /> : <Mail size={14} />}
+                {fetchingEmail ? "Fetching..." : "Fetch Email"}
+              </button>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); handleGenerateAiAnalysis(); }}
+                disabled={formDisabled || !fetchedEmailContext || generatingAi}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.375rem",
+                  padding: "0.5rem 0.75rem",
+                  borderRadius: "6px",
+                  background: (!fetchedEmailContext || formDisabled || generatingAi) ? "var(--color-bg-subtle, #e5e7eb)" : "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
+                  color: (!fetchedEmailContext || formDisabled || generatingAi) ? "var(--color-text-muted, #9ca3af)" : "#ffffff",
+                  border: "none",
+                  cursor: (!fetchedEmailContext || formDisabled || generatingAi) ? "not-allowed" : "pointer",
+                  fontSize: "0.8125rem",
+                  fontWeight: "600",
+                  transition: "all 0.2s"
+                }}
+                title={!fetchedEmailContext ? "Fetch email content first to enable AI generation" : "Generate Problem & Impact Analysis using OpenRouter AI"}
+              >
+                {generatingAi ? <Loader2 className="spinner" size={14} /> : <Sparkles size={14} />}
+                {generatingAi ? "Generating..." : "Generate AI"}
+              </button>
+            </div>
+          )}
           <span className="phase-title-actions">
-            <span className="phase-chevron">{expandedPhases.initiation ? "Hide" : "Show"}</span>
+            <button type="button" onClick={() => togglePhase("initiation")} className="phase-chevron" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)", fontSize: "0.8125rem", fontWeight: "600" }}>
+              {expandedPhases.initiation ? "Hide" : "Show"}
+            </button>
           </span>
-        </button>
+        </div>
         {expandedPhases.initiation ? (
           <div className="issue-initiation-layout">
           <div className="issue-initiation-column issue-initiation-main">
@@ -2094,48 +2162,14 @@ function IssueEditor({
               </div>
               <label>
                 Email Subject
-                <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem", alignItems: "center" }}>
-                  <input value={form.emailSubject || ""} onChange={(event) => update("emailSubject", event.target.value)} placeholder="Email subject" disabled={formDisabled} style={{ flex: 1 }} />
-                  <button
-                    type="button"
-                    onClick={handleFetchEmailContent}
-                    disabled={formDisabled || fetchingEmail || !form.emailSubject?.trim()}
-                    style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.625rem 0.875rem", borderRadius: "6px", background: "var(--color-primary, #2563eb)", color: "white", border: "none", cursor: "pointer", fontSize: "0.8125rem", fontWeight: "600", whiteSpace: "nowrap", transition: "all 0.2s" }}
-                    title="Fetch email content from Outlook Desktop"
-                  >
-                    {fetchingEmail ? <Loader2 className="spinner" size={14} /> : <Mail size={14} />}
-                    {fetchingEmail ? "Fetching..." : "Fetch Email Content"}
-                  </button>
-                </div>
+                <input value={form.emailSubject || ""} onChange={(event) => update("emailSubject", event.target.value)} placeholder="Email subject" disabled={formDisabled} style={{ width: "100%", marginTop: "0.25rem" }} />
               </label>
+              <a href="/api/outlook/download-agent" style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #6b7280)", marginTop: "0.25rem", display: "inline-block" }}>
+                "Fetch Email" tidak jalan? Download &amp; jalankan Outlook Agent di laptop Anda
+              </a>
             </div>
             <div className="initiation-section">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
-                <h3 style={{ margin: 0 }}>Analysis</h3>
-                <button
-                  type="button"
-                  onClick={handleGenerateAiAnalysis}
-                  disabled={formDisabled || !fetchedEmailContext || generatingAi}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "0.375rem",
-                    padding: "0.4rem 0.75rem",
-                    borderRadius: "6px",
-                    background: (!fetchedEmailContext || formDisabled || generatingAi) ? "var(--color-bg-subtle, #e5e7eb)" : "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
-                    color: (!fetchedEmailContext || formDisabled || generatingAi) ? "var(--color-text-muted, #9ca3af)" : "#ffffff",
-                    border: "none",
-                    cursor: (!fetchedEmailContext || formDisabled || generatingAi) ? "not-allowed" : "pointer",
-                    fontSize: "0.8125rem",
-                    fontWeight: "600",
-                    transition: "all 0.2s"
-                  }}
-                  title={!fetchedEmailContext ? "Fetch email content first to enable AI generation" : "Generate Problem & Impact Analysis using OpenRouter AI"}
-                >
-                  {generatingAi ? <Loader2 className="spinner" size={14} /> : <Sparkles size={14} />}
-                  {generatingAi ? "Generating AI..." : "✨ Generate Analysis with AI"}
-                </button>
-              </div>
+              <h3 style={{ margin: "0 0 0.5rem 0" }}>Analysis</h3>
               <label>Problem Analysis<textarea value={form.problemAnalysis || ""} onChange={(event) => update("problemAnalysis", event.target.value)} rows={6} disabled={formDisabled} /></label>
               <label>Impact Analysis<textarea value={form.impactAnalysis || ""} onChange={(event) => update("impactAnalysis", event.target.value)} rows={6} disabled={formDisabled} /></label>
             </div>
@@ -2460,6 +2494,111 @@ function IssueEditor({
               }}><X size={15} /> Cancel</button>
               <button type="button" className="primary" disabled={saving || newPeople.some((person) => !person.fullName?.trim() || !person.nickname?.trim() || !person.department?.trim())} onClick={registerMissingPeopleAndSave}>
                 <Save size={15} /> {saving ? "Saving" : "Save People and Issue"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+      {showAiOverwriteModal ? (
+        <div className="modal-backdrop" role="presentation">
+          <section className="modal-card ai-overwrite-modal" role="dialog" aria-modal="true" style={{ maxWidth: "520px", width: "100%", padding: "1.75rem", borderRadius: "12px", background: "var(--color-bg-elevated, #ffffff)", boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem" }}>
+              <div style={{ padding: "0.5rem", borderRadius: "8px", background: "rgba(99, 102, 241, 0.1)", color: "#6366f1" }}>
+                <Sparkles size={22} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: "1.125rem", fontWeight: 700, color: "var(--color-text-heading, #111827)" }}>Replace Existing Content?</h3>
+                <p style={{ margin: "0.125rem 0 0 0", fontSize: "0.8125rem", color: "var(--color-text-muted, #6b7280)" }}>
+                  Some fields already contain text. Check the fields you want AI to replace:
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", margin: "1.25rem 0", background: "var(--color-bg-subtle, #f9fafb)", padding: "1rem", borderRadius: "8px", border: "1px solid var(--color-border, #e5e7eb)" }}>
+              {Boolean(form.issueName?.trim()) && (
+                <label style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem", cursor: "pointer", fontSize: "0.875rem", color: "var(--color-text, #1f2937)", padding: "0.375rem 0" }}>
+                  <input
+                    type="checkbox"
+                    checked={aiOverwriteSelections.issueName}
+                    onChange={(e) => setAiOverwriteSelections(prev => ({ ...prev, issueName: e.target.checked }))}
+                    style={{ marginTop: "0.2rem", width: "1.1rem", height: "1.1rem", accentColor: "#6366f1" }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600 }}>Replace Issue Name</div>
+                    <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #6b7280)", fontStyle: "italic", marginTop: "0.125rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "380px" }}>
+                      Current: "{form.issueName}"
+                    </div>
+                  </div>
+                </label>
+              )}
+
+              {Boolean(form.problemAnalysis?.trim()) && (
+                <label style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem", cursor: "pointer", fontSize: "0.875rem", color: "var(--color-text, #1f2937)", padding: "0.375rem 0" }}>
+                  <input
+                    type="checkbox"
+                    checked={aiOverwriteSelections.problemAnalysis}
+                    onChange={(e) => setAiOverwriteSelections(prev => ({ ...prev, problemAnalysis: e.target.checked }))}
+                    style={{ marginTop: "0.2rem", width: "1.1rem", height: "1.1rem", accentColor: "#6366f1" }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600 }}>Replace Problem Analysis</div>
+                    <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #6b7280)", fontStyle: "italic", marginTop: "0.125rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "380px" }}>
+                      Current: "{form.problemAnalysis?.slice(0, 60)}..."
+                    </div>
+                  </div>
+                </label>
+              )}
+
+              {Boolean(form.impactAnalysis?.trim()) && (
+                <label style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem", cursor: "pointer", fontSize: "0.875rem", color: "var(--color-text, #1f2937)", padding: "0.375rem 0" }}>
+                  <input
+                    type="checkbox"
+                    checked={aiOverwriteSelections.impactAnalysis}
+                    onChange={(e) => setAiOverwriteSelections(prev => ({ ...prev, impactAnalysis: e.target.checked }))}
+                    style={{ marginTop: "0.2rem", width: "1.1rem", height: "1.1rem", accentColor: "#6366f1" }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600 }}>Replace Impact Analysis</div>
+                    <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #6b7280)", fontStyle: "italic", marginTop: "0.125rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "380px" }}>
+                      Current: "{form.impactAnalysis?.slice(0, 60)}..."
+                    </div>
+                  </div>
+                </label>
+              )}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.625rem", marginTop: "1.5rem" }}>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setShowAiOverwriteModal(false)}
+                style={{ padding: "0.5rem 1rem", borderRadius: "6px", fontSize: "0.875rem", fontWeight: 500 }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAiOverwriteModal(false);
+                  executeAiGeneration(aiOverwriteSelections);
+                }}
+                disabled={!aiOverwriteSelections.issueName && !aiOverwriteSelections.problemAnalysis && !aiOverwriteSelections.impactAnalysis}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.375rem",
+                  padding: "0.5rem 1.125rem",
+                  borderRadius: "6px",
+                  border: "none",
+                  background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
+                  color: "#ffffff",
+                  cursor: "pointer",
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
+                  opacity: (!aiOverwriteSelections.issueName && !aiOverwriteSelections.problemAnalysis && !aiOverwriteSelections.impactAnalysis) ? 0.5 : 1
+                }}
+              >
+                <Sparkles size={16} /> Generate & Replace
               </button>
             </div>
           </section>

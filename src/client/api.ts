@@ -332,15 +332,16 @@ export async function searchOutlookEmail(subject: string): Promise<{ rows: Outlo
 }
 
 export type AiAnalysisResult = {
+  issueName: string;
   problemAnalysis: string;
   impactAnalysis: string;
 };
 
-export async function generateAnalysis(emailContext: string, emailSubject?: string): Promise<AiAnalysisResult> {
+export async function generateAnalysis(emailContext: string, emailSubject?: string, issueName?: string): Promise<AiAnalysisResult> {
   return fetchJson("/api/ai/generate-analysis", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ emailContext, emailSubject })
+    body: JSON.stringify({ emailContext, emailSubject, issueName })
   });
 }
 

@@ -1,13 +1,15 @@
 import { pool } from "../db/pool.js";
 
 export type AnalysisGenerationResult = {
+  issueName: string;
   problemAnalysis: string;
   impactAnalysis: string;
 };
 
 export async function generateAnalysisFromEmail(
   emailContext: string,
-  emailSubject?: string
+  emailSubject?: string,
+  issueName?: string
 ): Promise<AnalysisGenerationResult> {
   if (!emailContext || !emailContext.trim()) {
     throw new Error("Email context is empty. Please fetch email content first.");
@@ -15,7 +17,7 @@ export async function generateAnalysisFromEmail(
 
   // Get OpenRouter settings from DB or env
   const { rows } = await pool.query<{ setting_key: string; setting_value: string }>(
-    `SELECT setting_key, setting_value FROM app_settings WHERE setting_key IN ('openrouter_api_key', 'openrouter_model', 'ai_instruction_email', 'ai_instruction_problem', 'ai_instruction_impact')`
+    `SELECT setting_key, setting_value FROM app_settings WHERE setting_key IN ('openrouter_api_key', 'openrouter_model', 'ai_instruction_email', 'ai_instruction_issue_name', 'ai_instruction_problem', 'ai_instruction_impact')`
   );
 
   const settingsMap = rows.reduce((acc, r) => {
@@ -25,6 +27,7 @@ export async function generateAnalysisFromEmail(
 
   const apiKey = settingsMap.openrouter_api_key || process.env.OPENROUTER_API_KEY || "";
   const model = settingsMap.openrouter_model || process.env.OPENROUTER_MODEL || "openrouter/auto";
+  const issueNameInstructions = settingsMap.ai_instruction_issue_name || "";
   const problemInstructions = settingsMap.ai_instruction_problem || "";
   const impactInstructions = settingsMap.ai_instruction_impact || "";
   const generalInstructions = settingsMap.ai_instruction_email || "";
@@ -34,20 +37,24 @@ export async function generateAnalysisFromEmail(
   }
 
   const systemPrompt = `You are an expert IT Business Analyst & SAP Consultant.
-Your task is to analyze raw email communications regarding an IT/SAP issue or Change Request and generate two distinct sections:
+Your task is to analyze raw email communications regarding an IT/SAP issue or Change Request and generate three distinct sections:
 
-1. Problem Analysis: Concise technical description of the reported issue, error message, system behavior, line/program affected, and root cause if mentioned.
+1. Issue Name: A short, concise, and clear title summarizing the issue (maximum 60 characters).
+${issueNameInstructions ? `[MANDATORY INSTRUCTION FOR ISSUE NAME]:\n${issueNameInstructions}\n` : ""}
+2. Problem Analysis: Concise technical description of the reported issue, error message, system behavior, line/program affected, and root cause if mentioned.
 ${problemInstructions ? `[MANDATORY INSTRUCTION FOR PROBLEM ANALYSIS]:\n${problemInstructions}\n` : ""}
-2. Impact Analysis: Business or operational impact, affected users/processes, urgency, and potential consequences if not resolved.
+3. Impact Analysis: Business or operational impact, affected users/processes, urgency, and potential consequences if not resolved.
 ${impactInstructions ? `[MANDATORY INSTRUCTION FOR IMPACT ANALYSIS]:\n${impactInstructions}\n` : ""}
 ${generalInstructions ? `[GENERAL GUIDELINES]:\n${generalInstructions}\n` : ""}
 IMPORTANT: You MUST respond ONLY with a valid JSON object strictly matching this schema, without any markdown formatting or commentary:
 {
+  "issueName": "your concise issue name here",
   "problemAnalysis": "your problem analysis text here",
   "impactAnalysis": "your impact analysis text here"
 }`;
 
-  const userPrompt = `Email Subject: ${emailSubject || "N/A"}
+  const userPrompt = `Issue Name: ${issueName || "N/A"}
+Email Subject: ${emailSubject || "N/A"}
 
 Email Content & History:
 ${emailContext}`;
@@ -87,12 +94,14 @@ ${emailContext}`;
     const cleanedJson = rawContent.replace(/```json\s*/gi, "").replace(/```\s*/gi, "").trim();
     const parsed = JSON.parse(cleanedJson);
     return {
+      issueName: parsed.issueName || "",
       problemAnalysis: parsed.problemAnalysis || rawContent,
       impactAnalysis: parsed.impactAnalysis || ""
     };
   } catch {
     // Fallback if parsing failed
     return {
+      issueName: "",
       problemAnalysis: rawContent,
       impactAnalysis: ""
     };

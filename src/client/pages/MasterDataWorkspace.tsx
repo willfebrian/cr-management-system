@@ -9,6 +9,7 @@ export function MasterDataWorkspace() {
   const [settings, setSettings] = useState<Record<string, string>>({
     ai_instruction_glpi: "",
     ai_instruction_email: "",
+    ai_instruction_issue_name: "",
     ai_instruction_problem: "",
     ai_instruction_impact: "",
     openrouter_api_key: "",
@@ -41,6 +42,7 @@ export function MasterDataWorkspace() {
         setSettings({
           ai_instruction_glpi: settingsRes.ai_instruction_glpi || "",
           ai_instruction_email: settingsRes.ai_instruction_email || "",
+          ai_instruction_issue_name: settingsRes.ai_instruction_issue_name || "",
           ai_instruction_problem: settingsRes.ai_instruction_problem || "",
           ai_instruction_impact: settingsRes.ai_instruction_impact || "",
           openrouter_api_key: settingsRes.openrouter_api_key || "",
@@ -510,6 +512,18 @@ export function MasterDataWorkspace() {
                 />
               </div>
               
+              <div>
+                <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "600", color: "var(--color-text, #374151)", fontSize: "0.875rem" }}>
+                  Issue Name Instruction / Guidelines
+                </label>
+                <textarea
+                  value={settings.ai_instruction_issue_name}
+                  onChange={(e) => setSettings({ ...settings, ai_instruction_issue_name: e.target.value })}
+                  placeholder="e.g., Keep issue name concise (max 60 chars). Include module prefix like [FI] or [COA] if applicable..."
+                  style={{ width: "100%", height: "100px", padding: "1rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "var(--font-mono, monospace)", fontSize: "0.875rem", lineHeight: "1.5", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
+                />
+              </div>
+
               <div>
                 <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "600", color: "var(--color-text, #374151)", fontSize: "0.875rem" }}>
                   Problem Analysis Instruction / Guidelines

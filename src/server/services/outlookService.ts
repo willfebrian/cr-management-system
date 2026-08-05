@@ -15,10 +15,11 @@ export type OutlookEmailMatch = {
 export async function searchOutlookEmails(querySubject: string): Promise<OutlookEmailMatch[]> {
   if (!querySubject || !querySubject.trim()) return [];
 
-  // Check OS
+  // Server runs on Linux and has no access to Outlook COM — this path only
+  // exists as a fallback when the user's local agent (port 18888) wasn't reachable.
   if (process.platform !== "win32") {
     throw new Error(
-      "Gagal mengambil email: Aplikasi Microsoft Outlook Desktop di laptop Anda belum dibuka atau Agent belum aktif. Silakan buka aplikasi Microsoft Outlook Desktop di laptop Anda, lalu coba lagi."
+      "Gagal mengambil email: Agent lokal Outlook belum berjalan di laptop Anda. Silakan download & jalankan installer-nya di /api/outlook/download-agent, pastikan Outlook Desktop terbuka, lalu coba lagi."
     );
   }
 
