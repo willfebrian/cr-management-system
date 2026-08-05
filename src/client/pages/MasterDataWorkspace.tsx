@@ -1,21 +1,29 @@
 import { useEffect, useState } from "react";
-import { fetchAdminPeople, fetchAdminSettings, updateAdminPerson, updateAdminSettings, createAdminPerson, deleteAdminPerson, type AdminPersonRow } from "../api";
-import { Check, Loader2, Save, X, Trash2, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
+import { fetchAdminPeople, fetchAdminSettings, updateAdminPerson, updateAdminSettings, createAdminPerson, deleteAdminPerson, fetchGroupEmails, createGroupEmail, updateGroupEmail, deleteGroupEmail, type AdminPersonRow, type GroupEmailRow } from "../api";
+import { Check, Loader2, Save, X, Trash2, CheckCircle2, XCircle, AlertTriangle, Mail } from "lucide-react";
 
 export function MasterDataWorkspace() {
-  const [activeTab, setActiveTab] = useState<"people" | "settings">("people");
+  const [activeTab, setActiveTab] = useState<"people" | "settings" | "group_emails">("people");
   const [people, setPeople] = useState<AdminPersonRow[]>([]);
+  const [groupEmails, setGroupEmails] = useState<GroupEmailRow[]>([]);
   const [settings, setSettings] = useState<Record<string, string>>({
     ai_instruction_glpi: "",
     ai_instruction_email: "",
+    ai_instruction_problem: "",
+    ai_instruction_impact: "",
+    openrouter_api_key: "",
+    openrouter_model: "openrouter/auto",
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showAddGroupModal, setShowAddGroupModal] = useState(false);
   const [newPersonData, setNewPersonData] = useState({ full_name: "", nickname: "", email: "" });
+  const [newGroupEmail, setNewGroupEmail] = useState({ email_address: "", name: "" });
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [deleteConfirmPerson, setDeleteConfirmPerson] = useState<AdminPersonRow | null>(null);
+  const [deleteConfirmGroup, setDeleteConfirmGroup] = useState<GroupEmailRow | null>(null);
 
   function showToast(type: "success" | "error", message: string) {
     setToast({ type, message });
@@ -23,12 +31,17 @@ export function MasterDataWorkspace() {
   }
 
   useEffect(() => {
-    Promise.all([fetchAdminPeople(), fetchAdminSettings()])
-      .then(([peopleRes, settingsRes]) => {
+    Promise.all([fetchAdminPeople(), fetchAdminSettings(), fetchGroupEmails()])
+      .then(([peopleRes, settingsRes, groupEmailsRes]) => {
         setPeople(peopleRes.rows);
+        setGroupEmails(groupEmailsRes.rows);
         setSettings({
           ai_instruction_glpi: settingsRes.ai_instruction_glpi || "",
           ai_instruction_email: settingsRes.ai_instruction_email || "",
+          ai_instruction_problem: settingsRes.ai_instruction_problem || "",
+          ai_instruction_impact: settingsRes.ai_instruction_impact || "",
+          openrouter_api_key: settingsRes.openrouter_api_key || "",
+          openrouter_model: settingsRes.openrouter_model || "openrouter/auto",
         });
       })
       .finally(() => setLoading(false));
@@ -127,6 +140,48 @@ export function MasterDataWorkspace() {
     }
   }
 
+  async function handleAddGroupEmail(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    if (!newGroupEmail.email_address.trim()) return;
+    try {
+      setSaving(true);
+      const created = await createGroupEmail(newGroupEmail);
+      setGroupEmails((prev) => [...prev, created]);
+      setShowAddGroupModal(false);
+      setNewGroupEmail({ email_address: "", name: "" });
+      showToast("success", "Group email added successfully!");
+    } catch (err) {
+      showToast("error", `Failed to add group email: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleGroupEmailActive(id: number, active: boolean) {
+    setGroupEmails((prev) => prev.map((g) => (g.id === id ? { ...g, is_active: active } : g)));
+    try {
+      await updateGroupEmail(id, { is_active: active });
+    } catch (err) {
+      setGroupEmails((prev) => prev.map((g) => (g.id === id ? { ...g, is_active: !active } : g)));
+      showToast("error", "Failed to update group email status");
+    }
+  }
+
+  async function confirmDeleteGroupEmail() {
+    if (!deleteConfirmGroup) return;
+    try {
+      setSaving(true);
+      await deleteGroupEmail(deleteConfirmGroup.id);
+      setGroupEmails((prev) => prev.filter((g) => g.id !== deleteConfirmGroup.id));
+      showToast("success", `Group email "${deleteConfirmGroup.email_address}" deleted!`);
+      setDeleteConfirmGroup(null);
+    } catch (err) {
+      showToast("error", `Failed to delete group email: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const filteredPeople = [...people]
     .filter(
       (p) =>
@@ -165,6 +220,13 @@ export function MasterDataWorkspace() {
           onClick={() => setActiveTab("people")}
         >
           People Roles
+        </button>
+        <button
+          className={activeTab === "group_emails" ? "active" : ""}
+          style={{ fontWeight: activeTab === "group_emails" ? "bold" : "normal", background: "none", border: "none", cursor: "pointer", color: "var(--text-color)" }}
+          onClick={() => setActiveTab("group_emails")}
+        >
+          Group Emails
         </button>
         <button
           className={activeTab === "settings" ? "active" : ""}
@@ -303,6 +365,60 @@ export function MasterDataWorkspace() {
       </div>
       )}
 
+      {activeTab === "group_emails" && (
+        <div className="group-emails-tab">
+          <div style={{ background: "var(--color-bg-elevated, #ffffff)", padding: "1.5rem", borderRadius: "8px", border: "1px solid var(--color-border, #e5e7eb)", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.5rem", flexWrap: "wrap", gap: "1rem" }}>
+              <div>
+                <h3 style={{ marginTop: 0, marginBottom: "0.5rem", fontSize: "1.25rem", color: "var(--color-text-heading, #111827)" }}>Monitored Group Emails</h3>
+                <p style={{ color: "var(--color-text-muted, #6b7280)", margin: 0, fontSize: "0.875rem" }}>Maintain group mailboxes monitored by Outlook integration for AI context retrieval.</p>
+              </div>
+              <button
+                onClick={() => setShowAddGroupModal(true)}
+                disabled={saving}
+                style={{ padding: "0.625rem 1.25rem", borderRadius: "6px", background: "var(--color-primary, #2563eb)", color: "white", border: "none", cursor: "pointer", fontWeight: "600", fontSize: "0.875rem", whiteSpace: "nowrap" }}
+              >
+                + Add Group Email
+              </button>
+            </div>
+
+            <div style={{ overflowX: "auto", border: "1px solid var(--color-border, #e5e7eb)", borderRadius: "6px" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.875rem" }}>
+                <thead style={{ background: "var(--color-bg-subtle, #f9fafb)" }}>
+                  <tr>
+                    <th style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", color: "var(--color-text-muted, #6b7280)", fontWeight: "600", fontSize: "0.75rem", textTransform: "uppercase" }}>Group Email Address</th>
+                    <th style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", color: "var(--color-text-muted, #6b7280)", fontWeight: "600", fontSize: "0.75rem", textTransform: "uppercase" }}>Name / Description</th>
+                    <th style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", color: "var(--color-text-muted, #6b7280)", fontWeight: "600", fontSize: "0.75rem", textTransform: "uppercase", textAlign: "center" }}>Active</th>
+                    <th style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", textAlign: "center" }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {groupEmails.map((g) => (
+                    <tr key={g.id}>
+                      <td style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", fontWeight: "500" }}>{g.email_address}</td>
+                      <td style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", color: "var(--color-text-muted, #6b7280)" }}>{g.name || "-"}</td>
+                      <td style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", textAlign: "center" }}>
+                        <input type="checkbox" checked={g.is_active} onChange={(e) => toggleGroupEmailActive(g.id, e.target.checked)} style={{ cursor: "pointer", width: "1.1rem", height: "1.1rem", accentColor: "var(--color-primary, #2563eb)" }} />
+                      </td>
+                      <td style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", textAlign: "center" }}>
+                        <button onClick={() => setDeleteConfirmGroup(g)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted, #9ca3af)", padding: "0.25rem" }} title="Delete Group Email">
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {groupEmails.length === 0 && (
+                    <tr>
+                      <td colSpan={4} style={{ padding: "1.5rem", textAlign: "center", color: "var(--color-text-muted, #6b7280)" }}>No group emails added yet. Click "+ Add Group Email" to add one.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {activeTab === "settings" && (
         <div className="settings-tab" style={{ display: "flex", flexDirection: "column", gap: "2rem", maxWidth: "800px" }}>
           
@@ -327,14 +443,70 @@ export function MasterDataWorkspace() {
               
               <div>
                 <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "600", color: "var(--color-text, #374151)", fontSize: "0.875rem" }}>
-                  Email Generation Guidelines
+                  Problem Analysis Instruction / Guidelines
+                </label>
+                <textarea
+                  value={settings.ai_instruction_problem}
+                  onChange={(e) => setSettings({ ...settings, ai_instruction_problem: e.target.value })}
+                  placeholder="e.g., Focus on technical root cause, error codes, affected SAP T-code or program name, and steps to reproduce..."
+                  style={{ width: "100%", height: "120px", padding: "1rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "var(--font-mono, monospace)", fontSize: "0.875rem", lineHeight: "1.5", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "600", color: "var(--color-text, #374151)", fontSize: "0.875rem" }}>
+                  Impact Analysis Instruction / Guidelines
+                </label>
+                <textarea
+                  value={settings.ai_instruction_impact}
+                  onChange={(e) => setSettings({ ...settings, ai_instruction_impact: e.target.value })}
+                  placeholder="e.g., Describe operational impact on business operations, affected plant/department, urgency level, and financial or compliance risks..."
+                  style={{ width: "100%", height: "120px", padding: "1rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "var(--font-mono, monospace)", fontSize: "0.875rem", lineHeight: "1.5", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "600", color: "var(--color-text, #374151)", fontSize: "0.875rem" }}>
+                  General Email Guidelines (Optional)
                 </label>
                 <textarea
                   value={settings.ai_instruction_email}
                   onChange={(e) => setSettings({ ...settings, ai_instruction_email: e.target.value })}
                   placeholder="e.g., Address the user by their first name. Keep paragraphs short..."
-                  style={{ width: "100%", height: "150px", padding: "1rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "var(--font-mono, monospace)", fontSize: "0.875rem", lineHeight: "1.5", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
+                  style={{ width: "100%", height: "100px", padding: "1rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "var(--font-mono, monospace)", fontSize: "0.875rem", lineHeight: "1.5", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
                 />
+              </div>
+
+              <div style={{ paddingTop: "1rem", borderTop: "1px solid var(--color-border, #e5e7eb)" }}>
+                <h4 style={{ margin: "0 0 1rem 0", fontSize: "1rem", color: "var(--color-text-heading, #111827)" }}>OpenRouter AI API Configuration</h4>
+                <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                  <div>
+                    <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "600", color: "var(--color-text, #374151)", fontSize: "0.875rem" }}>
+                      OpenRouter API Key
+                    </label>
+                    <input
+                      type="password"
+                      value={settings.openrouter_api_key}
+                      onChange={(e) => setSettings({ ...settings, openrouter_api_key: e.target.value })}
+                      placeholder="sk-or-v1-..."
+                      style={{ width: "100%", padding: "0.625rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", fontSize: "0.875rem" }}
+                    />
+                    <small style={{ color: "var(--color-text-muted, #6b7280)", display: "block", marginTop: "0.25rem" }}>API key from OpenRouter.ai for auto generating Problem & Impact Analysis.</small>
+                  </div>
+                  <div>
+                    <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "600", color: "var(--color-text, #374151)", fontSize: "0.875rem" }}>
+                      OpenRouter Model
+                    </label>
+                    <input
+                      type="text"
+                      value={settings.openrouter_model}
+                      onChange={(e) => setSettings({ ...settings, openrouter_model: e.target.value })}
+                      placeholder="openrouter/auto"
+                      style={{ width: "100%", padding: "0.625rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", fontSize: "0.875rem" }}
+                    />
+                    <small style={{ color: "var(--color-text-muted, #6b7280)", display: "block", marginTop: "0.25rem" }}>Default: <code>openrouter/auto</code> (or <code>anthropic/claude-3.5-sonnet</code>, <code>google/gemini-2.5-flash</code>, etc.)</small>
+                  </div>
+                </div>
               </div>
             </div>
             
@@ -374,6 +546,44 @@ export function MasterDataWorkspace() {
               <button type="submit" disabled={saving} style={{ padding: "0.625rem 1rem", borderRadius: "4px", background: "var(--color-primary, #2563eb)", color: "white", border: "none", cursor: "pointer" }}>{saving ? "Saving..." : "Save Person"}</button>
             </div>
           </form>
+        </div>
+      )}
+
+      {showAddGroupModal && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+          <form onSubmit={handleAddGroupEmail} style={{ background: "var(--color-bg, #ffffff)", padding: "2rem", borderRadius: "8px", width: "100%", maxWidth: "400px", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}>
+            <h3 style={{ marginTop: 0, marginBottom: "1.5rem", fontSize: "1.25rem" }}>Add Group Email</h3>
+            <div style={{ marginBottom: "1rem" }}>
+              <label style={{ display: "block", marginBottom: "0.5rem", fontSize: "0.875rem", fontWeight: "500" }}>Group Email Address</label>
+              <input type="email" value={newGroupEmail.email_address} onChange={(e) => setNewGroupEmail({ ...newGroupEmail, email_address: e.target.value })} placeholder="e.g. sap-abap@trst.co.id" style={{ width: "100%", padding: "0.625rem", borderRadius: "4px", border: "1px solid var(--color-border, #d1d5db)" }} required autoFocus />
+            </div>
+            <div style={{ marginBottom: "1.5rem" }}>
+              <label style={{ display: "block", marginBottom: "0.5rem", fontSize: "0.875rem", fontWeight: "500" }}>Name / Description (Optional)</label>
+              <input type="text" value={newGroupEmail.name} onChange={(e) => setNewGroupEmail({ ...newGroupEmail, name: e.target.value })} placeholder="e.g. SAP ABAP Team" style={{ width: "100%", padding: "0.625rem", borderRadius: "4px", border: "1px solid var(--color-border, #d1d5db)" }} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "1rem" }}>
+              <button type="button" onClick={() => setShowAddGroupModal(false)} style={{ padding: "0.625rem 1rem", borderRadius: "4px", background: "transparent", border: "1px solid var(--color-border, #d1d5db)", cursor: "pointer" }}>Cancel</button>
+              <button type="submit" disabled={saving} style={{ padding: "0.625rem 1rem", borderRadius: "4px", background: "var(--color-primary, #2563eb)", color: "white", border: "none", cursor: "pointer" }}>{saving ? "Saving..." : "Save Group Email"}</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {deleteConfirmGroup && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+          <div style={{ background: "var(--color-bg, #ffffff)", padding: "1.75rem", borderRadius: "12px", width: "100%", maxWidth: "420px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem", color: "#dc2626" }}>
+              <AlertTriangle size={24} />
+              <h3 style={{ margin: 0, fontSize: "1.125rem", fontWeight: "600" }}>Confirm Delete</h3>
+            </div>
+            <p style={{ color: "var(--color-text-muted, #4b5563)", fontSize: "0.875rem", lineHeight: "1.5", marginBottom: "1.5rem" }}>
+              Are you sure you want to delete group email <strong>"{deleteConfirmGroup.email_address}"</strong>?
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem" }}>
+              <button type="button" onClick={() => setDeleteConfirmGroup(null)} disabled={saving} style={{ padding: "0.5rem 1rem", borderRadius: "6px", background: "transparent", border: "1px solid var(--color-border, #d1d5db)", cursor: "pointer" }}>Cancel</button>
+              <button type="button" onClick={confirmDeleteGroupEmail} disabled={saving} style={{ padding: "0.5rem 1rem", borderRadius: "6px", background: "#dc2626", color: "white", border: "none", cursor: "pointer" }}>{saving ? "Deleting..." : "Yes, Delete"}</button>
+            </div>
+          </div>
         </div>
       )}
 

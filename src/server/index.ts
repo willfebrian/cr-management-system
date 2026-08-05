@@ -9,6 +9,8 @@ import { requireAuth } from "./auth/middleware.js";
 import { userRoutes } from "./routes/userRoutes.js";
 import { projectRoutes } from "./routes/projectRoutes.js";
 import { adminRoutes } from "./routes/adminRoutes.js";
+import { outlookRoutes } from "./routes/outlookRoutes.js";
+import { aiRoutes } from "./routes/aiRoutes.js";
 import { ProjectRepositoryError } from "./db/projectRepository.js";
 
 const app = express();
@@ -31,6 +33,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/users", requireAuth, userRoutes);
 app.use("/api/projects", projectRoutes);
 app.use("/api/admin", requireAuth, adminRoutes);
+app.use("/api/outlook", requireAuth, outlookRoutes);
+app.use("/api/ai", requireAuth, aiRoutes);
 app.use("/api", requireAuth, crRoutes);
 app.use(express.static(clientDist));
 

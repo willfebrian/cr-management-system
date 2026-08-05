@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
-import { AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Ban, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Database, FileOutput, FileSearch, FolderKanban, KeyRound, LogIn, LogOut, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, Trash2, Users, X, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Ban, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Database, FileOutput, FileSearch, FolderKanban, KeyRound, Loader2, LogIn, LogOut, Mail, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, Sparkles, Trash2, Users, X, XCircle } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchCrDetail, fetchCrList, fetchDashboard, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind } from "../api";
+import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchCrDetail, fetchCrList, fetchDashboard, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind } from "../api";
 import { IncompleteGroupCards } from "../components/IncompleteGroupCards";
 import { DisplayNameList } from "../components/DisplayNameList";
 import { DEFAULT_ISSUE_COLUMNS, IssueColumnMenu, type IssueColumnKey } from "../components/IssueColumnMenu";
@@ -666,6 +666,7 @@ export function App() {
           <IssueEditor
             mode="create"
             detail={null}
+            onNotify={showToast}
             onDirtyChange={setIssueFormDirty}
             onSave={async (payload) => {
               setError("");
@@ -1624,6 +1625,7 @@ function IssueEditor({
   detail,
   initialAction = "",
   navigationRequest,
+  onNotify,
   onSave,
   onCancel,
   onDelete,
@@ -1633,6 +1635,7 @@ function IssueEditor({
   detail: IssueDetail | null;
   initialAction?: "" | "cancel" | "delete";
   navigationRequest?: { sequence: number; item: IncompleteItem } | null;
+  onNotify?: (type: "success" | "error", message: string) => void;
   onSave: (payload: IssueSavePayload) => Promise<void>;
   onCancel?: (id: number, reason: string) => Promise<void>;
   onDelete?: (id: number) => Promise<void>;
@@ -1652,7 +1655,61 @@ function IssueEditor({
   const [showBaseIssueCandidates, setShowBaseIssueCandidates] = useState(false);
   const [crPreview, setCrPreview] = useState<Record<string, { description?: string; status?: string; system?: string }>>({});
   const [glpiPreview, setGlpiPreview] = useState<Record<string, { title?: string; openedAt?: string; status?: string; notFound?: boolean }>>({});
-  const [expandedPhases, setExpandedPhases] = useState<ExpandedIssueSections>({ initiation: true, dev: true, qa: false, prd: false });
+  const [expandedPhases, setExpandedPhases] = useState<ExpandedIssueSections>({ initiation: true, dev: true, qa: true, prd: true });
+  const [fetchingEmail, setFetchingEmail] = useState(false);
+  const [fetchedEmailContext, setFetchedEmailContext] = useState<string | null>(null);
+  const [generatingAi, setGeneratingAi] = useState(false);
+
+  async function handleFetchEmailContent() {
+    if (!form.emailSubject?.trim()) {
+      onNotify?.("error", "Please enter an Email Subject first.");
+      setFetchedEmailContext(null);
+      return;
+    }
+    setFetchingEmail(true);
+    try {
+      const res = await searchOutlookEmail(form.emailSubject);
+      if (!res.rows || res.rows.length === 0) {
+        setFetchedEmailContext(null);
+        onNotify?.("error", `No Outlook email found matching subject "${form.emailSubject}"`);
+        return;
+      }
+      
+      // Combine all matching emails into structured context for AI
+      const combinedContext = res.rows.map((m) => 
+        `Subject: ${m.subject}\nFrom: ${m.senderName} <${m.senderEmail}>\nReceived: ${m.receivedAt}\nTo: ${m.to}\n\n${m.body.trim()}`
+      ).join("\n\n========================================\n\n");
+      
+      setFetchedEmailContext(combinedContext);
+      onNotify?.("success", `Fetched ${res.rows.length} email(s) from Outlook as AI context. AI Analysis is now enabled!`);
+    } catch (err) {
+      setFetchedEmailContext(null);
+      const msg = err instanceof Error ? err.message : String(err);
+      onNotify?.("error", `Failed to fetch email from Outlook: ${msg}`);
+    } finally {
+      setFetchingEmail(false);
+    }
+  }
+
+  async function handleGenerateAiAnalysis() {
+    if (!fetchedEmailContext) {
+      onNotify?.("error", "No email context available. Please fetch email content first.");
+      return;
+    }
+    setGeneratingAi(true);
+    try {
+      const result = await generateAnalysis(fetchedEmailContext, form.emailSubject);
+      update("problemAnalysis", result.problemAnalysis);
+      update("impactAnalysis", result.impactAnalysis);
+      onNotify?.("success", "Problem and Impact Analysis generated successfully with OpenRouter AI!");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      onNotify?.("error", `AI Generation failed: ${msg}`);
+    } finally {
+      setGeneratingAi(false);
+    }
+  }
+
   const [templatePreview, setTemplatePreview] = useState<{ title: string; body: string; bodyHtml?: string } | null>(null);
   const [templateBusy, setTemplateBusy] = useState<"" | "email" | "ticket" | "cr-transport">("");
   const [generateMenuOpen, setGenerateMenuOpen] = useState(false);
@@ -2035,10 +2092,50 @@ function IssueEditor({
                   <TimestampInput label="Created On" value={form.createIssueDate} onChange={(value) => update("createIssueDate", value)} disabled={formDisabled} />
                 </div>
               </div>
-              <label>Email Subject<input value={form.emailSubject || ""} onChange={(event) => update("emailSubject", event.target.value)} placeholder="Email subject" disabled={formDisabled} /></label>
+              <label>
+                Email Subject
+                <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem", alignItems: "center" }}>
+                  <input value={form.emailSubject || ""} onChange={(event) => update("emailSubject", event.target.value)} placeholder="Email subject" disabled={formDisabled} style={{ flex: 1 }} />
+                  <button
+                    type="button"
+                    onClick={handleFetchEmailContent}
+                    disabled={formDisabled || fetchingEmail || !form.emailSubject?.trim()}
+                    style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.625rem 0.875rem", borderRadius: "6px", background: "var(--color-primary, #2563eb)", color: "white", border: "none", cursor: "pointer", fontSize: "0.8125rem", fontWeight: "600", whiteSpace: "nowrap", transition: "all 0.2s" }}
+                    title="Fetch email content from Outlook Desktop"
+                  >
+                    {fetchingEmail ? <Loader2 className="spinner" size={14} /> : <Mail size={14} />}
+                    {fetchingEmail ? "Fetching..." : "Fetch Email Content"}
+                  </button>
+                </div>
+              </label>
             </div>
             <div className="initiation-section">
-              <h3>Analysis</h3>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+                <h3 style={{ margin: 0 }}>Analysis</h3>
+                <button
+                  type="button"
+                  onClick={handleGenerateAiAnalysis}
+                  disabled={formDisabled || !fetchedEmailContext || generatingAi}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.375rem",
+                    padding: "0.4rem 0.75rem",
+                    borderRadius: "6px",
+                    background: (!fetchedEmailContext || formDisabled || generatingAi) ? "var(--color-bg-subtle, #e5e7eb)" : "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
+                    color: (!fetchedEmailContext || formDisabled || generatingAi) ? "var(--color-text-muted, #9ca3af)" : "#ffffff",
+                    border: "none",
+                    cursor: (!fetchedEmailContext || formDisabled || generatingAi) ? "not-allowed" : "pointer",
+                    fontSize: "0.8125rem",
+                    fontWeight: "600",
+                    transition: "all 0.2s"
+                  }}
+                  title={!fetchedEmailContext ? "Fetch email content first to enable AI generation" : "Generate Problem & Impact Analysis using OpenRouter AI"}
+                >
+                  {generatingAi ? <Loader2 className="spinner" size={14} /> : <Sparkles size={14} />}
+                  {generatingAi ? "Generating AI..." : "✨ Generate Analysis with AI"}
+                </button>
+              </div>
               <label>Problem Analysis<textarea value={form.problemAnalysis || ""} onChange={(event) => update("problemAnalysis", event.target.value)} rows={6} disabled={formDisabled} /></label>
               <label>Impact Analysis<textarea value={form.impactAnalysis || ""} onChange={(event) => update("impactAnalysis", event.target.value)} rows={6} disabled={formDisabled} /></label>
             </div>
@@ -2545,7 +2642,7 @@ function ChangeIssue({
         </section>
       ) : null}
 
-      {changeDetail ? <IssueEditor mode="change" detail={changeDetail} initialAction={initialAction} navigationRequest={navigationRequest} onSave={onSave} onCancel={onCancel} onDelete={onDelete} onDirtyChange={onDirtyChange} /> : null}
+      {changeDetail ? <IssueEditor mode="change" detail={changeDetail} initialAction={initialAction} navigationRequest={navigationRequest} onNotify={onNotify} onSave={onSave} onCancel={onCancel} onDelete={onDelete} onDirtyChange={onDirtyChange} /> : null}
     </div>
   );
 }

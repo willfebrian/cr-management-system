@@ -79,6 +79,61 @@ adminRoutes.delete("/people/:id", async (req, res, next) => {
   }
 });
 
+adminRoutes.get("/group-emails", async (_req, res, next) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT id, email_address, name, is_active, created_at
+      FROM issue_group_emails
+      ORDER BY id ASC
+    `);
+    res.json({ rows });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRoutes.post("/group-emails", async (req, res, next) => {
+  try {
+    const { email_address, name } = req.body;
+    const { rows } = await pool.query(`
+      INSERT INTO issue_group_emails (email_address, name, is_active)
+      VALUES ($1, $2, true)
+      RETURNING id, email_address, name, is_active, created_at
+    `, [email_address, name || ""]);
+    res.json(rows[0]);
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRoutes.put("/group-emails/:id", async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const { email_address, name, is_active } = req.body;
+    await pool.query(`
+      UPDATE issue_group_emails
+      SET email_address = COALESCE($2, email_address),
+          name = COALESCE($3, name),
+          is_active = COALESCE($4, is_active),
+          updated_at = now()
+      WHERE id = $1
+    `, [id, email_address ?? null, name ?? null, is_active ?? null]);
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRoutes.delete("/group-emails/:id", async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    await pool.query(`DELETE FROM issue_group_emails WHERE id = $1`, [id]);
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
 adminRoutes.get("/settings", async (_req, res, next) => {
   try {
     const { rows } = await pool.query(`SELECT setting_key, setting_value FROM app_settings`);

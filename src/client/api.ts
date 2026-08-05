@@ -248,6 +248,66 @@ export async function updateAdminSettings(settings: Record<string, string>): Pro
   });
 }
 
+export type GroupEmailRow = {
+  id: number;
+  email_address: string;
+  name: string | null;
+  is_active: boolean;
+  created_at?: string;
+};
+
+export async function fetchGroupEmails(): Promise<{ rows: GroupEmailRow[] }> {
+  return fetchJson("/api/admin/group-emails");
+}
+
+export async function createGroupEmail(data: { email_address: string; name?: string }): Promise<GroupEmailRow> {
+  return fetchJson("/api/admin/group-emails", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+}
+
+export async function updateGroupEmail(id: number, data: Partial<GroupEmailRow>): Promise<{ ok: boolean }> {
+  return fetchJson(`/api/admin/group-emails/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+}
+
+export async function deleteGroupEmail(id: number): Promise<{ ok: boolean }> {
+  return fetchJson(`/api/admin/group-emails/${id}`, {
+    method: "DELETE"
+  });
+}
+
+export type OutlookSearchEmailResult = {
+  receivedAt: string;
+  senderName: string;
+  senderEmail: string;
+  to: string;
+  subject: string;
+  body: string;
+};
+
+export async function searchOutlookEmail(subject: string): Promise<{ rows: OutlookSearchEmailResult[] }> {
+  return fetchJson(`/api/outlook/search-email?q=${encodeURIComponent(subject)}`);
+}
+
+export type AiAnalysisResult = {
+  problemAnalysis: string;
+  impactAnalysis: string;
+};
+
+export async function generateAnalysis(emailContext: string, emailSubject?: string): Promise<AiAnalysisResult> {
+  return fetchJson("/api/ai/generate-analysis", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ emailContext, emailSubject })
+  });
+}
+
 export type IssuePersonCheck = {
   name: string;
   mode: "full_name" | "nickname";
