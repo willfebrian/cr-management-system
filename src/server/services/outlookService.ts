@@ -16,29 +16,31 @@ export type OutlookEmailMatch = {
 export async function searchOutlookEmails(querySubject: string): Promise<OutlookEmailMatch[]> {
   if (!querySubject || !querySubject.trim()) return [];
 
-  // Get active group emails from DB
-  const { rows: groupRows } = await pool.query<{ email_address: string }>(
-    `SELECT email_address FROM issue_group_emails WHERE is_active = TRUE`
-  );
-
-  // If on Linux Server, fallback to Internal Exchange EWS (Option A)
+  // If on Linux Server, check for Exchange EWS Server configuration
   if (process.platform !== "win32") {
-    const { rows: settingRows } = await pool.query<{ setting_value: string }>(
-      `SELECT setting_value FROM app_settings WHERE setting_key = 'exchange_host'`
+    const { rows: settingRows } = await pool.query<{ setting_key: string; setting_value: string }>(
+      `SELECT setting_key, setting_value FROM app_settings WHERE setting_key IN ('exchange_host', 'exchange_user', 'exchange_pass')`
     );
-    const exchangeHost = settingRows[0]?.setting_value || process.env.EXCHANGE_HOST || "";
-    
+    const settingsMap = settingRows.reduce((acc, r) => {
+      acc[r.setting_key] = r.setting_value;
+      return acc;
+    }, {} as Record<string, string>);
+
+    const exchangeHost = settingsMap.exchange_host || process.env.EXCHANGE_HOST || "";
+    const exchangeUser = settingsMap.exchange_user || process.env.EXCHANGE_USER || "";
+    const exchangePass = settingsMap.exchange_pass || process.env.EXCHANGE_PASS || "";
+
     if (exchangeHost) {
-      return searchExchangeEWS(exchangeHost, querySubject);
+      return searchExchangeEWS(exchangeHost, exchangeUser, exchangePass, querySubject);
     }
 
     throw new Error(
-      "Outlook Desktop MAPI integration is running on a Linux Server. " +
-      "To enable automatic passwordless email fetching on Linux, please configure your Internal Exchange Host (e.g. mail.trst.co.id) in Master Data & Settings -> General Settings (or set EXCHANGE_HOST in .env)."
+      "Reading emails directly on a Linux Server requires an Internal Exchange Host & Service Account. " +
+      "Please set Internal Exchange Host, User, and Password in Master Data -> General Settings (or .env), or paste email content directly into Problem Analysis."
     );
   }
 
-  // Windows Desktop MAPI COM Object Implementation
+  // Windows Desktop MAPI COM Object Implementation (Passwordless via local Outlook Desktop)
   const script = `
     $ErrorActionPreference = 'SilentlyContinue'
     $outlook = New-Object -ComObject Outlook.Application
@@ -100,7 +102,12 @@ export async function searchOutlookEmails(querySubject: string): Promise<Outlook
   }
 }
 
-async function searchExchangeEWS(exchangeHost: string, querySubject: string): Promise<OutlookEmailMatch[]> {
+async function searchExchangeEWS(
+  exchangeHost: string,
+  exchangeUser: string,
+  exchangePass: string,
+  querySubject: string
+): Promise<OutlookEmailMatch[]> {
   const ewsUrl = exchangeHost.startsWith("http") ? exchangeHost : `https://${exchangeHost}/EWS/Exchange.asmx`;
 
   const soapBody = `<?xml version="1.0" encoding="utf-8"?>
@@ -126,15 +133,16 @@ async function searchExchangeEWS(exchangeHost: string, querySubject: string): Pr
 </soap:Envelope>`;
 
   let xml = "";
+  const authUserPass = exchangeUser && exchangePass ? `${exchangeUser}:${exchangePass}` : ":";
 
-  // Attempt 1: Try curl with NTLM Single Sign-On (--ntlm --user :)
+  // Attempt 1: Try curl with NTLM authentication
   try {
     const { stdout } = await execFileAsync("curl", [
       "-s",
       "-k",
       "--ntlm",
       "--user",
-      ":",
+      authUserPass,
       "-H",
       "Content-Type: text/xml; charset=utf-8",
       "-H",
@@ -150,27 +158,34 @@ async function searchExchangeEWS(exchangeHost: string, querySubject: string): Pr
     // Ignore curl failure and fallback
   }
 
-  // Attempt 2: Fallback to standard fetch
+  // Attempt 2: Standard fetch with Basic Auth header if credentials provided
   if (!xml) {
     try {
+      const headers: Record<string, string> = {
+        "Content-Type": "text/xml; charset=utf-8",
+        "SOAPAction": "http://schemas.microsoft.com/exchange/services/2006/messages/FindItem"
+      };
+
+      if (exchangeUser && exchangePass) {
+        const authBase64 = Buffer.from(`${exchangeUser}:${exchangePass}`).toString("base64");
+        headers["Authorization"] = `Basic ${authBase64}`;
+      }
+
       const res = await fetch(ewsUrl, {
         method: "POST",
-        headers: {
-          "Content-Type": "text/xml; charset=utf-8",
-          "SOAPAction": "http://schemas.microsoft.com/exchange/services/2006/messages/FindItem"
-        },
+        headers,
         body: soapBody
       });
 
       if (!res.ok) {
         const errText = await res.text();
-        throw new Error(`Exchange EWS HTTP ${res.status}: ${errText.slice(0, 300)}`);
+        throw new Error(`Exchange EWS HTTP ${res.status}: ${errText.slice(0, 200)}`);
       }
 
       xml = await res.text();
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      throw new Error(`Exchange EWS Internal Error (${ewsUrl}): ${msg}. Note: Exchange Server 2017 requires Windows NTLM authentication header or Service Account credentials.`);
+      throw new Error(`Exchange EWS Access Error (${ewsUrl}): ${msg}`);
     }
   }
 

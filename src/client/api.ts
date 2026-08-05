@@ -292,6 +292,25 @@ export type OutlookSearchEmailResult = {
 };
 
 export async function searchOutlookEmail(subject: string): Promise<{ rows: OutlookSearchEmailResult[] }> {
+  // 1. Try Local Client Agent on user's Windows laptop (Passwordless local MAPI)
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    const localRes = await fetch(`http://127.0.0.1:18888/api/fetch-outlook?q=${encodeURIComponent(subject)}`, {
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    if (localRes.ok) {
+      const data = await localRes.json();
+      if (data && Array.isArray(data.rows) && data.rows.length > 0) {
+        return data;
+      }
+    }
+  } catch {
+    // Local Agent not active, proceed to central backend fallback
+  }
+
+  // 2. Central Server Backend Fallback
   return fetchJson(`/api/outlook/search-email?q=${encodeURIComponent(subject)}`);
 }
 
