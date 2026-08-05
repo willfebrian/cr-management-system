@@ -34,7 +34,7 @@ export async function searchOutlookEmails(querySubject: string): Promise<Outlook
 
     throw new Error(
       "Outlook Desktop MAPI integration is running on a Linux Server. " +
-      "To enable automatic passwordless email fetching on Linux, please configure your Internal Exchange Host (e.g. mail.trst.co.id) in Master Data & Settings -> AI Instructions (or set EXCHANGE_HOST in .env)."
+      "To enable automatic passwordless email fetching on Linux, please configure your Internal Exchange Host (e.g. mail.trst.co.id) in Master Data & Settings -> General Settings (or set EXCHANGE_HOST in .env)."
     );
   }
 
@@ -125,27 +125,56 @@ async function searchExchangeEWS(exchangeHost: string, querySubject: string): Pr
   </soap:Body>
 </soap:Envelope>`;
 
+  let xml = "";
+
+  // Attempt 1: Try curl with NTLM Single Sign-On (--ntlm --user :)
   try {
-    const res = await fetch(ewsUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "text/xml; charset=utf-8",
-        "SOAPAction": "http://schemas.microsoft.com/exchange/services/2006/messages/FindItem"
-      },
-      body: soapBody
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`Exchange EWS HTTP ${res.status}: ${errText.slice(0, 300)}`);
+    const { stdout } = await execFileAsync("curl", [
+      "-s",
+      "-k",
+      "--ntlm",
+      "--user",
+      ":",
+      "-H",
+      "Content-Type: text/xml; charset=utf-8",
+      "-H",
+      "SOAPAction: http://schemas.microsoft.com/exchange/services/2006/messages/FindItem",
+      "-d",
+      soapBody,
+      ewsUrl
+    ]);
+    if (stdout && stdout.includes("soap:Envelope")) {
+      xml = stdout;
     }
-
-    const xml = await res.text();
-    return parseEwsResponse(xml);
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    throw new Error(`Exchange EWS Internal Error (${ewsUrl}): ${msg}`);
+  } catch {
+    // Ignore curl failure and fallback
   }
+
+  // Attempt 2: Fallback to standard fetch
+  if (!xml) {
+    try {
+      const res = await fetch(ewsUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/xml; charset=utf-8",
+          "SOAPAction": "http://schemas.microsoft.com/exchange/services/2006/messages/FindItem"
+        },
+        body: soapBody
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Exchange EWS HTTP ${res.status}: ${errText.slice(0, 300)}`);
+      }
+
+      xml = await res.text();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Exchange EWS Internal Error (${ewsUrl}): ${msg}. Note: Exchange Server 2017 requires Windows NTLM authentication header or Service Account credentials.`);
+    }
+  }
+
+  return parseEwsResponse(xml);
 }
 
 function escapeXml(str: string): string {

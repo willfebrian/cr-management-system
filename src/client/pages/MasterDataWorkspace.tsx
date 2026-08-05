@@ -3,7 +3,7 @@ import { fetchAdminPeople, fetchAdminSettings, updateAdminPerson, updateAdminSet
 import { Check, Loader2, Save, X, Trash2, CheckCircle2, XCircle, AlertTriangle, Mail } from "lucide-react";
 
 export function MasterDataWorkspace() {
-  const [activeTab, setActiveTab] = useState<"people" | "settings" | "group_emails">("people");
+  const [activeTab, setActiveTab] = useState<"people" | "group_emails" | "general_settings" | "ai_instructions">("people");
   const [people, setPeople] = useState<AdminPersonRow[]>([]);
   const [groupEmails, setGroupEmails] = useState<GroupEmailRow[]>([]);
   const [settings, setSettings] = useState<Record<string, string>>({
@@ -231,9 +231,16 @@ export function MasterDataWorkspace() {
           Group Emails
         </button>
         <button
-          className={activeTab === "settings" ? "active" : ""}
-          style={{ fontWeight: activeTab === "settings" ? "bold" : "normal", background: "none", border: "none", cursor: "pointer", color: "var(--text-color)" }}
-          onClick={() => setActiveTab("settings")}
+          className={activeTab === "general_settings" ? "active" : ""}
+          style={{ fontWeight: activeTab === "general_settings" ? "bold" : "normal", background: "none", border: "none", cursor: "pointer", color: "var(--text-color)" }}
+          onClick={() => setActiveTab("general_settings")}
+        >
+          General Settings
+        </button>
+        <button
+          className={activeTab === "ai_instructions" ? "active" : ""}
+          style={{ fontWeight: activeTab === "ai_instructions" ? "bold" : "normal", background: "none", border: "none", cursor: "pointer", color: "var(--text-color)" }}
+          onClick={() => setActiveTab("ai_instructions")}
         >
           AI Instructions
         </button>
@@ -421,13 +428,86 @@ export function MasterDataWorkspace() {
         </div>
       )}
 
-      {activeTab === "settings" && (
+      {activeTab === "general_settings" && (
+        <div className="general-settings-tab" style={{ display: "flex", flexDirection: "column", gap: "2rem", maxWidth: "800px" }}>
+          <div style={{ background: "var(--color-bg-elevated, #ffffff)", padding: "2rem", borderRadius: "8px", border: "1px solid var(--color-border, #e5e7eb)", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+            <h3 style={{ marginTop: 0, marginBottom: "0.5rem", fontSize: "1.25rem", color: "var(--color-text-heading, #111827)" }}>General Settings</h3>
+            <p style={{ color: "var(--color-text-muted, #6b7280)", marginBottom: "1.5rem", fontSize: "0.875rem" }}>
+              Configure API keys, model selections, and internal mail server connection endpoints.
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+              <div>
+                <h4 style={{ margin: "0 0 1rem 0", fontSize: "1rem", color: "var(--color-text-heading, #111827)" }}>OpenRouter AI API Configuration</h4>
+                <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                  <div>
+                    <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "600", color: "var(--color-text, #374151)", fontSize: "0.875rem" }}>
+                      OpenRouter API Key
+                    </label>
+                    <input
+                      type="password"
+                      value={settings.openrouter_api_key}
+                      onChange={(e) => setSettings({ ...settings, openrouter_api_key: e.target.value })}
+                      placeholder="sk-or-v1-..."
+                      style={{ width: "100%", padding: "0.625rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", fontSize: "0.875rem" }}
+                    />
+                    <small style={{ color: "var(--color-text-muted, #6b7280)", display: "block", marginTop: "0.25rem" }}>API key from OpenRouter.ai for auto generating Problem & Impact Analysis.</small>
+                  </div>
+                  <div>
+                    <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "600", color: "var(--color-text, #374151)", fontSize: "0.875rem" }}>
+                      OpenRouter Model
+                    </label>
+                    <input
+                      type="text"
+                      value={settings.openrouter_model}
+                      onChange={(e) => setSettings({ ...settings, openrouter_model: e.target.value })}
+                      placeholder="openrouter/auto"
+                      style={{ width: "100%", padding: "0.625rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", fontSize: "0.875rem" }}
+                    />
+                    <small style={{ color: "var(--color-text-muted, #6b7280)", display: "block", marginTop: "0.25rem" }}>Default: <code>openrouter/auto</code> (or <code>anthropic/claude-3.5-sonnet</code>, <code>google/gemini-2.5-flash</code>, etc.)</small>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ paddingTop: "1.5rem", borderTop: "1px solid var(--color-border, #e5e7eb)" }}>
+                <h4 style={{ margin: "0 0 1rem 0", fontSize: "1rem", color: "var(--color-text-heading, #111827)" }}>Linux Server Internal Exchange EWS Configuration</h4>
+                <div>
+                  <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "600", color: "var(--color-text, #374151)", fontSize: "0.875rem" }}>
+                    Internal Exchange Host (Optional for Linux Server)
+                  </label>
+                  <input
+                    type="text"
+                    value={settings.exchange_host}
+                    onChange={(e) => setSettings({ ...settings, exchange_host: e.target.value })}
+                    placeholder="e.g. mail.trst.co.id"
+                    style={{ width: "100%", padding: "0.625rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", fontSize: "0.875rem" }}
+                  />
+                  <small style={{ color: "var(--color-text-muted, #6b7280)", display: "block", marginTop: "0.25rem" }}>Internal company Exchange Server 2017 EWS endpoint (e.g., <code>mail.trst.co.id</code>). Used when application is deployed on internal Linux servers.</small>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ marginTop: "2rem", paddingTop: "1.5rem", borderTop: "1px solid var(--color-border, #e5e7eb)", display: "flex", justifyContent: "flex-end" }}>
+              <button
+                onClick={saveSettings}
+                disabled={saving}
+                style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.625rem 1.25rem", borderRadius: "6px", background: "var(--color-primary, #2563eb)", color: "white", border: "none", cursor: "pointer", fontWeight: "600", fontSize: "0.875rem", transition: "all 0.2s" }}
+              >
+                {saving ? <Loader2 className="spinner" size={16} /> : <Save size={16} />}
+                {saving ? "Saving Changes..." : "Save Settings"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "ai_instructions" && (
         <div className="settings-tab" style={{ display: "flex", flexDirection: "column", gap: "2rem", maxWidth: "800px" }}>
           
           <div style={{ background: "var(--color-bg-elevated, #ffffff)", padding: "2rem", borderRadius: "8px", border: "1px solid var(--color-border, #e5e7eb)", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-            <h3 style={{ marginTop: 0, marginBottom: "0.5rem", fontSize: "1.25rem", color: "var(--color-text-heading, #111827)" }}>System Prompts</h3>
+            <h3 style={{ marginTop: 0, marginBottom: "0.5rem", fontSize: "1.25rem", color: "var(--color-text-heading, #111827)" }}>System Prompts & AI Instructions</h3>
             <p style={{ color: "var(--color-text-muted, #6b7280)", marginBottom: "1.5rem", fontSize: "0.875rem" }}>
-              Configure the underlying instructions used by the AI assistant when generating content for GLPI and Email communications.
+              Configure the underlying instructions used by the AI assistant when generating content for GLPI and Problem/Impact Analysis.
             </p>
             
             <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
@@ -439,7 +519,7 @@ export function MasterDataWorkspace() {
                   value={settings.ai_instruction_glpi}
                   onChange={(e) => setSettings({ ...settings, ai_instruction_glpi: e.target.value })}
                   placeholder="e.g., Always use professional tone. Include standard disclaimer at the bottom..."
-                  style={{ width: "100%", height: "150px", padding: "1rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "var(--font-mono, monospace)", fontSize: "0.875rem", lineHeight: "1.5", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
+                  style={{ width: "100%", height: "120px", padding: "1rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "var(--font-mono, monospace)", fontSize: "0.875rem", lineHeight: "1.5", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
                 />
               </div>
               
@@ -477,55 +557,6 @@ export function MasterDataWorkspace() {
                   placeholder="e.g., Address the user by their first name. Keep paragraphs short..."
                   style={{ width: "100%", height: "100px", padding: "1rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "var(--font-mono, monospace)", fontSize: "0.875rem", lineHeight: "1.5", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
                 />
-              </div>
-
-              <div style={{ paddingTop: "1rem", borderTop: "1px solid var(--color-border, #e5e7eb)" }}>
-                <h4 style={{ margin: "0 0 1rem 0", fontSize: "1rem", color: "var(--color-text-heading, #111827)" }}>OpenRouter AI API Configuration</h4>
-                <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-                  <div>
-                    <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "600", color: "var(--color-text, #374151)", fontSize: "0.875rem" }}>
-                      OpenRouter API Key
-                    </label>
-                    <input
-                      type="password"
-                      value={settings.openrouter_api_key}
-                      onChange={(e) => setSettings({ ...settings, openrouter_api_key: e.target.value })}
-                      placeholder="sk-or-v1-..."
-                      style={{ width: "100%", padding: "0.625rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", fontSize: "0.875rem" }}
-                    />
-                    <small style={{ color: "var(--color-text-muted, #6b7280)", display: "block", marginTop: "0.25rem" }}>API key from OpenRouter.ai for auto generating Problem & Impact Analysis.</small>
-                  </div>
-                  <div>
-                    <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "600", color: "var(--color-text, #374151)", fontSize: "0.875rem" }}>
-                      OpenRouter Model
-                    </label>
-                    <input
-                      type="text"
-                      value={settings.openrouter_model}
-                      onChange={(e) => setSettings({ ...settings, openrouter_model: e.target.value })}
-                      placeholder="openrouter/auto"
-                      style={{ width: "100%", padding: "0.625rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", fontSize: "0.875rem" }}
-                    />
-                    <small style={{ color: "var(--color-text-muted, #6b7280)", display: "block", marginTop: "0.25rem" }}>Default: <code>openrouter/auto</code> (or <code>anthropic/claude-3.5-sonnet</code>, <code>google/gemini-2.5-flash</code>, etc.)</small>
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ paddingTop: "1rem", borderTop: "1px solid var(--color-border, #e5e7eb)" }}>
-                <h4 style={{ margin: "0 0 1rem 0", fontSize: "1rem", color: "var(--color-text-heading, #111827)" }}>Linux Server Internal Exchange EWS Configuration</h4>
-                <div>
-                  <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "600", color: "var(--color-text, #374151)", fontSize: "0.875rem" }}>
-                    Internal Exchange Host (Optional for Linux Server)
-                  </label>
-                  <input
-                    type="text"
-                    value={settings.exchange_host}
-                    onChange={(e) => setSettings({ ...settings, exchange_host: e.target.value })}
-                    placeholder="e.g. mail.trst.co.id"
-                    style={{ width: "100%", padding: "0.625rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", fontSize: "0.875rem" }}
-                  />
-                  <small style={{ color: "var(--color-text-muted, #6b7280)", display: "block", marginTop: "0.25rem" }}>Internal company Exchange Server 2017 EWS endpoint (e.g., <code>mail.trst.co.id</code>). Used when application is deployed on internal Linux servers.</small>
-                </div>
               </div>
             </div>
             
