@@ -24,7 +24,7 @@ export function ProjectIssuePicker({
 }: ProjectIssuePickerProps) {
   const selectedIds = new Set(selected.map((issue) => issue.issueId));
   return <section className="project-issue-picker" aria-labelledby="project-issues-heading">
-    <div className="project-section-heading">
+    <div className="project-section-heading" style={{ marginBottom: "var(--space-4)" }}>
       <div>
         <h3 id="project-issues-heading">Linked Issues</h3>
         <p>Search and stage relationship changes. Issues are not changed or deleted.</p>

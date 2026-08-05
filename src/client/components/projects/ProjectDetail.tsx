@@ -39,7 +39,7 @@ export function ProjectDetail({ detail, onOpenIssue, actions }: ProjectDetailPro
       <p>{project.cancelledReason}</p>
     </div>}
     <section className="project-linked-list" aria-labelledby="project-detail-issues">
-      <div className="project-section-heading">
+      <div className="project-section-heading" style={{ marginBottom: "var(--space-4)" }}>
         <div>
           <h3 id="project-detail-issues">Linked Issues</h3>
           <p>{project.projectStatus === "cancelled"

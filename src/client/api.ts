@@ -188,10 +188,64 @@ export async function fetchNextSubIssueNumber(issueNo: number | string): Promise
 
 export type ValueHelpKind = "people" | "glpi" | "cr-helpdesk" | "cr";
 
-export async function fetchValueHelp(kind: ValueHelpKind, q = ""): Promise<{ rows: Array<Record<string, unknown>> }> {
+export async function fetchValueHelp(kind: ValueHelpKind, q = "", options?: { role?: string }): Promise<{ rows: Array<Record<string, unknown>> }> {
   const params = new URLSearchParams();
   if (q) params.set("q", q);
+  if (options?.role) params.set("role", options.role);
   return fetchJson(`/api/value-help/${kind}${params.toString() ? `?${params}` : ""}`);
+}
+
+export type AdminPersonRow = {
+  id: number;
+  full_name: string | null;
+  nickname: string | null;
+  email: string | null;
+  department: string | null;
+  is_active: boolean;
+  is_requester: boolean;
+  is_abaper: boolean;
+  is_tester: boolean;
+  is_evaluator: boolean;
+  is_approver: boolean;
+  is_transporter: boolean;
+};
+
+export async function fetchAdminPeople(): Promise<{ rows: AdminPersonRow[] }> {
+  return fetchJson("/api/admin/people");
+}
+
+export async function createAdminPerson(data: { full_name: string; nickname: string; email: string }): Promise<AdminPersonRow> {
+  return fetchJson("/api/admin/people", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+}
+
+export async function updateAdminPerson(id: number, data: Partial<AdminPersonRow>): Promise<{ ok: boolean }> {
+  return fetchJson(`/api/admin/people/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+}
+
+export async function deleteAdminPerson(id: number): Promise<{ ok: boolean }> {
+  return fetchJson(`/api/admin/people/${id}`, {
+    method: "DELETE"
+  });
+}
+
+export async function fetchAdminSettings(): Promise<Record<string, string>> {
+  return fetchJson("/api/admin/settings");
+}
+
+export async function updateAdminSettings(settings: Record<string, string>): Promise<{ ok: boolean }> {
+  return fetchJson("/api/admin/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings)
+  });
 }
 
 export type IssuePersonCheck = {

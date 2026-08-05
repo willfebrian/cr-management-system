@@ -223,6 +223,11 @@ CREATE TABLE IF NOT EXISTS issue_people (
 );
 
 ALTER TABLE issue_people ADD COLUMN IF NOT EXISTS department TEXT;
+ALTER TABLE issue_people ADD COLUMN IF NOT EXISTS is_approver BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE issue_people ADD COLUMN IF NOT EXISTS is_abaper BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE issue_people ADD COLUMN IF NOT EXISTS is_requester BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE issue_people ADD COLUMN IF NOT EXISTS is_evaluator BOOLEAN NOT NULL DEFAULT FALSE;
+
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_issue_people_full_name_unique
   ON issue_people (lower(trim(full_name)))
@@ -686,3 +691,9 @@ CREATE TABLE IF NOT EXISTS project_status_history (
 
 CREATE INDEX IF NOT EXISTS idx_project_status_history_project
   ON project_status_history(project_id, changed_at DESC);
+
+CREATE TABLE IF NOT EXISTS app_settings (
+  setting_key TEXT PRIMARY KEY,
+  setting_value TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

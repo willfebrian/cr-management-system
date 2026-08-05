@@ -9,13 +9,14 @@ import { SummaryStrip } from "../components/SummaryStrip";
 import { ProjectEditor } from "../components/projects/ProjectEditor";
 import { ProjectReport } from "../components/projects/ProjectReport";
 import { UserManagementWorkspace } from "../components/users/UserManagementWorkspace";
+import { MasterDataWorkspace } from "./MasterDataWorkspace";
 import { fetchProjectDetail } from "../api/projectApi";
 import { afterIncompleteSectionRender, expandSection, getIncompleteItems, groupIncompleteItems, markIncompleteTarget, type ExpandedIssueSections, type IncompleteItem, type IssueSection } from "../issueIncomplete";
 import { nextExpandedSidebarGroup, type SidebarGroup } from "../navigation";
 import type { CrDetail, CrRequest, DashboardData, IssueDetail, IssueRow, SapSystemConfig, StatusTrendData } from "../../shared/types";
 import type { ProjectDetail as ProjectDetailModel } from "../../shared/projectTypes";
 
-type View = "dashboard" | "report" | "issue-display" | "issue-create" | "issue-change" | "user-management" | "project-report" | "project-create" | "project-change";
+type View = "dashboard" | "report" | "issue-display" | "issue-create" | "issue-change" | "user-management" | "project-report" | "project-create" | "project-change" | "master-data";
 const VIEW_META: Record<View, { title: string; description: string }> = {
   dashboard: { title: "Dashboard", description: "Monitor CR and Issue activity across connected source systems." },
   report: { title: "CR Transport", description: "Review SAP change requests ordered from the latest CR number." },
@@ -26,6 +27,7 @@ const VIEW_META: Record<View, { title: string; description: string }> = {
   "project-report": { title: "Project Report", description: "Group related Issues and CR transports in one delivery view." },
   "project-create": { title: "Create Project", description: "Create a project and group its related Issues." },
   "project-change": { title: "Change Project", description: "Maintain project ownership, scope, and linked Issues." },
+  "master-data": { title: "Master Data & Settings", description: "Manage issue people roles and global AI instructions." },
 };
 const SYNC_RESULT_VISIBLE_MS = 6000;
 const DASHBOARD_DB_REFRESH_MS = 60000;
@@ -485,6 +487,11 @@ export function App() {
             </div>
           ) : null}
         </div> : null}
+        <div className={`sidebar-group ${view === "master-data" ? "active" : ""}`}>
+          <button className={view === "master-data" ? "active" : ""} onClick={() => navigateTo("master-data")}>
+            <Database size={18} /> Master Data & Settings
+          </button>
+        </div>
         {USER_MANAGEMENT_ENABLED && authUser.role === "ADMIN" ? <button className={view === "user-management" ? "active" : ""} onClick={() => navigateTo("user-management")}><Users size={18} /> User Management</button> : null}
         </div>
         <div className="sidebar-footer">
@@ -575,7 +582,9 @@ export function App() {
             setAuthUser(null);
             setView("dashboard");
           }}
-        /> : view === "dashboard" ? (
+        /> : view === "master-data" ? (
+          <MasterDataWorkspace />
+        ) : view === "dashboard" ? (
           <Dashboard
             dashboard={dashboard}
             requests={requests}
@@ -1325,9 +1334,9 @@ function IssueDisplay({
   const [visibleIssueColumns, setVisibleIssueColumns] = useState<IssueColumnKey[]>([...DEFAULT_ISSUE_COLUMNS]);
   const selectedIssue = issues.find((issue) => issue.id === selectedId) || detail?.issue || null;
   const hasDetail = Boolean(selectedId && selectedIssue);
-  const canGenerateCrForm = Boolean(detail?.crLinks.length);
-  const primaryGlpiTicket = detail?.glpi.find((ticket) => ticket.is_primary)?.ticket_number
-    ?? detail?.glpi[0]?.ticket_number
+  const canGenerateCrForm = Boolean(detail?.crLinks?.length);
+  const primaryGlpiTicket = detail?.glpi?.find((ticket) => ticket.is_primary)?.ticket_number
+    ?? detail?.glpi?.[0]?.ticket_number
     ?? selectedIssue?.primary_glpi_ticket;
   const detailIncompleteItems = detail?.issue?.issue_status !== "cancelled" && detail ? getIncompleteItems(detail) : [];
   const detailIncompleteGroups = groupIncompleteItems(detailIncompleteItems);
@@ -1776,8 +1785,8 @@ function IssueEditor({
   const crTokens = splitTokenValues(form.crLinks);
   const glpiTokens = splitTokenValues(form.glpiTickets).filter((token) => /^\d+$/.test(token));
   const glpiLookupKey = glpiTokens.join("|");
-  const hasSavedGlpiNo = Boolean(detail?.glpi.length);
-  const hasSavedCrLink = Boolean(detail?.crLinks.length);
+  const hasSavedGlpiNo = Boolean(detail?.glpi?.length);
+  const hasSavedCrLink = Boolean(detail?.crLinks?.length);
   const hasCrAssigned = crTokens.length > 0;
   const primaryLifecycle = primaryCr?.lifecycle_status;
   const qaReady = Boolean(primaryCr?.qa_import_date || ["in_qa", "pending_prd", "in_prd"].includes(primaryLifecycle || ""));
@@ -2124,10 +2133,10 @@ function IssueEditor({
             <div className="initiation-section">
               <h3>People</h3>
               <div className="repeatable-row-field" data-incomplete-target="issue-requesters">
-                <MultiValueHelpField label="Requester" kind="people" personMode="full_name" value={form.requesterNames || ""} onChange={(value) => update("requesterNames", value)} placeholder="Full name" disabled={formDisabled} />
+                <MultiValueHelpField label="Requester" kind="people" role="requester" personMode="full_name" value={form.requesterNames || ""} onChange={(value) => update("requesterNames", value)} placeholder="Full name" disabled={formDisabled} />
               </div>
               <div className="repeatable-row-field" data-incomplete-target="issue-abapers">
-                <MultiValueHelpField label="ABAPer" kind="people" personMode="full_name" value={form.abaperNames || ""} onChange={(value) => update("abaperNames", value)} placeholder="Full name" disabled={formDisabled} />
+                <MultiValueHelpField label="ABAPer" kind="people" role="abaper" personMode="full_name" value={form.abaperNames || ""} onChange={(value) => update("abaperNames", value)} placeholder="Full name" disabled={formDisabled} />
               </div>
               {isCancelled ? (
                 <section className="issue-cancel-card">
@@ -2157,7 +2166,7 @@ function IssueEditor({
           <div className="phase-pair-grid">
             <ValueHelpField label="DEV Tester" kind="people" personMode="full_name" value={form.participants?.dev_tester || ""} onChange={(value) => updateParticipant("dev_tester", value)} placeholder="Full name" disabled={devDisabled} incompleteTarget="issue-dev-tester" />
             <TimestampInput label="Testing Date" value={form.timeline?.dev_tested_date} onChange={(value) => updateTimeline("dev_tested_date", value)} disabled={devDisabled} incompleteTarget="issue-dev-testing-date" />
-            <ValueHelpField label="DEV Evaluator" kind="people" personMode="full_name" value={form.participants?.dev_evaluator || ""} onChange={(value) => updateParticipant("dev_evaluator", value)} placeholder="Full name" disabled={devDisabled} incompleteTarget="issue-dev-evaluator" />
+            <ValueHelpField label="DEV Evaluator" kind="people" role="evaluator" personMode="full_name" value={form.participants?.dev_evaluator || ""} onChange={(value) => updateParticipant("dev_evaluator", value)} placeholder="Full name" disabled={devDisabled} incompleteTarget="issue-dev-evaluator" />
             <TimestampInput label="Evaluation Date" value={form.timeline?.dev_evaluated_date} onChange={(value) => updateTimeline("dev_evaluated_date", value)} disabled={devDisabled} incompleteTarget="issue-dev-evaluation-date" />
           </div>
         ) : null}
@@ -2181,7 +2190,7 @@ function IssueEditor({
             <label>Transport Date<input className="readonly-input" value={formatIssueTimestamp(primaryCr?.qa_import_date, primaryCr?.qa_import_time)} readOnly /></label>
             <ValueHelpField label="QA Tester" kind="people" personMode="full_name" value={form.participants?.qa_tester || ""} onChange={(value) => updateParticipant("qa_tester", value)} placeholder="Full name" disabled={qaDisabled} incompleteTarget="issue-qa-tester" />
             <TimestampInput label="Testing Date" value={form.timeline?.qa_tested_date} onChange={(value) => updateTimeline("qa_tested_date", value)} disabled={qaDisabled} incompleteTarget="issue-qa-testing-date" />
-            <ValueHelpField label="QA Evaluator" kind="people" personMode="full_name" value={form.participants?.qa_evaluator || ""} onChange={(value) => updateParticipant("qa_evaluator", value)} placeholder="Full name" disabled={qaDisabled} incompleteTarget="issue-qa-evaluator" />
+            <ValueHelpField label="QA Evaluator" kind="people" role="evaluator" personMode="full_name" value={form.participants?.qa_evaluator || ""} onChange={(value) => updateParticipant("qa_evaluator", value)} placeholder="Full name" disabled={qaDisabled} incompleteTarget="issue-qa-evaluator" />
             <TimestampInput label="Evaluation Date" value={form.timeline?.qa_evaluated_date} onChange={(value) => updateTimeline("qa_evaluated_date", value)} disabled={qaDisabled} incompleteTarget="issue-qa-evaluation-date" />
           </div>
         ) : null}
@@ -2201,11 +2210,11 @@ function IssueEditor({
         </button>
         {expandedPhases.prd ? (
           <div className="phase-pair-grid">
-            <ValueHelpField label="PRD Requester" kind="people" personMode="full_name" value={form.participants?.prd_requester || ""} onChange={(value) => updateParticipant("prd_requester", value)} placeholder="Full name" disabled={prdRequestDisabled} incompleteTarget="issue-prd-requester" />
+            <ValueHelpField label="PRD Requester" kind="people" role="requester" personMode="full_name" value={form.participants?.prd_requester || ""} onChange={(value) => updateParticipant("prd_requester", value)} placeholder="Full name" disabled={prdRequestDisabled} incompleteTarget="issue-prd-requester" />
             <TimestampInput label="Request Date" value={form.timeline?.prd_requested_date} onChange={(value) => updateTimeline("prd_requested_date", value)} disabled={prdRequestDisabled} incompleteTarget="issue-prd-request-date" />
-            <ValueHelpField label="PRD Evaluator" kind="people" personMode="full_name" value={form.participants?.prd_evaluator || ""} onChange={(value) => updateParticipant("prd_evaluator", value)} placeholder="Full name" disabled={prdRequestDisabled} incompleteTarget="issue-prd-evaluator" />
+            <ValueHelpField label="PRD Evaluator" kind="people" role="evaluator" personMode="full_name" value={form.participants?.prd_evaluator || ""} onChange={(value) => updateParticipant("prd_evaluator", value)} placeholder="Full name" disabled={prdRequestDisabled} incompleteTarget="issue-prd-evaluator" />
             <TimestampInput label="Evaluation Date" value={form.timeline?.prd_evaluated_date} onChange={(value) => updateTimeline("prd_evaluated_date", value)} disabled={prdRequestDisabled} incompleteTarget="issue-prd-evaluation-date" />
-            <ValueHelpField label="Approver" kind="people" personMode="full_name" value={form.participants?.approval || ""} onChange={(value) => updateParticipant("approval", value)} placeholder="Full name" disabled={prdRequestDisabled} incompleteTarget="issue-approver" />
+            <ValueHelpField label="Approver" kind="people" role="approver" personMode="full_name" value={form.participants?.approval || ""} onChange={(value) => updateParticipant("approval", value)} placeholder="Full name" disabled={prdRequestDisabled} incompleteTarget="issue-approver" />
             <TimestampInput label="Approval Date" value={form.timeline?.approval_date} onChange={(value) => updateTimeline("approval_date", value)} disabled={prdRequestDisabled} incompleteTarget="issue-approval-date" />
             <ValueHelpField label="PRD Transporter" kind="people" personMode="full_name" value={form.participants?.executor || ""} onChange={(value) => updateParticipant("executor", value)} placeholder="Full name" disabled={prdTransportDisabled} incompleteTarget="issue-prd-transporter" />
             <label>Transport Date<input className="readonly-input" value={formatIssueTimestamp(primaryCr?.prd_import_date, primaryCr?.prd_import_time)} readOnly /></label>
@@ -2550,7 +2559,8 @@ function ValueHelpField({
   disabled = false,
   onSelectRow,
   personMode = "full_name",
-  incompleteTarget
+  incompleteTarget,
+  role
 }: {
   label: string;
   kind: ValueHelpKind;
@@ -2561,6 +2571,7 @@ function ValueHelpField({
   disabled?: boolean;
   onSelectRow?: (row: Record<string, unknown>) => void;
   incompleteTarget?: string;
+  role?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(value);
@@ -2571,12 +2582,12 @@ function ValueHelpField({
   useEffect(() => {
     if (!open) return;
     const timeout = window.setTimeout(() => {
-      fetchValueHelp(kind, lastToken(query))
+      fetchValueHelp(kind, lastToken(query), { role })
         .then((result) => setRows(result.rows))
         .catch(() => setRows([]));
     }, 350);
     return () => window.clearTimeout(timeout);
-  }, [open, query, kind]);
+  }, [open, query, kind, role]);
 
   function choose(row: Record<string, unknown>) {
     const selected = valueHelpValue(kind, row, personMode);
@@ -2682,7 +2693,8 @@ function MultiValueHelpField({
   value,
   onChange,
   placeholder,
-  disabled = false
+  disabled = false,
+  role
 }: {
   label: string;
   kind: ValueHelpKind;
@@ -2691,6 +2703,7 @@ function MultiValueHelpField({
   onChange: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  role?: string;
 }) {
   const rows = value ? value.split(/[;,]/).map((item) => item.trim()) : [];
   const visibleRows = rows.length ? rows : [""];
@@ -2724,6 +2737,7 @@ function MultiValueHelpField({
           <ValueHelpField
             label={`${label} ${index + 1}`}
             kind={kind}
+            role={role}
             personMode={personMode}
             value={rowValue}
             onChange={(nextValue) => updateRow(index, nextValue)}
@@ -2990,7 +3004,7 @@ function formatGlpiStatus(value?: string) {
 }
 
 function formatCrHelpdeskNumbers(detail: IssueDetail | null) {
-  return detail?.crHelpdeskNumbers.map((item) => item.cr_helpdesk_no).join("; ") || "";
+  return detail?.crHelpdeskNumbers?.map((item) => item.cr_helpdesk_no)?.join("; ") || "";
 }
 
 function issueFormFromDetail(detail: IssueDetail | null): IssueSavePayload {
@@ -2998,7 +3012,7 @@ function issueFormFromDetail(detail: IssueDetail | null): IssueSavePayload {
   const participants = Object.fromEntries(
     PARTICIPANT_GROUPS.flatMap((group) => group.roles).map((role) => [
       role,
-      detail?.participants
+      (detail?.participants || [])
         .filter((participant) => participant.role === role)
         .map((participant) => participant.full_name || participant.nickname || participant.person_name_snapshot)
         .join("; ") || ""
@@ -3019,9 +3033,9 @@ function issueFormFromDetail(detail: IssueDetail | null): IssueSavePayload {
     sourceIssueStatus: issue?.source_issue_status || (issue?.issue_status === "cancelled" ? "cancelled" : "open"),
     cancelledDate: toDatetimeInput(issue?.cancelled_date) || "",
     cancelledReason: issue?.cancelled_reason || "",
-    glpiTickets: detail?.glpi.map((ticket) => ticket.ticket_number).join("; ") || "",
-    crHelpdeskNumbers: detail?.crHelpdeskNumbers.map((item) => item.cr_helpdesk_no).join("; ") || "",
-    crLinks: detail?.crLinks.map((link) => link.trkorr).join("; ") || "",
+    glpiTickets: detail?.glpi?.map((ticket) => ticket.ticket_number)?.join("; ") || "",
+    crHelpdeskNumbers: detail?.crHelpdeskNumbers?.map((item) => item.cr_helpdesk_no)?.join("; ") || "",
+    crLinks: detail?.crLinks?.map((link) => link.trkorr)?.join("; ") || "",
     participants,
     timeline: {
       dev_tested_date: toDatetimeInput(readTimelineDate(detail?.devTimeline, "dev_tested_date")),
@@ -3228,7 +3242,7 @@ function issueTimelineEvents(detail: IssueDetail | null) {
 }
 
 function issueCrLifecycleEvents(detail: IssueDetail | null) {
-  const primaryCr = detail?.crLinks.find((link) => link.is_primary) || detail?.crLinks[0];
+  const primaryCr = detail?.crLinks?.find((link) => link.is_primary) || detail?.crLinks?.[0];
   return [
     { source: "CR", label: "Created", date: timelineDate(primaryCr?.sap_created_at), time: timelineClock(primaryCr?.sap_created_at), order: 1 },
     { source: "CR", label: "Released", date: timelineDate(primaryCr?.sap_released_at), time: timelineClock(primaryCr?.sap_released_at), order: 5 },

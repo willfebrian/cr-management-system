@@ -780,15 +780,27 @@ export async function getNextSubIssueNumber(issueNo: number | string) {
   return { issueNo: parsedIssueNo, subIssueNo: String(next).padStart(2, "0") };
 }
 
-export async function searchIssuePeople(q = "") {
+export async function searchIssuePeople(q = "", role?: string) {
   const needle = `%${q.trim().toUpperCase()}%`;
+  let roleFilter = "";
+  if (role === "approver") roleFilter = "AND is_approver = TRUE";
+  else if (role === "abaper") roleFilter = "AND is_abaper = TRUE";
+  else if (role === "requester") roleFilter = "AND is_requester = TRUE";
+  else if (role === "tester") roleFilter = "AND is_tester = TRUE";
+  else if (role === "evaluator") roleFilter = "AND is_evaluator = TRUE";
+  else if (role === "transporter") roleFilter = "AND is_transporter = TRUE";
+
   const { rows } = await pool.query(`
     SELECT id, full_name, nickname, email, department
     FROM issue_people
-    WHERE $1 = '%%'
-       OR upper(coalesce(full_name, '')) LIKE $1
-       OR upper(coalesce(nickname, '')) LIKE $1
-       OR upper(coalesce(email, '')) LIKE $1
+    WHERE is_active = TRUE
+       ${roleFilter}
+       AND (
+         $1 = '%%'
+         OR upper(coalesce(full_name, '')) LIKE $1
+         OR upper(coalesce(nickname, '')) LIKE $1
+         OR upper(coalesce(email, '')) LIKE $1
+       )
     ORDER BY coalesce(full_name, nickname)
     LIMIT 20
   `, [needle]);

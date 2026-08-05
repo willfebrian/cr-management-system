@@ -130,11 +130,12 @@ crRoutes.get("/issues/next-sub-issue", async (req, res, next) => {
 crRoutes.get("/value-help/people", async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
-    res.json({ rows: await searchIssuePeople(stringQuery(req.query.q) || "") });
+    res.json({ rows: await searchIssuePeople(stringQuery(req.query.q) || "", stringQuery(req.query.role)) });
   } catch (error) {
     next(error);
   }
 });
+
 
 crRoutes.post("/value-help/people/validate", async (req, res, next) => {
   try {

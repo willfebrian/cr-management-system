@@ -8,6 +8,7 @@ import { authRoutes } from "./routes/authRoutes.js";
 import { requireAuth } from "./auth/middleware.js";
 import { userRoutes } from "./routes/userRoutes.js";
 import { projectRoutes } from "./routes/projectRoutes.js";
+import { adminRoutes } from "./routes/adminRoutes.js";
 import { ProjectRepositoryError } from "./db/projectRepository.js";
 
 const app = express();
@@ -29,6 +30,7 @@ app.get("/api/health", (_req, res) => res.json({ ok: true }));
 app.use("/api/auth", authRoutes);
 app.use("/api/users", requireAuth, userRoutes);
 app.use("/api/projects", projectRoutes);
+app.use("/api/admin", requireAuth, adminRoutes);
 app.use("/api", requireAuth, crRoutes);
 app.use(express.static(clientDist));
 
