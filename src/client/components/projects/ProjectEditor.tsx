@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Save } from "lucide-react";
+import { UIModal } from "../common/UIModal.js";
 import type {
   EditableProjectStatus,
   ProjectDetail,
@@ -150,28 +151,51 @@ export function ProjectEditor({ mode, detail, onSaved, onCancel, onDirtyChange }
     }
   }
 
+  const [showDiscardModal, setShowDiscardModal] = useState(false);
+
   function leave() {
-    if (!dirty || window.confirm("Discard unsaved Project changes?")) onCancel();
+    if (!dirty) {
+      onCancel();
+    } else {
+      setShowDiscardModal(true);
+    }
   }
 
-  return <ProjectEditorView
-    mode={mode}
-    draft={draft}
-    owners={owners}
-    issueOptions={issueOptions}
-    selectedIssues={selectedIssues}
-    issueQuery={issueQuery}
-    saving={saving}
-    loadingIssues={loadingIssues}
-    readOnly={Boolean(readOnly)}
-    error={error}
-    onDraftChange={updateDraft}
-    onIssueQueryChange={setIssueQuery}
-    onAddIssue={addIssue}
-    onRemoveIssue={removeIssue}
-    onSave={submit}
-    onCancel={leave}
-  />;
+  return (
+    <>
+      <ProjectEditorView
+        mode={mode}
+        draft={draft}
+        owners={owners}
+        issueOptions={issueOptions}
+        selectedIssues={selectedIssues}
+        issueQuery={issueQuery}
+        saving={saving}
+        loadingIssues={loadingIssues}
+        readOnly={Boolean(readOnly)}
+        error={error}
+        onDraftChange={updateDraft}
+        onIssueQueryChange={setIssueQuery}
+        onAddIssue={addIssue}
+        onRemoveIssue={removeIssue}
+        onSave={submit}
+        onCancel={leave}
+      />
+      <UIModal
+        isOpen={showDiscardModal}
+        onClose={() => setShowDiscardModal(false)}
+        title="Perubahan Belum Disimpan"
+        subtitle="Perubahan Project yang belum disimpan akan hilang. Lanjut keluar?"
+        type="warning"
+        confirmText="Keluar"
+        cancelText="Kembali Edit"
+        onConfirm={() => {
+          setShowDiscardModal(false);
+          onCancel();
+        }}
+      />
+    </>
+  );
 }
 
 type ProjectEditorViewProps = {

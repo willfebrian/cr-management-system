@@ -10,6 +10,7 @@ import { ProjectEditor } from "../components/projects/ProjectEditor";
 import { ProjectReport } from "../components/projects/ProjectReport";
 import { UserManagementWorkspace } from "../components/users/UserManagementWorkspace";
 import { MasterDataWorkspace } from "./MasterDataWorkspace";
+import { UIModal, type ModalType } from "../components/common/UIModal";
 import { fetchProjectDetail } from "../api/projectApi";
 import { afterIncompleteSectionRender, expandSection, getIncompleteItems, groupIncompleteItems, markIncompleteTarget, type ExpandedIssueSections, type IncompleteItem, type IssueSection } from "../issueIncomplete";
 import { nextExpandedSidebarGroup, type SidebarGroup } from "../navigation";
@@ -151,52 +152,75 @@ export function App() {
     }
   }
 
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    subtitle: string;
+    type?: ModalType;
+    confirmText?: string;
+    cancelText?: string;
+    onConfirm: () => void | Promise<void>;
+  }>({
+    isOpen: false,
+    title: "",
+    subtitle: "",
+    onConfirm: () => {}
+  });
+
   async function runSync() {
     const period = resolveMonthPeriod(syncFromPeriod, syncToPeriod);
     const options = { ...syncOptions, systemCodes: syncSystems, syncMode, lookbackDays, ...period };
     const periodText = syncMode === "incremental"
-      ? `incremental with ${lookbackDays} day lookback`
-      : `from ${options.fromDate} to ${options.toDate}`;
-    const confirmed = window.confirm(
-      `Sync CR ${syncSystems.join(", ")} ${periodText}?\n\nThis is read-only from SAP and will update PostgreSQL cache.`
-    );
-    if (!confirmed) return;
-    setLoading(true);
-    setSyncResult(null);
-    setRunningSyncSystems(syncSystems);
-    setError("");
-    showToast("success", "Sync started...");
-    try {
-      const result = await syncCr(options);
-      setSyncResult(result);
-      if (!result.ok) {
-        showToast("error", result.message || "Sync CR failed for all selected systems.");
-        return;
+      ? `incremental dengan lookback ${lookbackDays} hari`
+      : `periode ${options.fromDate} s/d ${options.toDate}`;
+
+    setConfirmModal({
+      isOpen: true,
+      title: "Sync CR Data SAP",
+      subtitle: `Sync CR ${syncSystems.join(", ")} (${periodText})? Data akan ditarik dari SAP dan diperbarui di database PostgreSQL.`,
+      type: "primary",
+      confirmText: "Sync Sekarang",
+      cancelText: "Batal",
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        setLoading(true);
+        setSyncResult(null);
+        setRunningSyncSystems(syncSystems);
+        setError("");
+        showToast("success", "Sync started...");
+        try {
+          const result = await syncCr(options);
+          setSyncResult(result);
+          if (!result.ok) {
+            showToast("error", result.message || "Sync CR failed for all selected systems.");
+            return;
+          }
+          const confirmedTargets = result.lifecycleResults?.filter((item) => item.evidenceSource === "confirmed").length || 0;
+          const orphanText = result.orphanImportsFound
+            ? `, orphan recovered ${result.orphanImportsRecovered || 0}/${result.orphanImportsFound}`
+            : "";
+          showToast("success", `Sync completed: ${result.requestCount} request(s), lifecycle checked for ${confirmedTargets} target(s)${orphanText}.`);
+          const resetFilters = { ...filters, page: 1 };
+          setFilters(resetFilters);
+          setDraftFilters(resetFilters);
+          await load(resetFilters);
+          await loadIssues(issueFilters);
+          if (selected) {
+            const key = parseRequestKey(selected);
+            await fetchCrDetail(key.trkorr, key.sapSystemCode).then(setDetail);
+          }
+          if (selectedIssueId) {
+            await fetchIssueDetail(selectedIssueId).then(setIssueDetail);
+          }
+          setSyncRefreshToken((current) => current + 1);
+        } catch (err) {
+          showToast("error", err instanceof Error ? err.message : String(err));
+        } finally {
+          setLoading(false);
+          setRunningSyncSystems([]);
+        }
       }
-      const confirmedTargets = result.lifecycleResults?.filter((item) => item.evidenceSource === "confirmed").length || 0;
-      const orphanText = result.orphanImportsFound
-        ? `, orphan recovered ${result.orphanImportsRecovered || 0}/${result.orphanImportsFound}`
-        : "";
-      showToast("success", `Sync completed: ${result.requestCount} request(s), lifecycle checked for ${confirmedTargets} target(s)${orphanText}.`);
-      const resetFilters = { ...filters, page: 1 };
-      setFilters(resetFilters);
-      setDraftFilters(resetFilters);
-      await load(resetFilters);
-      await loadIssues(issueFilters);
-      if (selected) {
-        const key = parseRequestKey(selected);
-        await fetchCrDetail(key.trkorr, key.sapSystemCode).then(setDetail);
-      }
-      if (selectedIssueId) {
-        await fetchIssueDetail(selectedIssueId).then(setIssueDetail);
-      }
-      setSyncRefreshToken((current) => current + 1);
-    } catch (err) {
-      showToast("error", err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoading(false);
-      setRunningSyncSystems([]);
-    }
+    });
   }
 
   function openReportFromTrend(status: string, monthStart: string) {
@@ -284,12 +308,38 @@ export function App() {
   function navigateTo(nextView: View) {
     if (nextView === view) return true;
     if ((view === "issue-create" || view === "issue-change") && issueFormDirty) {
-      const confirmed = window.confirm("Perubahan Issue yang belum disimpan akan hilang. Lanjut pindah menu?");
-      if (!confirmed) return false;
+      setConfirmModal({
+        isOpen: true,
+        title: "Perubahan Belum Disimpan",
+        subtitle: "Perubahan Issue yang belum disimpan akan hilang. Lanjut pindah menu?",
+        type: "warning",
+        confirmText: "Lanjut Pindah",
+        cancelText: "Kembali Edit",
+        onConfirm: () => {
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          setIssueFormDirty(false);
+          setProjectFormDirty(false);
+          setView(nextView);
+        }
+      });
+      return false;
     }
     if ((view === "project-create" || view === "project-change") && projectFormDirty) {
-      const confirmed = window.confirm("Perubahan Project yang belum disimpan akan hilang. Lanjut pindah menu?");
-      if (!confirmed) return false;
+      setConfirmModal({
+        isOpen: true,
+        title: "Perubahan Belum Disimpan",
+        subtitle: "Perubahan Project yang belum disimpan akan hilang. Lanjut pindah menu?",
+        type: "warning",
+        confirmText: "Lanjut Pindah",
+        cancelText: "Kembali Edit",
+        onConfirm: () => {
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          setIssueFormDirty(false);
+          setProjectFormDirty(false);
+          setView(nextView);
+        }
+      });
+      return false;
     }
     setIssueFormDirty(false);
     setProjectFormDirty(false);
@@ -791,6 +841,16 @@ export function App() {
           />
         )}
       </section>
+      <UIModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        title={confirmModal.title}
+        subtitle={confirmModal.subtitle}
+        type={confirmModal.type || "warning"}
+        confirmText={confirmModal.confirmText || "Ya, Lanjutkan"}
+        cancelText={confirmModal.cancelText || "Batal"}
+        onConfirm={confirmModal.onConfirm}
+      />
     </main>
   );
 }
@@ -1978,8 +2038,6 @@ function IssueEditor({
     if (!detail?.issue || !onCancel) return;
     const reason = cancelReason.trim();
     if (!reason) return;
-    const confirmed = window.confirm(`Cancel issue ${detail.issue.issue_key} and remove all linked CR SAP numbers?`);
-    if (!confirmed) return;
     setActionBusy("cancel");
     try {
       await onCancel(detail.issue.id, reason);
@@ -1991,8 +2049,6 @@ function IssueEditor({
 
   async function deleteCurrentIssue() {
     if (!detail?.issue || !onDelete || deleteConfirm.trim() !== detail.issue.issue_key) return;
-    const confirmed = window.confirm(`Delete issue ${detail.issue.issue_key}? This will permanently remove the issue from the database.`);
-    if (!confirmed) return;
     setActionBusy("delete");
     try {
       await onDelete(detail.issue.id);
@@ -2515,111 +2571,73 @@ function IssueEditor({
           </section>
         </div>
       ) : null}
-      {showAiOverwriteModal ? (
-        <div className="modal-backdrop" role="presentation">
-          <section className="modal-card ai-overwrite-modal" role="dialog" aria-modal="true" style={{ maxWidth: "520px", width: "100%", padding: "1.75rem", borderRadius: "12px", background: "var(--color-bg-elevated, #ffffff)", boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem" }}>
-              <div style={{ padding: "0.5rem", borderRadius: "8px", background: "rgba(99, 102, 241, 0.1)", color: "#6366f1" }}>
-                <Sparkles size={22} />
+      <UIModal
+        isOpen={showAiOverwriteModal}
+        onClose={() => setShowAiOverwriteModal(false)}
+        title="Replace Existing Content?"
+        subtitle="Some fields already contain text. Check the fields you want AI to replace:"
+        type="purple"
+        confirmText="Generate AI"
+        cancelText="Cancel"
+        confirmDisabled={!aiOverwriteSelections.issueName && !aiOverwriteSelections.problemAnalysis && !aiOverwriteSelections.impactAnalysis}
+        onConfirm={async () => {
+          setShowAiOverwriteModal(false);
+          await executeAiGeneration(aiOverwriteSelections);
+        }}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", background: "var(--color-bg-subtle, #f8fafc)", padding: "1rem", borderRadius: "10px", border: "1px solid var(--color-border, #e2e8f0)" }}>
+          {Boolean(form.issueName?.trim()) && (
+            <label style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem", cursor: "pointer", fontSize: "0.875rem", color: "var(--color-text, #1f2937)", padding: "0.375rem 0" }}>
+              <input
+                type="checkbox"
+                checked={aiOverwriteSelections.issueName}
+                onChange={(e) => setAiOverwriteSelections(prev => ({ ...prev, issueName: e.target.checked }))}
+                style={{ marginTop: "0.2rem", width: "1.1rem", height: "1.1rem", accentColor: "#6366f1" }}
+              />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600 }}>Replace Issue Name</div>
+                <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #6b7280)", fontStyle: "italic", marginTop: "0.125rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "380px" }}>
+                  Current: "{form.issueName}"
+                </div>
               </div>
-              <div>
-                <h3 style={{ margin: 0, fontSize: "1.125rem", fontWeight: 700, color: "var(--color-text-heading, #111827)" }}>Replace Existing Content?</h3>
-                <p style={{ margin: "0.125rem 0 0 0", fontSize: "0.8125rem", color: "var(--color-text-muted, #6b7280)" }}>
-                  Some fields already contain text. Check the fields you want AI to replace:
-                </p>
+            </label>
+          )}
+
+          {Boolean(form.problemAnalysis?.trim()) && (
+            <label style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem", cursor: "pointer", fontSize: "0.875rem", color: "var(--color-text, #1f2937)", padding: "0.375rem 0" }}>
+              <input
+                type="checkbox"
+                checked={aiOverwriteSelections.problemAnalysis}
+                onChange={(e) => setAiOverwriteSelections(prev => ({ ...prev, problemAnalysis: e.target.checked }))}
+                style={{ marginTop: "0.2rem", width: "1.1rem", height: "1.1rem", accentColor: "#6366f1" }}
+              />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600 }}>Replace Problem Analysis</div>
+                <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #6b7280)", fontStyle: "italic", marginTop: "0.125rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "380px" }}>
+                  Current: "{form.problemAnalysis?.slice(0, 60)}..."
+                </div>
               </div>
-            </div>
+            </label>
+          )}
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", margin: "1.25rem 0", background: "var(--color-bg-subtle, #f9fafb)", padding: "1rem", borderRadius: "8px", border: "1px solid var(--color-border, #e5e7eb)" }}>
-              {Boolean(form.issueName?.trim()) && (
-                <label style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem", cursor: "pointer", fontSize: "0.875rem", color: "var(--color-text, #1f2937)", padding: "0.375rem 0" }}>
-                  <input
-                    type="checkbox"
-                    checked={aiOverwriteSelections.issueName}
-                    onChange={(e) => setAiOverwriteSelections(prev => ({ ...prev, issueName: e.target.checked }))}
-                    style={{ marginTop: "0.2rem", width: "1.1rem", height: "1.1rem", accentColor: "#6366f1" }}
-                  />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600 }}>Replace Issue Name</div>
-                    <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #6b7280)", fontStyle: "italic", marginTop: "0.125rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "380px" }}>
-                      Current: "{form.issueName}"
-                    </div>
-                  </div>
-                </label>
-              )}
-
-              {Boolean(form.problemAnalysis?.trim()) && (
-                <label style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem", cursor: "pointer", fontSize: "0.875rem", color: "var(--color-text, #1f2937)", padding: "0.375rem 0" }}>
-                  <input
-                    type="checkbox"
-                    checked={aiOverwriteSelections.problemAnalysis}
-                    onChange={(e) => setAiOverwriteSelections(prev => ({ ...prev, problemAnalysis: e.target.checked }))}
-                    style={{ marginTop: "0.2rem", width: "1.1rem", height: "1.1rem", accentColor: "#6366f1" }}
-                  />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600 }}>Replace Problem Analysis</div>
-                    <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #6b7280)", fontStyle: "italic", marginTop: "0.125rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "380px" }}>
-                      Current: "{form.problemAnalysis?.slice(0, 60)}..."
-                    </div>
-                  </div>
-                </label>
-              )}
-
-              {Boolean(form.impactAnalysis?.trim()) && (
-                <label style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem", cursor: "pointer", fontSize: "0.875rem", color: "var(--color-text, #1f2937)", padding: "0.375rem 0" }}>
-                  <input
-                    type="checkbox"
-                    checked={aiOverwriteSelections.impactAnalysis}
-                    onChange={(e) => setAiOverwriteSelections(prev => ({ ...prev, impactAnalysis: e.target.checked }))}
-                    style={{ marginTop: "0.2rem", width: "1.1rem", height: "1.1rem", accentColor: "#6366f1" }}
-                  />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600 }}>Replace Impact Analysis</div>
-                    <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #6b7280)", fontStyle: "italic", marginTop: "0.125rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "380px" }}>
-                      Current: "{form.impactAnalysis?.slice(0, 60)}..."
-                    </div>
-                  </div>
-                </label>
-              )}
-            </div>
-
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.625rem", marginTop: "1.5rem" }}>
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => setShowAiOverwriteModal(false)}
-                style={{ padding: "0.5rem 1rem", borderRadius: "6px", fontSize: "0.875rem", fontWeight: 500 }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAiOverwriteModal(false);
-                  executeAiGeneration(aiOverwriteSelections);
-                }}
-                disabled={!aiOverwriteSelections.issueName && !aiOverwriteSelections.problemAnalysis && !aiOverwriteSelections.impactAnalysis}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.375rem",
-                  padding: "0.5rem 1.125rem",
-                  borderRadius: "6px",
-                  border: "none",
-                  background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
-                  color: "#ffffff",
-                  cursor: "pointer",
-                  fontSize: "0.875rem",
-                  fontWeight: 600,
-                  opacity: (!aiOverwriteSelections.issueName && !aiOverwriteSelections.problemAnalysis && !aiOverwriteSelections.impactAnalysis) ? 0.5 : 1
-                }}
-              >
-                <Sparkles size={16} /> Generate & Replace
-              </button>
-            </div>
-          </section>
+          {Boolean(form.impactAnalysis?.trim()) && (
+            <label style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem", cursor: "pointer", fontSize: "0.875rem", color: "var(--color-text, #1f2937)", padding: "0.375rem 0" }}>
+              <input
+                type="checkbox"
+                checked={aiOverwriteSelections.impactAnalysis}
+                onChange={(e) => setAiOverwriteSelections(prev => ({ ...prev, impactAnalysis: e.target.checked }))}
+                style={{ marginTop: "0.2rem", width: "1.1rem", height: "1.1rem", accentColor: "#6366f1" }}
+              />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600 }}>Replace Impact Analysis</div>
+                <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #6b7280)", fontStyle: "italic", marginTop: "0.125rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "380px" }}>
+                  Current: "{form.impactAnalysis?.slice(0, 60)}..."
+                </div>
+              </div>
+            </label>
+          )}
         </div>
-      ) : null}
+      </UIModal>
     </form>
   );
 }
