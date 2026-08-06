@@ -3,7 +3,7 @@ import { applyCustomFontSize } from "../utils/fontSize";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Ban, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Database, FileOutput, FileSearch, FolderKanban, KeyRound, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Trash2, Users, X, XCircle } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchAdminSettings, fetchCrDetail, fetchCrList, fetchDashboard, fetchGlpiTicketDetail, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind, type GlpiTicketDetail } from "../api";
+import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchAdminSettings, fetchAdminPeople, fetchCrDetail, fetchCrList, fetchDashboard, fetchGlpiTicketDetail, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind, type GlpiTicketDetail, type AdminPersonRow } from "../api";
 import { IncompleteGroupCards } from "../components/IncompleteGroupCards";
 import { DisplayNameList } from "../components/DisplayNameList";
 import { DEFAULT_ISSUE_COLUMNS, IssueColumnMenu, type IssueColumnKey } from "../components/IssueColumnMenu";
@@ -2594,6 +2594,33 @@ function IssueEditor({
     if (!combinedContext.trim()) {
       onNotify?.("error", "No context available. Please fetch Email or GLPI content first.");
       return;
+    }
+
+    // Fetch Master Data People directory to include in AI context for accurate name & role matching
+    try {
+      const peopleRes = await fetchAdminPeople();
+      if (peopleRes.rows?.length) {
+        const activePeopleStr = peopleRes.rows
+          .filter((p) => p.is_active)
+          .map((p) => {
+            const name = [p.full_name, p.nickname ? `(${p.nickname})` : null].filter(Boolean).join(" ");
+            const roles = [
+              p.is_requester && "Requester",
+              p.is_abaper && "ABAPer",
+              p.is_tester && "DEV/QA Tester",
+              p.is_evaluator && "DEV/QA/PRD Evaluator",
+              p.is_approver && "PRD Approver",
+              p.is_transporter && "QA/PRD Transporter"
+            ].filter(Boolean).join(", ");
+            return `• Name: "${name}" | Email: ${p.email || "N/A"} | Dept: ${p.department || "N/A"}${roles ? ` | System Roles: [${roles}]` : ""}`;
+          })
+          .join("\n");
+        if (activePeopleStr) {
+          combinedContext = `=== MASTER DATA PEOPLE DIRECTORY (MATCH GLPI/EMAIL PERSONS TO THESE OFFICIAL NAMES & ROLES) ===\n${activePeopleStr}\n\n` + combinedContext;
+        }
+      }
+    } catch (err) {
+      console.warn("Could not fetch admin people for AI context:", err);
     }
 
     setGeneratingAi(true);
