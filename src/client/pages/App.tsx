@@ -4883,7 +4883,6 @@ function IssueEditor({
       </section>
       <div className="editor-safe-space" aria-hidden="true" />
       <div className="issue-save-bar">
-        <span>Actions</span>
         <div className="sticky-actions">
           {mode === "change" ? (
             <>
@@ -4892,7 +4891,7 @@ function IssueEditor({
                   setGenerateMenuOpen((current) => !current);
                   setMoreMenuOpen(false);
                 }} disabled={templateBusy !== "" || !detail?.issue?.id}>
-                  <FileOutput size={16} /> {templateBusy ? "Generating" : "Generate"} <ChevronDown size={14} />
+                  <FileOutput size={16} /> {templateBusy ? "Generating..." : "Generate"} <ChevronDown size={14} />
                 </button>
                 {generateMenuOpen ? (
                   <div className="sticky-action-menu-list">
@@ -4937,10 +4936,33 @@ function IssueEditor({
                   }}><Trash2 size={15} /> Delete Issue</button>
                 </div>
               ) : null}
-              {isCancelled ? <span className="readonly-note">Cancelled issue is read-only.</span> : null}
+              {isCancelled ? <span className="readonly-note">Read-Only</span> : null}
             </div>
           ) : null}
-          {!isCancelled ? <button className="primary" type="submit" disabled={saving}><Save size={16} /> {saving ? "Saving" : "Save"}</button> : null}
+          {!isCancelled ? (
+            <button
+              className="primary"
+              type="submit"
+              disabled={saving}
+              style={{
+                height: "36px",
+                padding: "0 18px",
+                borderRadius: "8px",
+                fontWeight: "600",
+                fontSize: "0.875rem",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                background: "#0f766e",
+                color: "#ffffff",
+                border: "none",
+                cursor: saving ? "not-allowed" : "pointer"
+              }}
+            >
+              <Save size={16} className={saving ? "spinner" : ""} />
+              <span>{saving ? "Saving..." : "Save Issue"}</span>
+            </button>
+          ) : null}
         </div>
       </div>
       {templatePreview ? (
@@ -5264,7 +5286,7 @@ function ChangeIssue({
             <Status value={changeDetail.issue.issue_status} />
           </div>
           {missing.length ? (
-            <details className="change-summary-details" open>
+            <details className="change-summary-details">
               <summary>{missing.length} incomplete item(s)</summary>
               <IncompleteGroupCards groups={missingGroups} onItemClick={navigateToIncompleteItem} />
             </details>

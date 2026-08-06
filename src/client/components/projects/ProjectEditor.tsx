@@ -272,11 +272,33 @@ export function ProjectEditorView(props: ProjectEditorViewProps) {
       onAdd={props.onAddIssue}
       onRemove={props.onRemoveIssue}
     />
+    <div className="editor-safe-space" aria-hidden="true" style={{ minHeight: "80px" }} />
     <footer className="project-editor-actions">
       <button className="project-button" type="button" onClick={props.onCancel}>{readOnly ? "Back" : "Cancel"}</button>
-      {!readOnly && <button className="project-button project-button--primary" type="submit" disabled={props.saving}>
-        <Save size={16} aria-hidden="true" /> {props.saving ? "Saving…" : "Save Project"}
-      </button>}
+      {!readOnly && (
+        <button
+          className="project-button project-button--primary"
+          type="submit"
+          disabled={props.saving}
+          style={{
+            height: "36px",
+            padding: "0 18px",
+            borderRadius: "8px",
+            fontWeight: "600",
+            fontSize: "0.875rem",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "8px",
+            background: "#0f766e",
+            color: "#ffffff",
+            border: "none",
+            cursor: props.saving ? "not-allowed" : "pointer"
+          }}
+        >
+          <Save size={16} aria-hidden="true" className={props.saving ? "spinner" : ""} />
+          <span>{props.saving ? "Saving..." : "Save Project"}</span>
+        </button>
+      )}
     </footer>
   </form>;
 }

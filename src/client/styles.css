@@ -1027,34 +1027,36 @@ body.dark-theme .popup-table-row:hover {
 }
 
 .issue-save-bar {
-  position: sticky;
-  bottom: 0;
-  z-index: 15;
+  position: fixed;
+  bottom: 24px;
+  right: 32px;
+  z-index: 999;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  border: 1px solid #d8e0ea;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.14);
-  padding: 10px 12px;
+  gap: 10px;
+  border: 1px solid rgba(203, 213, 225, 0.8);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 16px 36px -6px rgba(15, 23, 42, 0.22), 0 4px 14px rgba(0, 0, 0, 0.08);
+  padding: 8px 12px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.issue-save-bar:hover {
+  box-shadow: 0 20px 42px -6px rgba(15, 23, 42, 0.28), 0 6px 18px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
 }
 
 .editor-safe-space {
-  min-height: var(--action-bar-height);
-}
-
-.issue-save-bar span {
-  overflow: hidden;
-  color: #4f6682;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-height: 80px;
 }
 
 .issue-save-bar .readonly-note {
   color: #9f1239;
+  font-size: 0.8rem;
+  font-weight: 600;
 }
 
 .sticky-actions {
@@ -4444,9 +4446,9 @@ body.dark-theme select option {
 
 /* Issue Save Bar */
 body.dark-theme .issue-save-bar {
-  background: #151d2a !important;
-  border-top: 1px solid #243044 !important;
-  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5) !important;
+  background: rgba(15, 23, 42, 0.92) !important;
+  border: 1px solid rgba(51, 65, 85, 0.9) !important;
+  box-shadow: 0 16px 36px -6px rgba(0, 0, 0, 0.6), 0 4px 14px rgba(0, 0, 0, 0.4) !important;
 }
 
 /* Tables & Lists */
@@ -4539,8 +4541,9 @@ body.dark-theme .auth-panel input {
 
 /* Project Management & Editor Dark Mode */
 body.dark-theme .project-editor-actions {
-  background: #0f172a !important;
-  border-top-color: #334155 !important;
+  background: rgba(15, 23, 42, 0.92) !important;
+  border: 1px solid rgba(51, 65, 85, 0.9) !important;
+  box-shadow: 0 16px 36px -6px rgba(0, 0, 0, 0.6), 0 4px 14px rgba(0, 0, 0, 0.4) !important;
 }
 
 body.dark-theme .project-selected-issues {
