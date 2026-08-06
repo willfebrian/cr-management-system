@@ -547,7 +547,7 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
       )}
 
       {activeTab === "general_settings" && (
-        <div className="general-settings-tab" style={{ display: "flex", flexDirection: "column", gap: "2rem", maxWidth: "800px" }}>
+        <div className="general-settings-tab" style={{ display: "flex", flexDirection: "column", gap: "2rem", maxWidth: "100%" }}>
           <div style={{ background: "var(--color-bg-elevated, #ffffff)", padding: "2rem", borderRadius: "8px", border: "1px solid var(--color-border, #e5e7eb)", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
             <h3 style={{ marginTop: 0, marginBottom: "0.5rem", fontSize: "1.25rem", color: "var(--color-text-heading, #111827)" }}>General Settings</h3>
             <p style={{ color: "var(--color-text-muted, #6b7280)", marginBottom: "1.5rem", fontSize: "0.875rem" }}>
@@ -603,7 +603,7 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
       )}
 
       {activeTab === "ai_instructions" && (
-        <div className="settings-tab" style={{ display: "flex", flexDirection: "column", gap: "2rem", maxWidth: "800px" }}>
+        <div className="settings-tab" style={{ display: "flex", flexDirection: "column", gap: "2rem", maxWidth: "100%" }}>
           
           <div style={{ background: "var(--color-bg-elevated, #ffffff)", padding: "2rem", borderRadius: "8px", border: "1px solid var(--color-border, #e5e7eb)", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
             <h3 style={{ marginTop: 0, marginBottom: "0.5rem", fontSize: "1.25rem", color: "var(--color-text-heading, #111827)" }}>System Prompts & AI Instructions</h3>
@@ -689,7 +689,7 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
       )}
 
       {activeTab === "appearance" && (
-        <div className="settings-tab" style={{ display: "flex", flexDirection: "column", gap: "2rem", maxWidth: "880px", paddingBottom: "5rem" }}>
+        <div className="settings-tab" style={{ display: "flex", flexDirection: "column", gap: "2rem", maxWidth: "100%", paddingBottom: "5rem" }}>
           {!isAdmin ? (
             <div style={{ padding: "0.875rem 1.25rem", borderRadius: "8px", background: "#f0fdf4", border: "1px solid #bbf7d0", color: "#166534", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "8px" }}>
               <CheckCircle2 size={16} color="#16a34a" />
