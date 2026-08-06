@@ -1743,7 +1743,213 @@ export function App() {
                 ) : null}
               </div>
             </div>
-          ) : view.startsWith("issue-") ? (
+          ) : view === "issue-change" ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <IssueSwitcherTopbar
+                onSelectIssue={(issueId) => {
+                  setChangeIssueInitialId(issueId);
+                  setChangeIssueInitialAction("");
+                  setChangeIssueInitialItem(null);
+                  setSelectedIssueId(issueId);
+                  setView("issue-change");
+                }}
+              />
+
+              {/* Sync CR Popover Button */}
+              <div
+                className="sync-cr-popover-wrapper"
+                style={{ position: "relative", display: "inline-block" }}
+                onMouseEnter={() => setSyncPopoverOpen(true)}
+                onMouseLeave={() => setSyncPopoverOpen(false)}
+              >
+                <button
+                  type="button"
+                  className="primary sync-button"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    background: "#0f766e",
+                    border: "none",
+                    color: "#ffffff",
+                    padding: "8px 18px",
+                    borderRadius: "8px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    fontSize: "0.875rem",
+                    height: "36px"
+                  }}
+                  onClick={() => setSyncPopoverOpen((prev) => !prev)}
+                >
+                  <RefreshCw size={16} className={loading ? "spinner" : ""} />
+                  <span>{loading ? "Syncing CR..." : "Sync CR"}</span>
+                  <ChevronDown size={14} style={{ opacity: 0.8, transform: syncPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                </button>
+
+                {syncPopoverOpen ? (
+                  <div
+                    className="sync-cr-popover-menu"
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      zIndex: 1000,
+                      width: "280px",
+                      background: "var(--color-bg-elevated, #ffffff)",
+                      border: "1px solid var(--color-border, #cbd5e1)",
+                      borderRadius: "14px",
+                      boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.2)",
+                      padding: "16px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "12px",
+                      textAlign: "left"
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--color-border-soft, #e2e8f0)", paddingBottom: "8px" }}>
+                      <span style={{ fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)" }}>
+                        Sync SAP CR Options
+                      </span>
+                    </div>
+
+                    {/* Source Systems */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                        Source Systems
+                      </label>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        {systems.map((system) => (
+                          <label
+                            key={system.code}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "5px",
+                              padding: "4px 10px",
+                              borderRadius: "6px",
+                              border: "1px solid var(--color-border, #cbd5e1)",
+                              background: syncSystems.includes(system.code) ? "#f0fdf4" : "var(--color-bg, #ffffff)",
+                              fontSize: "0.78rem",
+                              fontWeight: "600",
+                              color: syncSystems.includes(system.code) ? "#0f766e" : "var(--color-text, #334155)",
+                              cursor: system.enabled ? "pointer" : "not-allowed",
+                              opacity: system.enabled ? 1 : 0.5
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={syncSystems.includes(system.code)}
+                              disabled={!system.enabled}
+                              onChange={() => setSyncSystems(toggleSystem(syncSystems, system.code))}
+                              style={{ accentColor: "#0f766e", margin: 0 }}
+                            />
+                            {system.code}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Sync Mode */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                        Sync Mode
+                      </label>
+                      <select
+                        value={syncMode}
+                        onChange={(e) => setSyncMode(e.target.value as "incremental" | "full_period")}
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: "6px",
+                          border: "1px solid var(--color-border, #cbd5e1)",
+                          background: "var(--color-bg, #ffffff)",
+                          color: "var(--color-text, #111827)",
+                          fontSize: "0.825rem",
+                          width: "100%"
+                        }}
+                      >
+                        <option value="incremental">Incremental</option>
+                        <option value="full_period">Full by Period</option>
+                      </select>
+                    </div>
+
+                    {syncMode === "incremental" ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                          Lookback Days
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="30"
+                          value={lookbackDays}
+                          onChange={(e) => setLookbackDays(Number(e.target.value || 0))}
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: "6px",
+                            border: "1px solid var(--color-border, #cbd5e1)",
+                            background: "var(--color-bg, #ffffff)",
+                            color: "var(--color-text, #111827)",
+                            fontSize: "0.825rem",
+                            width: "100%"
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>From</label>
+                          <input
+                            type="month"
+                            value={syncFromPeriod}
+                            onChange={(e) => setSyncFromPeriod(e.target.value)}
+                            style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.78rem" }}
+                          />
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>To</label>
+                          <input
+                            type="month"
+                            value={syncToPeriod}
+                            onChange={(e) => setSyncToPeriod(e.target.value)}
+                            style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.78rem" }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Sync Action Button */}
+                    <button
+                      type="button"
+                      className="primary"
+                      disabled={loading || syncSystems.length === 0}
+                      onClick={() => {
+                        setSyncPopoverOpen(false);
+                        runSync();
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "8px",
+                        background: "#0f766e",
+                        color: "#ffffff",
+                        border: "none",
+                        padding: "8px 14px",
+                        borderRadius: "8px",
+                        fontWeight: "600",
+                        fontSize: "0.85rem",
+                        cursor: "pointer",
+                        marginTop: "4px"
+                      }}
+                    >
+                      <RefreshCw size={15} className={loading ? "spinner" : ""} />
+                      <span>{loading ? "Syncing..." : "Sync CR Now"}</span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : view === "issue-display" ? (
             <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
               {/* Issue Custom Status Filter Dropdown */}
               {(() => {
@@ -2572,53 +2778,7 @@ export function App() {
                 ) : null}
               </div>
             </div>
-          ) : (
-            <div className={`sync-controls report-sync-controls page-sync-toolbar ${syncMode === "full_period" ? "full-mode" : "incremental-mode"}`}>
-              <label>
-                Source Systems
-                <div className="system-checks">
-                  {systems.map((system) => (
-                    <label key={system.code} className={!system.enabled ? "disabled" : ""} title={!system.enabled ? "Disabled in .env" : systemLabel(system)}>
-                      <input
-                        type="checkbox"
-                        checked={syncSystems.includes(system.code)}
-                        disabled={!system.enabled}
-                        onChange={() => setSyncSystems(toggleSystem(syncSystems, system.code))}
-                      />
-                      {system.code}
-                    </label>
-                  ))}
-                </div>
-              </label>
-              <label>
-                Sync Mode
-                <select value={syncMode} onChange={(event) => setSyncMode(event.target.value as "incremental" | "full_period")}>
-                  <option value="incremental">Incremental</option>
-                  <option value="full_period">Full by Period</option>
-                </select>
-              </label>
-              {syncMode === "incremental" ? (
-                <label>
-                  Lookback Days
-                  <input type="number" min="0" max="30" value={lookbackDays} onChange={(event) => setLookbackDays(Number(event.target.value || 0))} />
-                </label>
-              ) : (
-                <>
-              <label>
-                From Period
-                <input type="month" value={syncFromPeriod} onChange={(event) => setSyncFromPeriod(event.target.value)} />
-              </label>
-              <label>
-                To Period
-                <input type="month" value={syncToPeriod} onChange={(event) => setSyncToPeriod(event.target.value)} />
-              </label>
-                </>
-              )}
-              <button className="primary sync-button" onClick={runSync} disabled={loading || syncSystems.length === 0}>
-                <RefreshCw size={16} className={loading ? "spinner" : ""} /> <span>{loading ? "Syncing..." : "Sync CR"}</span>
-              </button>
-            </div>
-          )}
+          ) : null}
         </header>
 
         {error ? <div className="notice">{error}</div> : null}
@@ -4631,6 +4791,147 @@ function IssueDisplay({
     </section>
   );
 }
+function IssueSwitcherTopbar({ onSelectIssue }: { onSelectIssue: (issueId: number) => void }) {
+  const [query, setQuery] = useState("");
+  const [candidates, setCandidates] = useState<IssueRow[]>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (!query.trim()) {
+      setCandidates([]);
+      setOpen(false);
+      return;
+    }
+    const timer = window.setTimeout(async () => {
+      setLoading(true);
+      try {
+        const rows = await fetchIssueCandidates({ q: query.trim() });
+        setCandidates(rows);
+        setOpen(true);
+      } catch {
+        setCandidates([]);
+      } finally {
+        setLoading(false);
+      }
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  return (
+    <div ref={containerRef} style={{ position: "relative", display: "inline-block" }}>
+      <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+        <FileSearch size={15} style={{ position: "absolute", left: "10px", color: "#0f766e", pointerEvents: "none" }} />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => { if (candidates.length) setOpen(true); }}
+          placeholder="Switch Issue (Type Issue #, GLPI, CR...)"
+          style={{
+            padding: "6px 28px 6px 32px",
+            borderRadius: "8px",
+            border: "1px solid var(--color-border, #cbd5e1)",
+            background: "var(--color-bg, #ffffff)",
+            fontSize: "0.85rem",
+            width: "280px",
+            height: "36px",
+            boxSizing: "border-box"
+          }}
+        />
+        {query ? (
+          <button
+            type="button"
+            onClick={() => { setQuery(""); setCandidates([]); setOpen(false); }}
+            style={{ position: "absolute", right: "8px", border: "none", background: "transparent", color: "#64748b", cursor: "pointer", padding: "2px", display: "flex", alignItems: "center" }}
+          >
+            <X size={14} />
+          </button>
+        ) : null}
+      </div>
+
+      {open && (
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 6px)",
+            right: 0,
+            zIndex: 1000,
+            width: "380px",
+            maxHeight: "340px",
+            overflowY: "auto",
+            background: "var(--color-bg-elevated, #ffffff)",
+            border: "1px solid var(--color-border, #cbd5e1)",
+            borderRadius: "12px",
+            boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.2)",
+            padding: "6px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "4px"
+          }}
+        >
+          {loading ? (
+            <div style={{ padding: "12px", textAlign: "center", color: "#64748b", fontSize: "0.825rem" }}>
+              Searching issues...
+            </div>
+          ) : candidates.length === 0 ? (
+            <div style={{ padding: "12px", textAlign: "center", color: "#64748b", fontSize: "0.825rem" }}>
+              No matching issue found.
+            </div>
+          ) : (
+            candidates.map((issue) => (
+              <button
+                key={issue.id}
+                type="button"
+                onClick={() => {
+                  onSelectIssue(issue.id);
+                  setOpen(false);
+                  setQuery("");
+                }}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "2px",
+                  padding: "8px 10px",
+                  borderRadius: "8px",
+                  border: "none",
+                  background: "transparent",
+                  textAlign: "left",
+                  cursor: "pointer",
+                  transition: "background 0.15s ease"
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "#f1f5f9")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+                  <strong style={{ color: "#0f766e", fontSize: "0.85rem" }}>{issue.issue_key}</strong>
+                  <Status value={issue.issue_status} />
+                </div>
+                <span style={{ color: "#1e293b", fontSize: "0.825rem", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {issue.issue_name}
+                </span>
+                <small style={{ color: "#64748b", fontSize: "0.75rem" }}>
+                  {[issue.primary_cr, issue.primary_cr_helpdesk_no, issue.primary_glpi_ticket ? `GLPI:${issue.primary_glpi_ticket}` : ""].filter(Boolean).join(" • ")}
+                </small>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function IssueEditor({
   mode,
@@ -6027,37 +6328,6 @@ function ChangeIssue({
 
   return (
     <div className="issue-change-layout">
-      <form className="panel issue-selection-panel" onSubmit={search}>
-        <div className="panel-heading">
-          <h2>Selection Parameter</h2>
-        </div>
-        <div className="issue-selection-grid">
-          <label>Issue / Description / Requester
-            <input value={selection.q} onChange={(event) => updateSelection("q", event.target.value)} placeholder="Issue no, description, requester" />
-          </label>
-          <label>GLPI
-            <input value={selection.glpi} onChange={(event) => updateSelection("glpi", event.target.value)} placeholder="15293" />
-          </label>
-          <label>CR Helpdesk No.
-            <input value={selection.crHelpdesk} onChange={(event) => updateSelection("crHelpdesk", event.target.value)} placeholder="CR Helpdesk No." />
-          </label>
-          <label>CR
-            <input value={selection.cr} onChange={(event) => updateSelection("cr", event.target.value)} placeholder="TRDK..." />
-          </label>
-        </div>
-        {showCandidates ? (
-          <div className="issue-candidate-list">
-            {candidates.map((issue) => (
-              <button type="button" key={issue.id} className={changeDetail?.issue?.id === issue.id ? "selected" : ""} onClick={() => openIssue(issue).catch((err) => onNotify("error", err instanceof Error ? err.message : String(err)))}>
-                <strong>{issue.issue_key}</strong>
-                <span>{issue.issue_name}</span>
-                <small>{[issue.primary_cr, issue.primary_cr_helpdesk_no, formatGlpi(issue.primary_glpi_ticket), formatStatusLabel(issue.issue_status)].filter(Boolean).join(" - ")}</small>
-              </button>
-            ))}
-            {searched && !searching && candidates.length === 0 ? <span className="empty">No issue found.</span> : null}
-          </div>
-        ) : null}
-      </form>
 
       {changeDetail?.issue ? (
         <section className="panel issue-change-summary">
