@@ -76,7 +76,7 @@ export function UserManagementWorkspaceView({
     </div>
     <div className="user-management__filters">
       <input
-        aria-label="Cari user"
+        aria-label="Search users"
         placeholder="Search username"
         value={filters.q}
         onChange={(event) => onFiltersChange({ ...filters, q: event.target.value })}

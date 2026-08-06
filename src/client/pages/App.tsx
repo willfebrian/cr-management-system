@@ -987,9 +987,9 @@ export function App() {
           isOpen={metricModal.isOpen}
           onClose={() => setMetricModal(prev => ({ ...prev, isOpen: false }))}
           title={`${metricModal.title} (${metricModalData.total} Data)`}
-          subtitle={`Klik pada salah satu baris untuk membuka detail ${metricModal.kind === "cr" ? "CR Transport" : "Issue"}`}
+          subtitle={`Click on any row to open ${metricModal.kind === "cr" ? "CR Transport" : "Issue"} details`}
           type="primary"
-          cancelText="Tutup"
+          cancelText="Close"
           maxWidth="980px"
         >
           <div style={{ display: "flex", flexDirection: "column", gap: "14px", width: "100%" }}>
@@ -997,7 +997,7 @@ export function App() {
               <Search size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#64748b" }} />
               <input
                 type="text"
-                placeholder="Cari berdasarkan nomor, nama, owner/ABAPer..."
+                placeholder="Search by number, description, owner/ABAPer..."
                 value={metricModalData.search}
                 onChange={(e) => setMetricModalData(prev => ({ ...prev, search: e.target.value }))}
                 style={{ padding: "9px 12px 9px 36px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%", boxSizing: "border-box", fontSize: "13px" }}
@@ -1007,7 +1007,7 @@ export function App() {
             {metricModalData.loading ? (
               <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "50px 0", gap: "10px", color: "#0f766e" }}>
                 <Loader2 className="animate-spin" size={22} />
-                <span style={{ fontWeight: "600" }}>Memuat daftar data...</span>
+                <span style={{ fontWeight: "600" }}>Loading data list...</span>
               </div>
             ) : metricModal.kind === "cr" ? (
               <div style={{ overflowY: "auto", maxHeight: "420px", border: "1px solid #e2e8f0", borderRadius: "8px" }}>
@@ -1023,7 +1023,7 @@ export function App() {
                   </thead>
                   <tbody>
                     {(metricModalData.crs || []).length === 0 ? (
-                      <tr><td colSpan={5} style={{ padding: "24px", textAlign: "center", color: "#64748b" }}>Tidak ada data ditemukan.</td></tr>
+                      <tr><td colSpan={5} style={{ padding: "24px", textAlign: "center", color: "#64748b" }}>No data found.</td></tr>
                     ) : (
                       (metricModalData.crs || [])
                         .filter(c => !metricModalData.search || `${c.trkorr} ${c.description} ${c.owner}`.toLowerCase().includes(metricModalData.search.toLowerCase()))
@@ -1062,7 +1062,7 @@ export function App() {
                   </thead>
                   <tbody>
                     {(metricModalData.issues || []).length === 0 ? (
-                      <tr><td colSpan={5} style={{ padding: "24px", textAlign: "center", color: "#64748b" }}>Tidak ada data ditemukan.</td></tr>
+                      <tr><td colSpan={5} style={{ padding: "24px", textAlign: "center", color: "#64748b" }}>No data found.</td></tr>
                     ) : (
                       (metricModalData.issues || [])
                         .filter(i => !metricModalData.search || `${i.issue_key} ${i.issue_name} ${i.abaper_name_snapshot}`.toLowerCase().includes(metricModalData.search.toLowerCase()))
