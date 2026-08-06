@@ -361,6 +361,8 @@ export type AiAnalysisResult = {
   issueName: string;
   problemAnalysis: string;
   impactAnalysis: string;
+  participants?: Record<string, string>;
+  timeline?: Record<string, string>;
 };
 
 export async function generateAnalysis(emailContext: string, emailSubject?: string, issueName?: string): Promise<AiAnalysisResult> {

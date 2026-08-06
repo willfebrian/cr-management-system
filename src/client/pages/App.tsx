@@ -2614,10 +2614,36 @@ function IssueEditor({
         updatedCount++;
       }
 
+      // Auto-fill empty participant fields (never overwrite existing non-empty fields)
+      if (result.participants) {
+        for (const [role, nameVal] of Object.entries(result.participants)) {
+          if (nameVal && nameVal.trim() && nameVal.trim().toUpperCase() !== "N/A") {
+            const existingVal = form.participants?.[role]?.trim();
+            if (!existingVal) {
+              updateParticipant(role, nameVal.trim());
+              updatedCount++;
+            }
+          }
+        }
+      }
+
+      // Auto-fill empty timeline date fields (never overwrite existing non-empty fields)
+      if (result.timeline) {
+        for (const [tKey, dateVal] of Object.entries(result.timeline)) {
+          if (dateVal && dateVal.trim() && dateVal.trim().toUpperCase() !== "N/A") {
+            const existingVal = form.timeline?.[tKey]?.trim();
+            if (!existingVal) {
+              updateTimeline(tKey, dateVal.trim());
+              updatedCount++;
+            }
+          }
+        }
+      }
+
       if (updatedCount > 0) {
-        onNotify?.("success", `Generated AI analysis for ${updatedCount} field(s) successfully!`);
+        onNotify?.("success", `Generated & filled AI data for ${updatedCount} field(s) successfully!`);
       } else {
-        onNotify?.("error", "AI generation returned empty results. Please try clicking Generate AI again.");
+        onNotify?.("error", "AI generation returned empty or already existing results. Please try clicking Generate AI again.");
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

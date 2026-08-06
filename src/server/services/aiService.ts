@@ -4,6 +4,8 @@ export type AnalysisGenerationResult = {
   issueName: string;
   problemAnalysis: string;
   impactAnalysis: string;
+  participants?: Record<string, string>;
+  timeline?: Record<string, string>;
 };
 
 export async function generateAnalysisFromEmail(
@@ -17,7 +19,7 @@ export async function generateAnalysisFromEmail(
 
   // Get OpenRouter settings from DB or env
   const { rows } = await pool.query<{ setting_key: string; setting_value: string }>(
-    `SELECT setting_key, setting_value FROM app_settings WHERE setting_key IN ('openrouter_api_key', 'openrouter_model', 'ai_instruction_email', 'ai_instruction_issue_name', 'ai_instruction_problem', 'ai_instruction_impact')`
+    `SELECT setting_key, setting_value FROM app_settings WHERE setting_key IN ('openrouter_api_key', 'openrouter_model', 'ai_instruction_glpi', 'ai_instruction_email', 'ai_instruction_issue_name', 'ai_instruction_problem', 'ai_instruction_impact')`
   );
 
   const settingsMap = rows.reduce((acc, r) => {
@@ -27,6 +29,7 @@ export async function generateAnalysisFromEmail(
 
   const apiKey = settingsMap.openrouter_api_key || process.env.OPENROUTER_API_KEY || "";
   const model = settingsMap.openrouter_model || process.env.OPENROUTER_MODEL || "openrouter/auto";
+  const glpiInstructions = settingsMap.ai_instruction_glpi || "";
   const issueNameInstructions = settingsMap.ai_instruction_issue_name || "";
   const problemInstructions = settingsMap.ai_instruction_problem || "";
   const impactInstructions = settingsMap.ai_instruction_impact || "";
@@ -37,7 +40,7 @@ export async function generateAnalysisFromEmail(
   }
 
   const systemPrompt = `You are an expert IT Business Analyst & SAP Consultant.
-Your task is to analyze raw email communications regarding an IT/SAP issue or Change Request and generate three distinct sections:
+Your task is to analyze raw email communications, GLPI ticket details, and discussion logs regarding an IT/SAP issue or Change Request, and generate/extract the following structured data:
 
 1. Issue Name: A short, concise, and clear title summarizing the issue (maximum 60 characters).
 ${issueNameInstructions ? `[MANDATORY INSTRUCTION FOR ISSUE NAME]:\n${issueNameInstructions}\n` : ""}
@@ -45,18 +48,63 @@ ${issueNameInstructions ? `[MANDATORY INSTRUCTION FOR ISSUE NAME]:\n${issueNameI
 ${problemInstructions ? `[MANDATORY INSTRUCTION FOR PROBLEM ANALYSIS]:\n${problemInstructions}\n` : ""}
 3. Impact Analysis: Business or operational impact, affected users/processes, urgency, and potential consequences if not resolved.
 ${impactInstructions ? `[MANDATORY INSTRUCTION FOR IMPACT ANALYSIS]:\n${impactInstructions}\n` : ""}
+4. Participants (People Involved): Infer/extract person names (full name or username/nickname) from the email/GLPI context for roles:
+   - requester: Person requesting the issue/CR
+   - abaper: ABAP Developer/Technician assigned
+   - dev_tester: DEV Tester
+   - dev_evaluator: DEV Evaluator
+   - qa_transporter: QA Transporter
+   - qa_tester: QA Tester
+   - qa_evaluator: QA Evaluator
+   - prd_requester: PRD Requester
+   - prd_evaluator: PRD Evaluator
+   - approval: PRD Approver
+   - executor: PRD Transporter
+5. Timeline Dates: Extract any mentioned dates for:
+   - dev_tested_date (YYYY-MM-DD HH:MM:SS or YYYY-MM-DD)
+   - dev_evaluated_date
+   - qa_tested_date
+   - qa_evaluated_date
+   - prd_requested_date
+   - prd_evaluated_date
+   - approval_date
+
+${glpiInstructions ? `[CR DAN GLPI GENERATION GUIDELINES]:\n${glpiInstructions}\n` : ""}
 ${generalInstructions ? `[GENERAL GUIDELINES]:\n${generalInstructions}\n` : ""}
+
 IMPORTANT: You MUST respond ONLY with a valid JSON object strictly matching this schema, without any markdown formatting or commentary:
 {
-  "issueName": "your concise issue name here",
-  "problemAnalysis": "your problem analysis text here",
-  "impactAnalysis": "your impact analysis text here"
+  "issueName": "concise issue name",
+  "problemAnalysis": "problem analysis text",
+  "impactAnalysis": "impact analysis text",
+  "participants": {
+    "requester": "Name or empty string",
+    "abaper": "Name or empty string",
+    "dev_tester": "Name or empty string",
+    "dev_evaluator": "Name or empty string",
+    "qa_transporter": "Name or empty string",
+    "qa_tester": "Name or empty string",
+    "qa_evaluator": "Name or empty string",
+    "prd_requester": "Name or empty string",
+    "prd_evaluator": "Name or empty string",
+    "approval": "Name or empty string",
+    "executor": "Name or empty string"
+  },
+  "timeline": {
+    "dev_tested_date": "date string or empty string",
+    "dev_evaluated_date": "date string or empty string",
+    "qa_tested_date": "date string or empty string",
+    "qa_evaluated_date": "date string or empty string",
+    "prd_requested_date": "date string or empty string",
+    "prd_evaluated_date": "date string or empty string",
+    "approval_date": "date string or empty string"
+  }
 }`;
 
   const userPrompt = `Issue Name: ${issueName || "N/A"}
-Email Subject: ${emailSubject || "N/A"}
+Email Subject / Ref: ${emailSubject || "N/A"}
 
-Email Content & History:
+Context & Background Data (Email & GLPI Tickets):
 ${emailContext}`;
 
   const siteUrl = process.env.OPENROUTER_SITE_URL || "https://github.com/willfebrian/cr-management-system";
@@ -104,6 +152,8 @@ ${emailContext}`;
     const issueName = parsed.issueName || parsed.issue_name || "";
     const problemAnalysis = parsed.problemAnalysis || parsed.problem_analysis || "";
     const impactAnalysis = parsed.impactAnalysis || parsed.impact_analysis || "";
+    const participants = typeof parsed.participants === "object" && parsed.participants ? parsed.participants : undefined;
+    const timeline = typeof parsed.timeline === "object" && parsed.timeline ? parsed.timeline : undefined;
 
     if (!problemAnalysis && !impactAnalysis && !issueName) {
       throw new Error(`AI response JSON did not contain expected fields. Raw output: ${rawContent.slice(0, 150)}...`);
@@ -112,7 +162,9 @@ ${emailContext}`;
     return {
       issueName,
       problemAnalysis: problemAnalysis || rawContent,
-      impactAnalysis
+      impactAnalysis,
+      participants,
+      timeline
     };
   } catch (err: any) {
     if (err.message && err.message.startsWith("AI response JSON")) {

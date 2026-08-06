@@ -614,7 +614,7 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
             <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
               <div>
                 <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "600", color: "var(--color-text, #374151)", fontSize: "0.875rem" }}>
-                  GLPI Generation Guidelines
+                  CR dan GLPI Generation Guidelines
                 </label>
                 <textarea
                   value={settings.ai_instruction_glpi}
