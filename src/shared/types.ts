@@ -20,6 +20,19 @@ export type DashboardData = {
       cancelled: number;
     }>;
   };
+  leaderInsights?: {
+    abaperWorkload: Array<{ name: string; open: number; in_progress: number; total: number }>;
+    topRequesters: Array<{ name: string; count?: number; open_count: number; done_count: number; total_count: number }>;
+    avgLeadTimeDays: number;
+    recentLogs: Array<{
+      id: number;
+      activity_type: string;
+      action: string;
+      username: string;
+      description: string;
+      created_at: string;
+    }>;
+  };
   aging: {
     older_than_14_days: number;
     outstanding: number;
@@ -55,6 +68,9 @@ export type DashboardData = {
     description?: string;
     status_group: string;
     changed_date?: string;
+    requester_name?: string | null;
+    abaper_name?: string | null;
+    tester_name?: string | null;
   }>;
   lastSuccessfulSync: {
     id: string;
@@ -114,6 +130,9 @@ export type CrRequest = {
   owner?: string;
   changed_date?: string;
   changed_time?: string;
+  requester_name?: string | null;
+  abaper_name?: string | null;
+  tester_name?: string | null;
 };
 
 export type CrDetail = {

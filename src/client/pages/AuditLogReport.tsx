@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Search, RefreshCw, Filter, Calendar, ShieldCheck, User, Cpu, FileCode2, FolderGit2, Database, Settings, KeyRound } from "lucide-react";
+import { Search, RefreshCw, Filter, ShieldCheck, User, Cpu, FileCode2, FolderGit2, Database, Settings, KeyRound } from "lucide-react";
 import { fetchAuditLogs, ActivityLogItem, ActivityLogSummary, ActivityLogFilters } from "../api";
 
 export function AuditLogReport() {
@@ -94,7 +94,7 @@ export function AuditLogReport() {
     if (!ts) return "-";
     const d = new Date(ts);
     if (isNaN(d.getTime())) return ts;
-    return d.toLocaleString("id-ID", {
+    return d.toLocaleString("en-US", {
       year: "numeric",
       month: "short",
       day: "2-digit",
@@ -113,7 +113,7 @@ export function AuditLogReport() {
             <ShieldCheck size={26} color="#0f766e" /> Audit Log & Activity Report
           </h1>
           <p style={{ color: "#64748b", margin: "4px 0 0", fontSize: "14px" }}>
-            Laporan riwayat seluruh aktivitas pengguna dan sistem (otomatis disimpan 1 tahun).
+            Comprehensive audit trail of all user and system activities (automatically retained for 1 year).
           </p>
         </div>
         <button className="secondary" onClick={() => loadData(activeFilters, page)} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
@@ -153,12 +153,12 @@ export function AuditLogReport() {
       <section className="panel" style={{ padding: "16px 20px" }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "14px", alignItems: "flex-end" }}>
           <div style={{ flex: 1, minWidth: "220px" }}>
-            <label style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "4px", color: "#475569" }}>Pencarian</label>
+            <label style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "4px", color: "#475569" }}>Search</label>
             <div style={{ position: "relative" }}>
               <Search size={15} style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
               <input
                 type="text"
-                placeholder="Cari kata kunci, username, aksi..."
+                placeholder="Search keyword, username, action..."
                 value={draftFilters.q}
                 onChange={(e) => setDraftFilters({ ...draftFilters, q: e.target.value })}
                 onKeyDown={(e) => e.key === "Enter" && handleApplyFilter()}
@@ -168,13 +168,13 @@ export function AuditLogReport() {
           </div>
 
           <div style={{ width: "180px" }}>
-            <label style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "4px", color: "#475569" }}>Kategori</label>
+            <label style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "4px", color: "#475569" }}>Category</label>
             <select
               value={draftFilters.activityType}
               onChange={(e) => setDraftFilters({ ...draftFilters, activityType: e.target.value })}
               style={{ width: "100%", padding: "8px 12px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "13px" }}
             >
-              <option value="all">Semua Kategori</option>
+              <option value="all">All Categories</option>
               <option value="sync">Sync (SAP CR)</option>
               <option value="issue">Issue (Create/Change/Delete)</option>
               <option value="project">Project (Create/Change/Delete)</option>
@@ -185,7 +185,7 @@ export function AuditLogReport() {
           </div>
 
           <div style={{ width: "150px" }}>
-            <label style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "4px", color: "#475569" }}>Dari Tanggal</label>
+            <label style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "4px", color: "#475569" }}>From Date</label>
             <input
               type="date"
               value={draftFilters.fromDate}
@@ -195,7 +195,7 @@ export function AuditLogReport() {
           </div>
 
           <div style={{ width: "150px" }}>
-            <label style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "4px", color: "#475569" }}>Sampai Tanggal</label>
+            <label style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "4px", color: "#475569" }}>To Date</label>
             <input
               type="date"
               value={draftFilters.toDate}
@@ -228,11 +228,11 @@ export function AuditLogReport() {
           <table className="report-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
             <thead style={{ background: "#f8fafc", position: "sticky", top: 0, zIndex: 1, borderBottom: "1px solid #e2e8f0" }}>
               <tr>
-                <th style={{ padding: "10px 14px", textAlign: "left", width: "170px" }}>TANGGAL & WAKTU</th>
-                <th style={{ padding: "10px 14px", textAlign: "left", width: "130px" }}>KATEGORI</th>
-                <th style={{ padding: "10px 14px", textAlign: "left", width: "140px" }}>AKSI</th>
+                <th style={{ padding: "10px 14px", textAlign: "left", width: "170px" }}>DATE & TIME</th>
+                <th style={{ padding: "10px 14px", textAlign: "left", width: "130px" }}>CATEGORY</th>
+                <th style={{ padding: "10px 14px", textAlign: "left", width: "140px" }}>ACTION</th>
                 <th style={{ padding: "10px 14px", textAlign: "left", width: "150px" }}>USERNAME</th>
-                <th style={{ padding: "10px 14px", textAlign: "left" }}>DESKRIPSI AKTIVITAS</th>
+                <th style={{ padding: "10px 14px", textAlign: "left" }}>ACTIVITY DESCRIPTION</th>
                 <th style={{ padding: "10px 14px", textAlign: "left", width: "120px" }}>IP ADDRESS</th>
               </tr>
             </thead>
@@ -241,13 +241,13 @@ export function AuditLogReport() {
                 <tr>
                   <td colSpan={6} style={{ padding: "40px 0", textAlign: "center", color: "#0f766e" }}>
                     <RefreshCw className="animate-spin" size={22} style={{ margin: "0 auto 8px" }} />
-                    <div>Memuat log aktivitas...</div>
+                    <div>Loading activity logs...</div>
                   </td>
                 </tr>
               ) : logs.length === 0 ? (
                 <tr>
                   <td colSpan={6} style={{ padding: "40px 0", textAlign: "center", color: "#64748b" }}>
-                    Belum ada log aktivitas yang sesuai dengan filter.
+                    No activity logs match the selected filter.
                   </td>
                 </tr>
               ) : (
@@ -277,7 +277,7 @@ export function AuditLogReport() {
         {/* Pagination Footer */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderTop: "1px solid #e2e8f0", background: "#f8fafc" }}>
           <span style={{ fontSize: "13px", color: "#64748b" }}>
-            Menampilkan <strong>{logs.length}</strong> dari <strong>{totalCount}</strong> log aktivitas
+            Showing <strong>{logs.length}</strong> of <strong>{totalCount}</strong> activity logs
           </span>
 
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -290,7 +290,7 @@ export function AuditLogReport() {
               &laquo; Prev
             </button>
             <span style={{ fontSize: "13px", fontWeight: "600", color: "#334155" }}>
-              Halaman {page} dari {totalPages}
+              Page {page} of {totalPages}
             </span>
             <button
               className="secondary"

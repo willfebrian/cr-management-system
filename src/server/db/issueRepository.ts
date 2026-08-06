@@ -540,6 +540,152 @@ export async function getIssueDashboardInsights() {
   };
 }
 
+export async function getLeaderDashboardInsights() {
+  const [abaperResult, requesterResult, leadTimeResult, recentLogsResult] = await Promise.all([
+    pool.query(`
+      WITH active_issues AS (
+        SELECT 
+          COALESCE(NULLIF(TRIM(h.abaper_name_snapshot), ''), 'Unassigned') AS name,
+          CASE
+            WHEN LOWER(COALESCE(h.issue_status, '')) = 'cancelled' THEN 'cancelled'
+            WHEN primary_cr.trkorr IS NULL THEN 'open'
+            WHEN primary_cr.lifecycle_status = 'in_prd' THEN 'ok'
+            ELSE 'in_progress'
+          END AS calc_status
+        FROM issue_headers h
+        LEFT JOIN LATERAL (
+          SELECT link.trkorr, cr.lifecycle_status
+          FROM issue_cr_links link
+          LEFT JOIN LATERAL (
+            SELECT
+              CASE
+                WHEN lifecycle_req.status_group <> 'released' THEN 'created'
+                WHEN EXISTS (
+                  SELECT 1 FROM cr_transport_lifecycle prd_life
+                  WHERE prd_life.source_system_code = 'DEV' AND prd_life.target_system_code = 'PRD'
+                    AND prd_life.trkorr = lifecycle_req.trkorr AND prd_life.transport_status = 'imported'
+                ) THEN 'in_prd'
+                WHEN EXISTS (
+                  SELECT 1 FROM cr_transport_lifecycle qa_life
+                  WHERE qa_life.source_system_code = 'DEV' AND qa_life.target_system_code = 'QA'
+                    AND qa_life.trkorr = lifecycle_req.trkorr AND qa_life.transport_status = 'imported'
+                ) THEN 'in_qa'
+                WHEN lifecycle_req.sap_system_code = 'DEV' AND lifecycle_req.status_group = 'released' THEN 'released'
+                ELSE 'unknown'
+              END AS lifecycle_status
+            FROM cr_requests req
+            LEFT JOIN cr_requests parent_req ON parent_req.sap_system_code = req.sap_system_code AND parent_req.trkorr = req.parent_request
+            CROSS JOIN LATERAL (
+              SELECT COALESCE(parent_req.sap_system_code, req.sap_system_code) AS sap_system_code,
+                     COALESCE(parent_req.trkorr, req.trkorr) AS trkorr,
+                     COALESCE(parent_req.status_group, req.status_group) AS status_group
+            ) lifecycle_req
+            WHERE req.sap_system_code = link.sap_system_code AND req.trkorr = link.trkorr
+            LIMIT 1
+          ) cr ON true
+          WHERE link.issue_id = h.id
+          ORDER BY link.is_primary DESC, link.trkorr
+          LIMIT 1
+        ) primary_cr ON true
+      )
+      SELECT
+        name,
+        COUNT(*) FILTER (WHERE calc_status = 'open')::int AS open,
+        COUNT(*) FILTER (WHERE calc_status = 'in_progress')::int AS in_progress,
+        COUNT(*)::int AS total
+      FROM active_issues
+      WHERE calc_status IN ('open', 'in_progress')
+      GROUP BY name
+      ORDER BY total DESC
+      LIMIT 10
+    `),
+    pool.query(`
+      WITH requester_issues AS (
+        SELECT 
+          COALESCE(req_p.name, NULLIF(TRIM(h.requester_name_snapshot), ''), 'Unknown') AS name,
+          CASE
+            WHEN LOWER(COALESCE(h.issue_status, '')) = 'cancelled' THEN 'cancelled'
+            WHEN primary_cr.lifecycle_status = 'in_prd' OR LOWER(COALESCE(h.issue_status, '')) = 'ok' THEN 'done'
+            ELSE 'open'
+          END AS calc_status
+        FROM issue_headers h
+        LEFT JOIN LATERAL (
+          SELECT COALESCE(people.nickname, people.full_name, p.person_name_snapshot) AS name
+          FROM issue_participants p
+          LEFT JOIN issue_people people ON people.id = p.person_id
+          WHERE p.issue_id = h.id AND p.role = 'requester'
+          ORDER BY p.is_primary DESC, p.id
+          LIMIT 1
+        ) req_p ON true
+        LEFT JOIN LATERAL (
+          SELECT link.trkorr, cr.lifecycle_status
+          FROM issue_cr_links link
+          LEFT JOIN LATERAL (
+            SELECT
+              CASE
+                WHEN EXISTS (
+                  SELECT 1 FROM cr_transport_lifecycle prd_life
+                  WHERE prd_life.source_system_code = 'DEV' AND prd_life.target_system_code = 'PRD'
+                    AND prd_life.trkorr = req.trkorr AND prd_life.transport_status = 'imported'
+                ) THEN 'in_prd'
+                ELSE req.status_group
+              END AS lifecycle_status
+            FROM cr_requests req
+            WHERE req.sap_system_code = link.sap_system_code AND req.trkorr = link.trkorr
+            LIMIT 1
+          ) cr ON true
+          WHERE link.issue_id = h.id
+          ORDER BY link.is_primary DESC, link.trkorr
+          LIMIT 1
+        ) primary_cr ON true
+      )
+      SELECT
+        name,
+        COUNT(*) FILTER (WHERE calc_status = 'open')::int AS open_count,
+        COUNT(*) FILTER (WHERE calc_status = 'done')::int AS done_count,
+        COUNT(*)::int AS total_count,
+        COUNT(*)::int AS count
+      FROM requester_issues
+      WHERE calc_status <> 'cancelled'
+      GROUP BY name
+      ORDER BY total_count DESC
+      LIMIT 10
+    `),
+    pool.query(`
+      SELECT 
+        COALESCE(
+          ROUND(
+            AVG(
+              GREATEST(
+                1,
+                EXTRACT(EPOCH FROM (COALESCE(prd.prd_evaluated_date, dev.dev_tested_date, h.created_at) - h.create_issue_date)) / 86400.0
+              )
+            )::numeric, 1
+          )::float,
+          2.5
+        ) AS avg_lead_time_days
+      FROM issue_headers h
+      LEFT JOIN issue_dev_timeline dev ON dev.issue_id = h.id
+      LEFT JOIN issue_prd_timeline prd ON prd.issue_id = h.id
+      WHERE h.create_issue_date IS NOT NULL 
+        AND LOWER(COALESCE(h.issue_status, '')) <> 'cancelled'
+    `),
+    pool.query(`
+      SELECT id, activity_type, action, username, description, created_at::text AS created_at
+      FROM activity_logs
+      ORDER BY created_at DESC
+      LIMIT 8
+    `)
+  ]);
+
+  return {
+    abaperWorkload: abaperResult.rows,
+    topRequesters: requesterResult.rows,
+    avgLeadTimeDays: leadTimeResult.rows[0]?.avg_lead_time_days || 0,
+    recentLogs: recentLogsResult.rows
+  };
+}
+
 export async function getIssueDetail(id: number) {
   const [
     issue,

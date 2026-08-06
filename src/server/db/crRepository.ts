@@ -89,11 +89,51 @@ export async function getDashboard() {
       UNION ALL SELECT 'In PRD', value FROM prd
     `),
     pool.query(`
-      SELECT sap_system_code, trkorr, description, status_group, changed_date::text AS changed_date
-      FROM cr_requests
-      WHERE parent_request IS NULL
-        AND upper(owner) = 'TRSTDEV'
-      ORDER BY changed_date DESC NULLS LAST, changed_time DESC NULLS LAST, trkorr
+      SELECT 
+        req.sap_system_code,
+        req.trkorr,
+        req.description,
+        req.status_group,
+        req.changed_date::text AS changed_date,
+        COALESCE(req_p.name, h.requester_name_snapshot) AS requester_name,
+        COALESCE(abap_p.name, h.abaper_name_snapshot) AS abaper_name,
+        tester_p.name AS tester_name
+      FROM cr_requests req
+      LEFT JOIN LATERAL (
+        SELECT link.issue_id
+        FROM issue_cr_links link
+        WHERE link.sap_system_code = req.sap_system_code AND link.trkorr = req.trkorr
+        ORDER BY link.is_primary DESC, link.id
+        LIMIT 1
+      ) link ON true
+      LEFT JOIN issue_headers h ON h.id = link.issue_id
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(people.nickname, people.full_name, p.person_name_snapshot) AS name
+        FROM issue_participants p
+        LEFT JOIN issue_people people ON people.id = p.person_id
+        WHERE p.issue_id = h.id AND p.role = 'requester'
+        ORDER BY p.is_primary DESC, p.id
+        LIMIT 1
+      ) req_p ON true
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(people.nickname, people.full_name, p.person_name_snapshot) AS name
+        FROM issue_participants p
+        LEFT JOIN issue_people people ON people.id = p.person_id
+        WHERE p.issue_id = h.id AND p.role = 'abaper'
+        ORDER BY p.is_primary DESC, p.id
+        LIMIT 1
+      ) abap_p ON true
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(people.nickname, people.full_name, p.person_name_snapshot) AS name
+        FROM issue_participants p
+        LEFT JOIN issue_people people ON people.id = p.person_id
+        WHERE p.issue_id = h.id AND p.role IN ('dev_tester', 'qa_tester')
+        ORDER BY p.is_primary DESC, p.id
+        LIMIT 1
+      ) tester_p ON true
+      WHERE req.parent_request IS NULL
+        AND upper(req.owner) = 'TRSTDEV'
+      ORDER BY req.changed_date DESC NULLS LAST, req.changed_time DESC NULLS LAST, req.trkorr
       LIMIT 8
     `),
     pool.query(`

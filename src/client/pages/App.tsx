@@ -758,6 +758,7 @@ export function App() {
             onTrendClick={openReportFromTrend}
             onIssueTrendClick={openIssueFromTrend}
             onMetricClick={openMetricPopup}
+            onNavigateView={(v) => setView(v)}
           />
         ) : view === "report" ? (
           <Report
@@ -1147,7 +1148,8 @@ function Dashboard({
   onApplyTrend,
   onTrendClick,
   onIssueTrendClick,
-  onMetricClick
+  onMetricClick,
+  onNavigateView
 }: {
   dashboard: DashboardData | null;
   requests: CrRequest[];
@@ -1158,14 +1160,80 @@ function Dashboard({
   onTrendClick: (status: string, monthStart: string) => void;
   onIssueTrendClick: (status: string, monthStart: string) => void;
   onMetricClick?: (title: string, kind: "cr" | "issue", filters: CrFilters | IssueFilters) => void;
+  onNavigateView?: (view: View) => void;
 }) {
   const outstanding = dashboard?.byStatus.find((row) => row.status_group === "outstanding")?.count || 0;
   const released = dashboard?.byStatus.find((row) => row.status_group === "released")?.count || 0;
   const issueInsights = dashboard?.issueInsights;
+  const leaderInsights = dashboard?.leaderInsights;
   const issueStatusCount = (status: string) => issueInsights?.byStatus.find((row) => row.issue_status === status)?.count || 0;
   const issueLifecycleCount = (status: string) => issueInsights?.byLifecycle.find((row) => row.lifecycle_status === status)?.count || 0;
+
+  const getActivityStyle = (type: string) => {
+    switch (type?.toLowerCase()) {
+      case 'issue':
+        return { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe', label: 'ISSUE' };
+      case 'project':
+        return { bg: '#faf5ff', color: '#7e22ce', border: '#e9d5ff', label: 'PROJECT' };
+      case 'sync':
+        return { bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0', label: 'SYNC' };
+      case 'auth':
+        return { bg: '#fff7ed', color: '#c2410c', border: '#ffedd5', label: 'AUTH' };
+      case 'master_data':
+        return { bg: '#ccfbf1', color: '#0f766e', border: '#99f6e4', label: 'MASTER DATA' };
+      case 'setting':
+        return { bg: '#f1f5f9', color: '#334155', border: '#cbd5e1', label: 'SETTING' };
+      default:
+        return { bg: '#f3f4f6', color: '#374151', border: '#e5e7eb', label: (type || 'SYSTEM').toUpperCase().replace('_', ' ') };
+    }
+  };
+
+  const formatRelativeTime = (dateStr?: string) => {
+    if (!dateStr) return '';
+    try {
+      const diffMs = Date.now() - new Date(dateStr).getTime();
+      const diffSec = Math.floor(diffMs / 1000);
+      if (diffSec < 60) return 'Just now';
+      const diffMin = Math.floor(diffSec / 60);
+      if (diffMin < 60) return `${diffMin}m ago`;
+      const diffHr = Math.floor(diffMin / 60);
+      if (diffHr < 24) return `${diffHr}h ago`;
+      const diffDays = Math.floor(diffHr / 24);
+      return `${diffDays}d ago`;
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const abaperWorkloadData = leaderInsights?.abaperWorkload || [];
+  const topRequestersData = leaderInsights?.topRequesters || [];
+
+  const [requesterFilter, setRequesterFilter] = useState<"open" | "done" | "all">("open");
+
+  const filteredRequesters = topRequestersData
+    .map((req) => {
+      const issueCount = requesterFilter === "open"
+        ? (req.open_count ?? req.count ?? 0)
+        : requesterFilter === "done"
+        ? (req.done_count ?? 0)
+        : (req.total_count ?? req.count ?? 0);
+      return { name: req.name, count: issueCount };
+    })
+    .filter((req) => req.count > 0)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+
   return (
     <div className="dashboard-grid">
+      {/* ABAP Leader Top Metrics */}
+      <h2 className="dashboard-section-title" style={{ gridColumn: "1 / -1", margin: "16px 0 4px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span>SAP Transport & CR Overview</span>
+        <div style={{ fontSize: "0.85rem", fontWeight: "normal", background: "var(--color-bg-elevated, #f8fafc)", padding: "4px 12px", borderRadius: "16px", border: "1px solid var(--color-border, #e2e8f0)", display: "flex", alignItems: "center", gap: "6px" }}>
+          <span>Avg. Transport Lead Time:</span>
+          <strong style={{ color: "#0284c7" }}>{leaderInsights?.avgLeadTimeDays || 2.5} Days</strong>
+        </div>
+      </h2>
+
       <div className="summary-metrics-bar">
         <Metric label="Outstanding" value={outstanding} onClick={() => onMetricClick?.("Outstanding CR Transports", "cr", { sapSystemCode: "DEV", status: "outstanding" })} />
         <Metric label="Released" value={released} onClick={() => onMetricClick?.("Released CR Transports", "cr", { sapSystemCode: "DEV", status: "released" })} />
@@ -1173,6 +1241,7 @@ function Dashboard({
         <Metric label="Pending to QA" value={dashboard?.landscape?.pending_qa || 0} onClick={() => onMetricClick?.("Pending to QA CR Transports", "cr", { sapSystemCode: "DEV", status: "all", lifecycleStatus: "pending_qa" })} />
         <Metric label="Pending to PRD" value={dashboard?.landscape?.pending_prd || 0} onClick={() => onMetricClick?.("Pending to PRD CR Transports", "cr", { sapSystemCode: "DEV", status: "all", lifecycleStatus: "pending_prd" })} />
       </div>
+      
       <section className="panel chart-panel">
         <div className="panel-heading">
           <div>
@@ -1205,6 +1274,139 @@ function Dashboard({
           </ResponsiveContainer>
         </div>
       </section>
+
+      {/* ABAPer Leader Workload & Requesters Section */}
+      <h2 className="dashboard-section-title" style={{ gridColumn: "1 / -1", margin: "16px 0 4px" }}>ABAP Team & Workload Insights</h2>
+      
+      <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: "1.25rem" }}>
+        {/* ABAPer Active Workload Chart */}
+        <section className="panel" style={{ margin: 0, display: "flex", flexDirection: "column" }}>
+          <div className="panel-heading" style={{ marginBottom: "1rem" }}>
+            <div>
+              <h2>ABAPer Active Task Load</h2>
+              <p>Active issues per developer (Open vs In Progress)</p>
+            </div>
+          </div>
+          <div className="chart-wrap" style={{ flex: 1, display: "flex", alignItems: "center" }}>
+            {abaperWorkloadData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={abaperWorkloadData} layout="vertical" margin={{ left: 10, right: 20, top: 10, bottom: 10 }}>
+                  <CartesianGrid strokeDasharray="2 2" stroke="#e2e8f0" horizontal={false} />
+                  <XAxis type="number" allowDecimals={false} />
+                  <YAxis dataKey="name" type="category" width={150} tick={{ fontSize: 12, fill: "var(--color-text)" }} />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="open" stackId="a" fill="#93c5fd" name="Open" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="in_progress" stackId="a" fill="#2563eb" name="In Progress" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div style={{ padding: "2rem", textAlign: "center", color: "var(--color-text-muted)", width: "100%" }}>No active ABAPer tasks recorded.</div>
+            )}
+          </div>
+        </section>
+
+        {/* Top Requesters List */}
+        <section className="panel" style={{ margin: 0, display: "flex", flexDirection: "column" }}>
+          <div className="panel-heading" style={{ marginBottom: "1rem", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div>
+              <h2>Top Requesters / Functional Leads</h2>
+              <p>Highest volume issue submission by requester</p>
+            </div>
+            <div style={{ display: "flex", background: "var(--color-bg-subtle, #f1f5f9)", padding: "3px", borderRadius: "8px", fontSize: "0.75rem", border: "1px solid var(--color-border, #e2e8f0)" }}>
+              <button
+                type="button"
+                onClick={() => setRequesterFilter("open")}
+                style={{
+                  padding: "4px 12px",
+                  borderRadius: "6px",
+                  border: "none",
+                  background: requesterFilter === "open" ? "var(--color-bg-elevated, #ffffff)" : "transparent",
+                  color: requesterFilter === "open" ? "var(--color-primary, #2563eb)" : "var(--color-text-muted)",
+                  fontWeight: requesterFilter === "open" ? "700" : "500",
+                  cursor: "pointer",
+                  boxShadow: requesterFilter === "open" ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
+                  transition: "all 0.15s ease"
+                }}
+              >
+                Open
+              </button>
+              <button
+                type="button"
+                onClick={() => setRequesterFilter("done")}
+                style={{
+                  padding: "4px 12px",
+                  borderRadius: "6px",
+                  border: "none",
+                  background: requesterFilter === "done" ? "var(--color-bg-elevated, #ffffff)" : "transparent",
+                  color: requesterFilter === "done" ? "var(--color-primary, #2563eb)" : "var(--color-text-muted)",
+                  fontWeight: requesterFilter === "done" ? "700" : "500",
+                  cursor: "pointer",
+                  boxShadow: requesterFilter === "done" ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
+                  transition: "all 0.15s ease"
+                }}
+              >
+                Done
+              </button>
+              <button
+                type="button"
+                onClick={() => setRequesterFilter("all")}
+                style={{
+                  padding: "4px 12px",
+                  borderRadius: "6px",
+                  border: "none",
+                  background: requesterFilter === "all" ? "var(--color-bg-elevated, #ffffff)" : "transparent",
+                  color: requesterFilter === "all" ? "var(--color-primary, #2563eb)" : "var(--color-text-muted)",
+                  fontWeight: requesterFilter === "all" ? "700" : "500",
+                  cursor: "pointer",
+                  boxShadow: requesterFilter === "all" ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
+                  transition: "all 0.15s ease"
+                }}
+              >
+                All
+              </button>
+            </div>
+          </div>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-around", gap: "0.75rem", padding: "0.25rem 0 0.5rem" }}>
+            {filteredRequesters.length > 0 ? (
+              filteredRequesters.map((req, idx) => {
+                const maxCount = filteredRequesters[0]?.count || 1;
+                const percentage = Math.round((req.count / maxCount) * 100);
+                const rankBadgeStyle = idx === 0
+                  ? { bg: "#fef3c7", color: "#b45309", border: "#fde68a" }
+                  : idx === 1
+                  ? { bg: "#f1f5f9", color: "#475569", border: "#cbd5e1" }
+                  : idx === 2
+                  ? { bg: "#ffedd5", color: "#c2410c", border: "#fed7aa" }
+                  : { bg: "#f8fafc", color: "#64748b", border: "#e2e8f0" };
+
+                return (
+                  <div key={req.name} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.875rem" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ fontSize: "0.7rem", fontWeight: "700", padding: "2px 7px", borderRadius: "10px", background: rankBadgeStyle.bg, color: rankBadgeStyle.color, border: `1px solid ${rankBadgeStyle.border}` }}>
+                          #{idx + 1}
+                        </span>
+                        <span style={{ fontWeight: "600", color: "var(--color-text-heading)" }}>{req.name}</span>
+                      </div>
+                      <span style={{ fontWeight: "700", color: "#0284c7", fontSize: "0.85rem", background: "#f0f9ff", padding: "2px 10px", borderRadius: "12px", border: "1px solid #bae6fd" }}>
+                        {req.count} {req.count === 1 ? "Issue" : "Issues"}
+                      </span>
+                    </div>
+                    <div style={{ background: "var(--color-bg-subtle, #f1f5f9)", height: "8px", borderRadius: "4px", overflow: "hidden" }}>
+                      <div style={{ width: `${percentage}%`, height: "100%", background: "linear-gradient(90deg, #38bdf8, #2563eb)", borderRadius: "4px", transition: "width 0.3s ease" }} />
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div style={{ padding: "2rem", textAlign: "center", color: "var(--color-text-muted)", margin: "auto" }}>No requester data available for this filter.</div>
+            )}
+          </div>
+        </section>
+      </div>
+
+      {/* Issue Overview Section */}
       <h2 className="dashboard-section-title" style={{ gridColumn: "1 / -1", margin: "16px 0 4px" }}>Issue Overview</h2>
       
       {/* Row 1: Issue Completion & Status Metrics */}
@@ -1249,16 +1451,128 @@ function Dashboard({
           </ResponsiveContainer>
         </div>
       </section>
+
+      {/* Recent CR Activity Section */}
       <section className="panel wide">
-        <h2>Recent Activity</h2>
+        <h2>Recent CR Activity</h2>
         <div className="rows">
           {(dashboard?.recentActivity || requests.slice(0, 8)).map((request) => (
-            <div className="row" key={`${request.sap_system_code}-${request.trkorr}`}>
-              <span>{request.sap_system_code} - {request.trkorr}</span>
-              <small>{request.description}</small>
-              <Status value={request.status_group} />
+            <div className="row" key={`${request.sap_system_code}-${request.trkorr}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", minWidth: 0, flex: 1 }}>
+                <span style={{ fontWeight: "700", fontSize: "0.875rem", whiteSpace: "nowrap" }}>{request.sap_system_code} - {request.trkorr}</span>
+                <small style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{request.description}</small>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem" }}>
+                {request.requester_name ? (
+                  <span title="Requester" style={{ background: "#f1f5f9", color: "#475569", padding: "2px 8px", borderRadius: "12px", border: "1px solid #cbd5e1" }}>
+                    Req: <strong>{request.requester_name}</strong>
+                  </span>
+                ) : null}
+                {request.abaper_name ? (
+                  <span title="ABAPer" style={{ background: "#eff6ff", color: "#1d4ed8", padding: "2px 8px", borderRadius: "12px", border: "1px solid #bfdbfe" }}>
+                    ABAP: <strong>{request.abaper_name}</strong>
+                  </span>
+                ) : null}
+                {request.tester_name ? (
+                  <span title="Tester" style={{ background: "#f0fdf4", color: "#15803d", padding: "2px 8px", borderRadius: "12px", border: "1px solid #bbf7d0" }}>
+                    Test: <strong>{request.tester_name}</strong>
+                  </span>
+                ) : null}
+                {(request.requester_name || request.abaper_name || request.tester_name) ? (
+                  <div style={{ width: "1px", height: "16px", background: "var(--color-border, #cbd5e1)", margin: "0 4px" }} />
+                ) : null}
+                <Status value={request.status_group} />
+              </div>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* Enhanced Recent Team Activity Stream Section */}
+      <section className="panel wide">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+          <div>
+            <h2 style={{ margin: 0 }}>Recent Team Activity Stream</h2>
+            <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--color-text-muted)" }}>Live audit log stream of recent team actions and SAP sync events</p>
+          </div>
+          {onNavigateView && (
+            <button
+              onClick={() => onNavigateView("audit-log")}
+              style={{ background: "none", border: "none", color: "var(--color-primary, #2563eb)", cursor: "pointer", fontWeight: "600", fontSize: "0.875rem", display: "flex", alignItems: "center", gap: "4px" }}
+            >
+              View Full Audit Log &rarr;
+            </button>
+          )}
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+          {leaderInsights?.recentLogs && leaderInsights.recentLogs.length > 0 ? (
+            leaderInsights.recentLogs.map((log) => {
+              const badge = getActivityStyle(log.activity_type);
+              return (
+                <div
+                  key={log.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "0.75rem 1rem",
+                    borderRadius: "8px",
+                    background: "var(--color-bg-subtle, #f8fafc)",
+                    border: "1px solid var(--color-border, #e2e8f0)",
+                    gap: "1rem"
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", minWidth: 0, flex: 1 }}>
+                    <span
+                      style={{
+                        minWidth: "115px",
+                        width: "115px",
+                        padding: "3px 8px",
+                        borderRadius: "12px",
+                        fontSize: "0.7rem",
+                        fontWeight: "700",
+                        letterSpacing: "0.5px",
+                        background: badge.bg,
+                        color: badge.color,
+                        border: `1px solid ${badge.border}`,
+                        whiteSpace: "nowrap",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        textAlign: "center"
+                      }}
+                    >
+                      {badge.label}
+                    </span>
+                    <span
+                      style={{
+                        minWidth: "130px",
+                        width: "130px",
+                        fontSize: "0.875rem",
+                        fontWeight: "600",
+                        color: "var(--color-text-heading)",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis"
+                      }}
+                    >
+                      {log.username || "System"}
+                    </span>
+                    <span style={{ flex: 1, fontSize: "0.875rem", color: "var(--color-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {log.description}
+                    </span>
+                  </div>
+                  <small style={{ color: "var(--color-text-muted)", fontSize: "0.75rem", whiteSpace: "nowrap", fontWeight: "500" }}>
+                    {formatRelativeTime(log.created_at)}
+                  </small>
+                </div>
+              );
+            })
+          ) : (
+            <div style={{ padding: "1.5rem", textAlign: "center", color: "var(--color-text-muted)" }}>No recent audit activity recorded yet.</div>
+          )}
         </div>
       </section>
     </div>
