@@ -1,7 +1,7 @@
 import { applyCustomStatusColors } from "../utils/tagColors";
 import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
-import { AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Ban, Calendar, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Database, FileOutput, FileSearch, FolderKanban, GitPullRequest, KeyRound, LayoutGrid, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Tag, Trash2, Users, X, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Ban, Calendar, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Database, FileOutput, FileSearch, FileText, FolderKanban, GitPullRequest, KeyRound, LayoutGrid, Link as LinkIcon, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Tag, Trash2, Users, X, XCircle } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchAdminSettings, fetchAdminPeople, fetchCrDetail, fetchCrList, fetchDashboard, fetchGlpiTicketDetail, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind, type GlpiTicketDetail, type AdminPersonRow } from "../api";
 import { IncompleteGroupCards } from "../components/IncompleteGroupCards";
@@ -5163,6 +5163,64 @@ function IssueSwitcherTopbar({ onSelectIssue }: { onSelectIssue: (issueId: numbe
   );
 }
 
+type FieldBadgeType = "required" | "optional" | "auto-filled" | "ai-powered";
+
+function FieldLabel({
+  label,
+  badge,
+  badges,
+  icon
+}: {
+  label: string;
+  badge?: FieldBadgeType;
+  badges?: FieldBadgeType[];
+  icon?: React.ReactNode;
+}) {
+  const badgeList: FieldBadgeType[] = badges || (badge ? [badge] : []);
+
+  return (
+    <div className="micro-card-field-label" style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "8px", width: "100%", marginBottom: "4px" }}>
+      <span className="micro-card-field-title" style={{ fontSize: "0.825rem", fontWeight: "600", color: "var(--color-text, #1e293b)", display: "inline-flex", alignItems: "center", gap: "5px" }}>
+        {icon}
+        {label}
+      </span>
+      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+        {badgeList.map((b, i) => {
+          if (b === "required") {
+            return (
+              <span key={i} className="field-badge required" style={{ fontSize: "0.68rem", fontWeight: "700", padding: "1px 6px", borderRadius: "999px", background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca" }}>
+                Required *
+              </span>
+            );
+          }
+          if (b === "optional") {
+            return (
+              <span key={i} className="field-badge optional" style={{ fontSize: "0.68rem", fontWeight: "600", padding: "1px 6px", borderRadius: "999px", background: "#f8fafc", color: "#64748b", border: "1px solid #cbd5e1" }}>
+                Optional
+              </span>
+            );
+          }
+          if (b === "auto-filled") {
+            return (
+              <span key={i} className="field-badge auto-filled" style={{ fontSize: "0.68rem", fontWeight: "700", padding: "1px 6px", borderRadius: "999px", background: "#f0fdf4", color: "#0f766e", border: "1px solid #bbf7d0", display: "inline-flex", alignItems: "center", gap: "3px" }}>
+                <CheckCircle2 size={10} color="#0f766e" /> Auto-filled
+              </span>
+            );
+          }
+          if (b === "ai-powered") {
+            return (
+              <span key={i} className="field-badge ai-powered" style={{ fontSize: "0.68rem", fontWeight: "700", padding: "1px 6px", borderRadius: "999px", background: "#f3e8ff", color: "#7c3aed", border: "1px solid #ddd6fe", display: "inline-flex", alignItems: "center", gap: "3px" }}>
+                <Sparkles size={10} color="#7c3aed" /> AI Powered
+              </span>
+            );
+          }
+          return null;
+        })}
+      </div>
+    </div>
+  );
+}
+
 function IssueEditor({
   mode,
   detail,
@@ -5997,25 +6055,40 @@ function IssueEditor({
         {expandedPhases.initiation ? (
           <div className="issue-initiation-layout">
           <div className="issue-initiation-column issue-initiation-main">
-            <div className="initiation-section">
-              <h3>Issue Information</h3>
+            <div className="initiation-section micro-card">
+              <h3>
+                <span className="micro-card-icon-badge"><FileText size={16} /></span>
+                Issue Information
+              </h3>
               <div className="initiation-pair">
-                <label>Issue No.<input className="readonly-input" value={displayedIssueNo} onChange={(event) => update("issueNo", event.target.value)} placeholder="Auto" readOnly={mode === "create"} disabled={formDisabled} /></label>
-                <label>Sub Issue<input className={mode === "create" ? "readonly-input" : ""} value={displayedSubIssueNo} onChange={(event) => update("subIssueNo", event.target.value)} readOnly={mode === "create"} disabled={formDisabled} /></label>
+                <label>
+                  <FieldLabel label="Issue No." badge="auto-filled" />
+                  <input className="readonly-input" value={displayedIssueNo} onChange={(event) => update("issueNo", event.target.value)} placeholder="Auto" readOnly={mode === "create"} disabled={formDisabled} />
+                </label>
+                <label>
+                  <FieldLabel label="Sub Issue" badge="auto-filled" />
+                  <input className={mode === "create" ? "readonly-input" : ""} value={displayedSubIssueNo} onChange={(event) => update("subIssueNo", event.target.value)} readOnly={mode === "create"} disabled={formDisabled} />
+                </label>
               </div>
-              <label data-incomplete-target="issue-name">Issue Name<input value={form.issueName || ""} onChange={(event) => update("issueName", event.target.value)} required disabled={formDisabled} /></label>
+              <label data-incomplete-target="issue-name">
+                <FieldLabel label="Issue Name" badges={["required", "ai-powered"]} />
+                <input value={form.issueName || ""} onChange={(event) => update("issueName", event.target.value)} required disabled={formDisabled} />
+              </label>
               <div className="initiation-pair">
-                <label>Status<select value={form.sourceIssueStatus || "open"} onChange={(event) => update("sourceIssueStatus", event.target.value)} disabled={formDisabled}>
-                  <option value="open">Open</option>
-                  <option value="ok">OK</option>
-                  {isCancelled ? <option value="cancelled">Cancelled</option> : null}
-                </select></label>
+                <label>
+                  <FieldLabel label="Status" badge="auto-filled" />
+                  <select value={form.sourceIssueStatus || "open"} onChange={(event) => update("sourceIssueStatus", event.target.value)} disabled={formDisabled}>
+                    <option value="open">Open</option>
+                    <option value="ok">OK</option>
+                    {isCancelled ? <option value="cancelled">Cancelled</option> : null}
+                  </select>
+                </label>
                 <div className="incomplete-target" data-incomplete-target="issue-created-on">
                   <TimestampInput label="Created On" value={form.createIssueDate} onChange={(value) => update("createIssueDate", value)} disabled={formDisabled} />
                 </div>
               </div>
               <label>
-                Email Subject
+                <FieldLabel label="Email Subject" badge="required" />
                 <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem", alignItems: "center" }}>
                   <input
                     value={form.emailSubject || ""}
@@ -6034,7 +6107,7 @@ function IssueEditor({
                       gap: "0.375rem",
                       padding: "0.5rem 0.875rem",
                       borderRadius: "6px",
-                      background: "var(--color-primary, #2563eb)",
+                      background: "#0f766e",
                       color: "white",
                       border: "none",
                       cursor: (formDisabled || fetchingEmail || !form.emailSubject?.trim()) ? "not-allowed" : "pointer",
@@ -6056,23 +6129,36 @@ function IssueEditor({
                 "Fetch Email" tidak jalan? Download &amp; jalankan Outlook Agent di laptop Anda
               </a>
             </div>
-            <div className="initiation-section">
-              <h3 style={{ margin: "0 0 0.5rem 0" }}>Analysis</h3>
-              <label>Problem Analysis<textarea value={form.problemAnalysis || ""} onChange={(event) => update("problemAnalysis", event.target.value)} rows={6} disabled={formDisabled} /></label>
-              <label>Impact Analysis<textarea value={form.impactAnalysis || ""} onChange={(event) => update("impactAnalysis", event.target.value)} rows={6} disabled={formDisabled} /></label>
+
+            <div className="initiation-section micro-card">
+              <h3>
+                <span className="micro-card-icon-badge" style={{ background: "#f3e8ff", color: "#7c3aed" }}><Sparkles size={16} /></span>
+                Analysis &amp; Problem Statement
+              </h3>
+              <label>
+                <FieldLabel label="Problem Analysis" badge="ai-powered" />
+                <textarea value={form.problemAnalysis || ""} onChange={(event) => update("problemAnalysis", event.target.value)} rows={6} disabled={formDisabled} />
+              </label>
+              <label>
+                <FieldLabel label="Impact Analysis" badge="ai-powered" />
+                <textarea value={form.impactAnalysis || ""} onChange={(event) => update("impactAnalysis", event.target.value)} rows={6} disabled={formDisabled} />
+              </label>
             </div>
           </div>
 
           <div className="issue-initiation-column issue-initiation-reference">
-            <div className="initiation-section">
-              <h3>References</h3>
+            <div className="initiation-section micro-card">
+              <h3>
+                <span className="micro-card-icon-badge" style={{ background: "#eff6ff", color: "#2563eb" }}><LinkIcon size={16} /></span>
+                External References
+              </h3>
               <div className="initiation-pair reference-pair">
                 <div className="reference-field-group" data-incomplete-target="issue-glpi">
-                  <ValueHelpField label="CR Helpdesk No." kind="cr-helpdesk" value={form.crHelpdeskNumbers || ""} onChange={(value) => update("crHelpdeskNumbers", value)} placeholder="CR Helpdesk No." disabled={formDisabled} />
+                  <ValueHelpField label={<FieldLabel label="CR Helpdesk No." badge="optional" />} kind="cr-helpdesk" value={form.crHelpdeskNumbers || ""} onChange={(value) => update("crHelpdeskNumbers", value)} placeholder="CR Helpdesk No." disabled={formDisabled} />
                 </div>
                 <div className="reference-field-group">
                   <ValueHelpField
-                    label="GLPI No."
+                    label={<FieldLabel label="GLPI No." badge="optional" />}
                     kind="glpi"
                     value={form.glpiTickets || ""}
                     onChange={(value) => update("glpiTickets", value)}
@@ -6111,7 +6197,7 @@ function IssueEditor({
               </div>
               <div className="incomplete-target" data-incomplete-target="issue-cr">
                 <ValueHelpField
-                  label="CR SAP No."
+                  label={<FieldLabel label="CR SAP No." badge="optional" />}
                   kind="cr"
                   value={form.crLinks || ""}
                   onChange={(value) => update("crLinks", value.toUpperCase())}
@@ -6149,13 +6235,17 @@ function IssueEditor({
                 </div>
               ) : null}
             </div>
-            <div className="initiation-section">
-              <h3>People</h3>
+
+            <div className="initiation-section micro-card">
+              <h3>
+                <span className="micro-card-icon-badge" style={{ background: "#f0fdf4", color: "#0f766e" }}><Users size={16} /></span>
+                Key Stakeholders &amp; Team
+              </h3>
               <div className="repeatable-row-field" data-incomplete-target="issue-requesters">
-                <MultiValueHelpField label="Requester" kind="people" role="requester" personMode="full_name" value={form.requesterNames || ""} onChange={(value) => update("requesterNames", value)} placeholder="Full name" disabled={formDisabled} />
+                <MultiValueHelpField label={<FieldLabel label="Requester" badges={["required", "ai-powered"]} />} kind="people" role="requester" personMode="full_name" value={form.requesterNames || ""} onChange={(value) => update("requesterNames", value)} placeholder="Full name" disabled={formDisabled} />
               </div>
               <div className="repeatable-row-field" data-incomplete-target="issue-abapers">
-                <MultiValueHelpField label="ABAPer" kind="people" role="abaper" personMode="full_name" value={form.abaperNames || ""} onChange={(value) => update("abaperNames", value)} placeholder="Full name" disabled={formDisabled} />
+                <MultiValueHelpField label={<FieldLabel label="ABAPer / Developer" badges={["required", "ai-powered"]} />} kind="people" role="abaper" personMode="full_name" value={form.abaperNames || ""} onChange={(value) => update("abaperNames", value)} placeholder="Full name" disabled={formDisabled} />
               </div>
               {isCancelled ? (
                 <section className="issue-cancel-card">
@@ -6186,10 +6276,10 @@ function IssueEditor({
         </button>
         {expandedPhases.dev ? (
           <div className="phase-pair-grid">
-            <ValueHelpField label="DEV Tester" kind="people" role="tester" personMode="full_name" value={form.participants?.dev_tester || ""} onChange={(value) => updateParticipant("dev_tester", value)} placeholder="Full name" disabled={devDisabled} incompleteTarget="issue-dev-tester" />
-            <TimestampInput label="Testing Date" value={form.timeline?.dev_tested_date} onChange={(value) => updateTimeline("dev_tested_date", value)} disabled={devDisabled} incompleteTarget="issue-dev-testing-date" />
-            <ValueHelpField label="DEV Evaluator" kind="people" role="evaluator" personMode="full_name" value={form.participants?.dev_evaluator || ""} onChange={(value) => updateParticipant("dev_evaluator", value)} placeholder="Full name" disabled={devDisabled} incompleteTarget="issue-dev-evaluator" />
-            <TimestampInput label="Evaluation Date" value={form.timeline?.dev_evaluated_date} onChange={(value) => updateTimeline("dev_evaluated_date", value)} disabled={devDisabled} incompleteTarget="issue-dev-evaluation-date" />
+            <ValueHelpField label={<FieldLabel label="DEV Tester" badge="ai-powered" />} kind="people" role="tester" personMode="full_name" value={form.participants?.dev_tester || ""} onChange={(value) => updateParticipant("dev_tester", value)} placeholder="Full name" disabled={devDisabled} incompleteTarget="issue-dev-tester" />
+            <TimestampInput label={<FieldLabel label="Testing Date" badge="auto-filled" />} value={form.timeline?.dev_tested_date} onChange={(value) => updateTimeline("dev_tested_date", value)} disabled={devDisabled} incompleteTarget="issue-dev-testing-date" />
+            <ValueHelpField label={<FieldLabel label="DEV Evaluator" badge="ai-powered" />} kind="people" role="evaluator" personMode="full_name" value={form.participants?.dev_evaluator || ""} onChange={(value) => updateParticipant("dev_evaluator", value)} placeholder="Full name" disabled={devDisabled} incompleteTarget="issue-dev-evaluator" />
+            <TimestampInput label={<FieldLabel label="Evaluation Date" badge="auto-filled" />} value={form.timeline?.dev_evaluated_date} onChange={(value) => updateTimeline("dev_evaluated_date", value)} disabled={devDisabled} incompleteTarget="issue-dev-evaluation-date" />
           </div>
         ) : null}
       </section>
@@ -6211,12 +6301,12 @@ function IssueEditor({
         </button>
         {expandedPhases.qa ? (
           <div className="phase-pair-grid">
-            <ValueHelpField label="QA Transporter" kind="people" role="transporter" personMode="full_name" value={form.participants?.qa_transporter || ""} onChange={(value) => updateParticipant("qa_transporter", value)} placeholder="Full name" disabled={qaDisabled} incompleteTarget="issue-qa-transporter" />
-            <label>Transport Date<input className="readonly-input" value={formatIssueTimestamp(primaryCr?.qa_import_date, primaryCr?.qa_import_time)} readOnly /></label>
-            <ValueHelpField label="QA Tester" kind="people" role="tester" personMode="full_name" value={form.participants?.qa_tester || ""} onChange={(value) => updateParticipant("qa_tester", value)} placeholder="Full name" disabled={qaDisabled} incompleteTarget="issue-qa-tester" />
-            <TimestampInput label="Testing Date" value={form.timeline?.qa_tested_date} onChange={(value) => updateTimeline("qa_tested_date", value)} disabled={qaDisabled} incompleteTarget="issue-qa-testing-date" />
-            <ValueHelpField label="QA Evaluator" kind="people" role="evaluator" personMode="full_name" value={form.participants?.qa_evaluator || ""} onChange={(value) => updateParticipant("qa_evaluator", value)} placeholder="Full name" disabled={qaDisabled} incompleteTarget="issue-qa-evaluator" />
-            <TimestampInput label="Evaluation Date" value={form.timeline?.qa_evaluated_date} onChange={(value) => updateTimeline("qa_evaluated_date", value)} disabled={qaDisabled} incompleteTarget="issue-qa-evaluation-date" />
+            <ValueHelpField label={<FieldLabel label="QA Transporter" badge="ai-powered" />} kind="people" role="transporter" personMode="full_name" value={form.participants?.qa_transporter || ""} onChange={(value) => updateParticipant("qa_transporter", value)} placeholder="Full name" disabled={qaDisabled} incompleteTarget="issue-qa-transporter" />
+            <label><FieldLabel label="Transport Date" badge="auto-filled" /><input className="readonly-input" value={formatIssueTimestamp(primaryCr?.qa_import_date, primaryCr?.qa_import_time)} readOnly /></label>
+            <ValueHelpField label={<FieldLabel label="QA Tester" badge="ai-powered" />} kind="people" role="tester" personMode="full_name" value={form.participants?.qa_tester || ""} onChange={(value) => updateParticipant("qa_tester", value)} placeholder="Full name" disabled={qaDisabled} incompleteTarget="issue-qa-tester" />
+            <TimestampInput label={<FieldLabel label="Testing Date" badge="auto-filled" />} value={form.timeline?.qa_tested_date} onChange={(value) => updateTimeline("qa_tested_date", value)} disabled={qaDisabled} incompleteTarget="issue-qa-testing-date" />
+            <ValueHelpField label={<FieldLabel label="QA Evaluator" badge="ai-powered" />} kind="people" role="evaluator" personMode="full_name" value={form.participants?.qa_evaluator || ""} onChange={(value) => updateParticipant("qa_evaluator", value)} placeholder="Full name" disabled={qaDisabled} incompleteTarget="issue-qa-evaluator" />
+            <TimestampInput label={<FieldLabel label="Evaluation Date" badge="auto-filled" />} value={form.timeline?.qa_evaluated_date} onChange={(value) => updateTimeline("qa_evaluated_date", value)} disabled={qaDisabled} incompleteTarget="issue-qa-evaluation-date" />
           </div>
         ) : null}
       </section>
@@ -6238,14 +6328,14 @@ function IssueEditor({
         </button>
         {expandedPhases.prd ? (
           <div className="phase-pair-grid">
-            <ValueHelpField label="PRD Requester" kind="people" role="requester" personMode="full_name" value={form.participants?.prd_requester || ""} onChange={(value) => updateParticipant("prd_requester", value)} placeholder="Full name" disabled={prdRequestDisabled} incompleteTarget="issue-prd-requester" />
-            <TimestampInput label="Request Date" value={form.timeline?.prd_requested_date} onChange={(value) => updateTimeline("prd_requested_date", value)} disabled={prdRequestDisabled} incompleteTarget="issue-prd-request-date" />
-            <ValueHelpField label="PRD Evaluator" kind="people" role="evaluator" personMode="full_name" value={form.participants?.prd_evaluator || ""} onChange={(value) => updateParticipant("prd_evaluator", value)} placeholder="Full name" disabled={prdRequestDisabled} incompleteTarget="issue-prd-evaluator" />
-            <TimestampInput label="Evaluation Date" value={form.timeline?.prd_evaluated_date} onChange={(value) => updateTimeline("prd_evaluated_date", value)} disabled={prdRequestDisabled} incompleteTarget="issue-prd-evaluation-date" />
-            <ValueHelpField label="Approver" kind="people" role="approver" personMode="full_name" value={form.participants?.approval || ""} onChange={(value) => updateParticipant("approval", value)} placeholder="Full name" disabled={prdRequestDisabled} incompleteTarget="issue-approver" />
-            <TimestampInput label="Approval Date" value={form.timeline?.approval_date} onChange={(value) => updateTimeline("approval_date", value)} disabled={prdRequestDisabled} incompleteTarget="issue-approval-date" />
-            <ValueHelpField label="PRD Transporter" kind="people" role="transporter" personMode="full_name" value={form.participants?.executor || ""} onChange={(value) => updateParticipant("executor", value)} placeholder="Full name" disabled={prdTransportDisabled} incompleteTarget="issue-prd-transporter" />
-            <label>Transport Date<input className="readonly-input" value={formatIssueTimestamp(primaryCr?.prd_import_date, primaryCr?.prd_import_time)} readOnly /></label>
+            <ValueHelpField label={<FieldLabel label="PRD Requester" badge="ai-powered" />} kind="people" role="requester" personMode="full_name" value={form.participants?.prd_requester || ""} onChange={(value) => updateParticipant("prd_requester", value)} placeholder="Full name" disabled={prdRequestDisabled} incompleteTarget="issue-prd-requester" />
+            <TimestampInput label={<FieldLabel label="Request Date" badge="auto-filled" />} value={form.timeline?.prd_requested_date} onChange={(value) => updateTimeline("prd_requested_date", value)} disabled={prdRequestDisabled} incompleteTarget="issue-prd-request-date" />
+            <ValueHelpField label={<FieldLabel label="PRD Evaluator" badge="ai-powered" />} kind="people" role="evaluator" personMode="full_name" value={form.participants?.prd_evaluator || ""} onChange={(value) => updateParticipant("prd_evaluator", value)} placeholder="Full name" disabled={prdRequestDisabled} incompleteTarget="issue-prd-evaluator" />
+            <TimestampInput label={<FieldLabel label="Evaluation Date" badge="auto-filled" />} value={form.timeline?.prd_evaluated_date} onChange={(value) => updateTimeline("prd_evaluated_date", value)} disabled={prdRequestDisabled} incompleteTarget="issue-prd-evaluation-date" />
+            <ValueHelpField label={<FieldLabel label="Approver" badge="ai-powered" />} kind="people" role="approver" personMode="full_name" value={form.participants?.approval || ""} onChange={(value) => updateParticipant("approval", value)} placeholder="Full name" disabled={prdRequestDisabled} incompleteTarget="issue-approver" />
+            <TimestampInput label={<FieldLabel label="Approval Date" badge="auto-filled" />} value={form.timeline?.approval_date} onChange={(value) => updateTimeline("approval_date", value)} disabled={prdRequestDisabled} incompleteTarget="issue-approval-date" />
+            <ValueHelpField label={<FieldLabel label="PRD Transporter" badge="ai-powered" />} kind="people" role="transporter" personMode="full_name" value={form.participants?.executor || ""} onChange={(value) => updateParticipant("executor", value)} placeholder="Full name" disabled={prdTransportDisabled} incompleteTarget="issue-prd-transporter" />
+            <label><FieldLabel label="Transport Date" badge="auto-filled" /><input className="readonly-input" value={formatIssueTimestamp(primaryCr?.prd_import_date, primaryCr?.prd_import_time)} readOnly /></label>
           </div>
         ) : null}
       </section>
@@ -6758,7 +6848,7 @@ function ValueHelpField({
   incompleteTarget,
   role
 }: {
-  label: string;
+  label: React.ReactNode | string;
   kind: ValueHelpKind;
   personMode?: "full_name" | "nickname";
   value: string;
@@ -6844,7 +6934,7 @@ function TimestampInput({
   disabled = false,
   incompleteTarget
 }: {
-  label: string;
+  label: React.ReactNode | string;
   value?: string;
   onChange: (value: string) => void;
   disabled?: boolean;
@@ -6892,7 +6982,7 @@ function MultiValueHelpField({
   disabled = false,
   role
 }: {
-  label: string;
+  label: React.ReactNode | string;
   kind: ValueHelpKind;
   personMode?: "full_name" | "nickname";
   value: string;
@@ -6929,9 +7019,9 @@ function MultiValueHelpField({
         <button type="button" className="mini-action" onClick={addRow} disabled={disabled}><Plus size={14} /> Add</button>
       </div>
       {visibleRows.map((rowValue, index) => (
-        <div className="multi-value-row" key={`${label}-${index}`}>
+        <div className="multi-value-row" key={`multi-row-${index}`}>
           <ValueHelpField
-            label={`${label} ${index + 1}`}
+            label={index === 0 ? "" : `Person #${index + 1}`}
             kind={kind}
             role={role}
             personMode={personMode}
