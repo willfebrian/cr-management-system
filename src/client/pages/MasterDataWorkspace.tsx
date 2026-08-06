@@ -620,7 +620,7 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
                   value={settings.ai_instruction_glpi}
                   onChange={(e) => setSettings({ ...settings, ai_instruction_glpi: e.target.value })}
                   placeholder="e.g., Always use professional tone. Include standard disclaimer at the bottom..."
-                  style={{ width: "100%", height: "120px", padding: "1rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "var(--font-mono, monospace)", fontSize: "0.875rem", lineHeight: "1.5", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
+                  style={{ width: "100%", minHeight: "180px", padding: "0.875rem 1rem", borderRadius: "8px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "inherit", fontSize: "0.875rem", lineHeight: "1.6", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
                 />
               </div>
               
@@ -632,7 +632,7 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
                   value={settings.ai_instruction_issue_name}
                   onChange={(e) => setSettings({ ...settings, ai_instruction_issue_name: e.target.value })}
                   placeholder="e.g., Keep issue name concise (max 60 chars). Include module prefix like [FI] or [COA] if applicable..."
-                  style={{ width: "100%", height: "100px", padding: "1rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "var(--font-mono, monospace)", fontSize: "0.875rem", lineHeight: "1.5", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
+                  style={{ width: "100%", minHeight: "120px", padding: "0.875rem 1rem", borderRadius: "8px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "inherit", fontSize: "0.875rem", lineHeight: "1.6", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
                 />
               </div>
 
@@ -644,7 +644,7 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
                   value={settings.ai_instruction_problem}
                   onChange={(e) => setSettings({ ...settings, ai_instruction_problem: e.target.value })}
                   placeholder="e.g., Focus on technical root cause, error codes, affected SAP T-code or program name, and steps to reproduce..."
-                  style={{ width: "100%", height: "120px", padding: "1rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "var(--font-mono, monospace)", fontSize: "0.875rem", lineHeight: "1.5", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
+                  style={{ width: "100%", minHeight: "150px", padding: "0.875rem 1rem", borderRadius: "8px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "inherit", fontSize: "0.875rem", lineHeight: "1.6", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
                 />
               </div>
 
@@ -656,7 +656,7 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
                   value={settings.ai_instruction_impact}
                   onChange={(e) => setSettings({ ...settings, ai_instruction_impact: e.target.value })}
                   placeholder="e.g., Describe operational impact on business operations, affected plant/department, urgency level, and financial or compliance risks..."
-                  style={{ width: "100%", height: "120px", padding: "1rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "var(--font-mono, monospace)", fontSize: "0.875rem", lineHeight: "1.5", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
+                  style={{ width: "100%", minHeight: "150px", padding: "0.875rem 1rem", borderRadius: "8px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "inherit", fontSize: "0.875rem", lineHeight: "1.6", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
                 />
               </div>
 
@@ -668,7 +668,7 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
                   value={settings.ai_instruction_email}
                   onChange={(e) => setSettings({ ...settings, ai_instruction_email: e.target.value })}
                   placeholder="e.g., Address the user by their first name. Keep paragraphs short..."
-                  style={{ width: "100%", height: "100px", padding: "1rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "var(--font-mono, monospace)", fontSize: "0.875rem", lineHeight: "1.5", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
+                  style={{ width: "100%", minHeight: "120px", padding: "0.875rem 1rem", borderRadius: "8px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "inherit", fontSize: "0.875rem", lineHeight: "1.6", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
                 />
               </div>
             </div>

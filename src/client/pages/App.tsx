@@ -2686,6 +2686,17 @@ function IssueEditor({
       return;
     }
     
+    // When no email context is fetched (GLPI context only), do not prompt to replace text fields.
+    // Directly fill empty People & Timeline date fields.
+    if (!fetchedEmailContext) {
+      await executeAiGeneration({
+        issueName: false,
+        problemAnalysis: false,
+        impactAnalysis: false
+      });
+      return;
+    }
+    
     const hasExistingName = Boolean(form.issueName?.trim());
     const hasExistingProblem = Boolean(form.problemAnalysis?.trim());
     const hasExistingImpact = Boolean(form.impactAnalysis?.trim());
