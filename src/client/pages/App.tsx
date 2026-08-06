@@ -19,7 +19,7 @@ import { afterIncompleteSectionRender, expandSection, getIncompleteItems, groupI
 import { nextExpandedSidebarGroup, type SidebarGroup } from "../navigation";
 import type { CrDetail, CrRequest, DashboardData, IssueDetail, IssueRow, SapSystemConfig, StatusTrendData } from "../../shared/types";
 import { AppLoadingScreen, SkeletonDetailLoader } from "../components/InteractiveLoaders";
-import type { ProjectDetail as ProjectDetailModel } from "../../shared/projectTypes";
+import type { ProjectDetail as ProjectDetailModel, ProjectStatus } from "../../shared/projectTypes";
 
 type View = "dashboard" | "report" | "issue-display" | "issue-create" | "issue-change" | "user-management" | "project-report" | "project-create" | "project-change" | "master-data" | "settings" | "audit-log";
 const VIEW_META: Record<View, { title: string; description: string }> = {
@@ -121,6 +121,9 @@ export function App() {
   }, [view]);
   const [projectEditorDetail, setProjectEditorDetail] = useState<ProjectDetailModel | null>(null);
   const [projectFormDirty, setProjectFormDirty] = useState(false);
+  const [projectSearch, setProjectSearch] = useState("");
+  const [projectStatus, setProjectStatus] = useState<ProjectStatus | "all">("all");
+  const [projectStatusPopoverOpen, setProjectStatusPopoverOpen] = useState(false);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [systems, setSystems] = useState<SapSystemConfig[]>([]);
   const [trend, setTrend] = useState<StatusTrendData | null>(null);
@@ -2202,6 +2205,358 @@ export function App() {
                 ) : null}
               </div>
             </div>
+          ) : view.startsWith("project-") ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              {view === "project-report" ? (
+                <>
+                  {/* Project Custom Status Filter Dropdown */}
+                  {(() => {
+                    const projectStatusOptions = [
+                      { value: "all", label: "All Statuses", color: "#64748b" },
+                      { value: "planned", label: "Planned", color: "#2563eb" },
+                      { value: "in_progress", label: "In Progress", color: "#d97706" },
+                      { value: "on_hold", label: "On Hold", color: "#6b7280" },
+                      { value: "completed", label: "Completed", color: "#059669" },
+                      { value: "cancelled", label: "Cancelled", color: "#dc2626" }
+                    ];
+                    const currentStatusVal = projectStatus || "all";
+                    const currentStatusObj = projectStatusOptions.find(o => o.value === currentStatusVal) || projectStatusOptions[0];
+
+                    return (
+                      <div style={{ position: "relative", display: "inline-block" }}>
+                        <button
+                          type="button"
+                          onClick={() => setProjectStatusPopoverOpen((prev) => !prev)}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            padding: "6px 12px",
+                            borderRadius: "8px",
+                            border: "1px solid var(--color-border, #cbd5e1)",
+                            background: "var(--color-bg, #ffffff)",
+                            color: "var(--color-text, #1e293b)",
+                            fontSize: "0.85rem",
+                            fontWeight: "500",
+                            height: "36px",
+                            cursor: "pointer"
+                          }}
+                        >
+                          <span
+                            style={{
+                              width: "8px",
+                              height: "8px",
+                              borderRadius: "50%",
+                              backgroundColor: currentStatusObj.color,
+                              display: "inline-block"
+                            }}
+                          />
+                          <span>{currentStatusObj.label}</span>
+                          <ChevronDown size={14} style={{ opacity: 0.7, transform: projectStatusPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                        </button>
+
+                        {projectStatusPopoverOpen ? (
+                          <div
+                            style={{
+                              position: "absolute",
+                              top: "calc(100% + 6px)",
+                              left: 0,
+                              zIndex: 1000,
+                              width: "190px",
+                              background: "var(--color-bg-elevated, #ffffff)",
+                              border: "1px solid var(--color-border, #cbd5e1)",
+                              borderRadius: "12px",
+                              boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.18)",
+                              padding: "6px",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "2px"
+                            }}
+                          >
+                            {projectStatusOptions.map((opt) => {
+                              const isSelected = opt.value === currentStatusVal;
+                              return (
+                                <button
+                                  key={opt.value}
+                                  type="button"
+                                  onClick={() => {
+                                    setProjectStatus(opt.value as ProjectStatus | "all");
+                                    setProjectStatusPopoverOpen(false);
+                                  }}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "10px",
+                                    padding: "8px 10px",
+                                    borderRadius: "6px",
+                                    border: "none",
+                                    background: isSelected ? "var(--color-bg-subtle, #f1f5f9)" : "transparent",
+                                    color: isSelected ? "#0f766e" : "var(--color-text, #334155)",
+                                    fontWeight: isSelected ? "600" : "400",
+                                    fontSize: "0.825rem",
+                                    cursor: "pointer",
+                                    textAlign: "left",
+                                    width: "100%"
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      width: "8px",
+                                      height: "8px",
+                                      borderRadius: "50%",
+                                      backgroundColor: opt.color,
+                                      display: "inline-block"
+                                    }}
+                                  />
+                                  <span>{opt.label}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Search Bar Input */}
+                  <div style={{ position: "relative" }}>
+                    <Search size={15} style={{ position: "absolute", left: "11px", top: "50%", transform: "translateY(-50%)", color: "var(--color-text-muted, #64748b)" }} />
+                    <input
+                      type="text"
+                      value={projectSearch}
+                      onChange={(e) => setProjectSearch(e.target.value)}
+                      placeholder="Search projects..."
+                      style={{
+                        padding: "6px 12px 6px 32px",
+                        borderRadius: "8px",
+                        border: "1px solid var(--color-border, #cbd5e1)",
+                        background: "var(--color-bg, #ffffff)",
+                        fontSize: "0.85rem",
+                        width: "200px",
+                        height: "36px",
+                        boxSizing: "border-box"
+                      }}
+                    />
+                  </div>
+
+                  {/* Create Project Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProjectEditorDetail(null);
+                      navigateTo("project-create");
+                    }}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      padding: "0 14px",
+                      height: "36px",
+                      borderRadius: "8px",
+                      background: "#0f766e",
+                      color: "#ffffff",
+                      border: "none",
+                      fontWeight: "600",
+                      fontSize: "0.85rem",
+                      cursor: "pointer"
+                    }}
+                  >
+                    <Plus size={15} />
+                    <span>+ Create Project</span>
+                  </button>
+                </>
+              ) : null}
+
+              {/* Unified Sync CR Popover Button */}
+              <div style={{ position: "relative" }}>
+                <button
+                  type="button"
+                  className="primary sync-button"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    background: "#0f766e",
+                    border: "none",
+                    color: "#ffffff",
+                    padding: "8px 18px",
+                    borderRadius: "8px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    fontSize: "0.875rem",
+                    height: "36px"
+                  }}
+                  onClick={() => setSyncPopoverOpen((prev) => !prev)}
+                >
+                  <RefreshCw size={16} className={loading ? "spinner" : ""} />
+                  <span>{loading ? "Syncing CR..." : "Sync CR"}</span>
+                  <ChevronDown size={14} style={{ opacity: 0.8, transform: syncPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                </button>
+
+                {syncPopoverOpen ? (
+                  <div
+                    className="sync-cr-popover-menu"
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      zIndex: 1000,
+                      width: "280px",
+                      background: "var(--color-bg-elevated, #ffffff)",
+                      border: "1px solid var(--color-border, #cbd5e1)",
+                      borderRadius: "14px",
+                      boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.2)",
+                      padding: "16px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "12px",
+                      textAlign: "left"
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--color-border-soft, #e2e8f0)", paddingBottom: "8px" }}>
+                      <span style={{ fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)" }}>
+                        Sync SAP CR Options
+                      </span>
+                    </div>
+
+                    {/* Source Systems */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                        Source Systems
+                      </label>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        {systems.map((system) => (
+                          <label
+                            key={system.code}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "5px",
+                              padding: "4px 10px",
+                              borderRadius: "6px",
+                              border: "1px solid var(--color-border, #cbd5e1)",
+                              background: syncSystems.includes(system.code) ? "#f0fdf4" : "var(--color-bg, #ffffff)",
+                              fontSize: "0.78rem",
+                              fontWeight: "600",
+                              color: syncSystems.includes(system.code) ? "#0f766e" : "var(--color-text, #334155)",
+                              cursor: system.enabled ? "pointer" : "not-allowed",
+                              opacity: system.enabled ? 1 : 0.5
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={syncSystems.includes(system.code)}
+                              disabled={!system.enabled}
+                              onChange={() => setSyncSystems(toggleSystem(syncSystems, system.code))}
+                              style={{ accentColor: "#0f766e", margin: 0 }}
+                            />
+                            {system.code}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Sync Mode */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                        Sync Mode
+                      </label>
+                      <select
+                        value={syncMode}
+                        onChange={(e) => setSyncMode(e.target.value as "incremental" | "full_period")}
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: "6px",
+                          border: "1px solid var(--color-border, #cbd5e1)",
+                          background: "var(--color-bg, #ffffff)",
+                          color: "var(--color-text, #111827)",
+                          fontSize: "0.825rem",
+                          width: "100%"
+                        }}
+                      >
+                        <option value="incremental">Incremental</option>
+                        <option value="full_period">Full by Period</option>
+                      </select>
+                    </div>
+
+                    {/* Lookback Days or Period Inputs */}
+                    {syncMode === "incremental" ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                          Lookback Days
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="30"
+                          value={lookbackDays}
+                          onChange={(e) => setLookbackDays(Number(e.target.value || 0))}
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: "6px",
+                            border: "1px solid var(--color-border, #cbd5e1)",
+                            background: "var(--color-bg, #ffffff)",
+                            color: "var(--color-text, #111827)",
+                            fontSize: "0.825rem",
+                            width: "100%"
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>From</label>
+                          <input
+                            type="month"
+                            value={syncFromPeriod}
+                            onChange={(e) => setSyncFromPeriod(e.target.value)}
+                            style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.78rem" }}
+                          />
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>To</label>
+                          <input
+                            type="month"
+                            value={syncToPeriod}
+                            onChange={(e) => setSyncToPeriod(e.target.value)}
+                            style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.78rem" }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Sync Action Button */}
+                    <button
+                      type="button"
+                      className="primary"
+                      disabled={loading || syncSystems.length === 0}
+                      onClick={() => {
+                        setSyncPopoverOpen(false);
+                        runSync();
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "8px",
+                        background: "#0f766e",
+                        color: "#ffffff",
+                        border: "none",
+                        padding: "8px 14px",
+                        borderRadius: "8px",
+                        fontWeight: "600",
+                        fontSize: "0.85rem",
+                        cursor: "pointer",
+                        marginTop: "4px"
+                      }}
+                    >
+                      <RefreshCw size={15} className={loading ? "spinner" : ""} />
+                      <span>{loading ? "Syncing..." : "Sync CR Now"}</span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
           ) : (
             <div className={`sync-controls report-sync-controls page-sync-toolbar ${syncMode === "full_period" ? "full-mode" : "incremental-mode"}`}>
               <label>
@@ -2387,6 +2742,8 @@ export function App() {
           />
         ) : view === "project-report" ? (
           <ProjectReport
+            q={projectSearch}
+            status={projectStatus}
             userRole={authUser.role}
             onCreate={() => {
               setProjectEditorDetail(null);
@@ -2425,6 +2782,8 @@ export function App() {
               showToast("success", "Project saved.");
             }}
           /> : <ProjectReport
+            q={projectSearch}
+            status={projectStatus}
             userRole={authUser.role}
             onChange={openProjectEditor}
             onOpenIssue={openIssueFromProjectLink}

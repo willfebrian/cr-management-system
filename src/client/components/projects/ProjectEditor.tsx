@@ -226,13 +226,7 @@ export function ProjectEditorView(props: ProjectEditorViewProps) {
     props.onSave();
   };
   return <form className="project-editor" onSubmit={submit}>
-    <header className="project-editor-header project-form-card">
-      <div>
-        <p className="project-eyebrow">{props.mode === "create" ? "Create" : "Change"} Project</p>
-        <h2>{props.mode === "create" ? "New Project" : draft.projectName}</h2>
-      </div>
-      {readOnly && <span className="project-read-only">Cancelled Projects are read-only</span>}
-    </header>
+    {readOnly && <p className="project-read-only" style={{ margin: "0 0 1rem 0", padding: "8px 12px", background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", borderRadius: "8px", fontSize: "0.85rem" }}>Cancelled Projects are read-only</p>}
     {props.error && <p className="project-error" role="alert">{props.error}</p>}
     <section className="project-form-card" aria-label="Project information">
     <div className="project-form-grid">
