@@ -1,7 +1,9 @@
+import { applyCustomStatusColors } from "../utils/tagColors";
+import { applyCustomFontSize } from "../utils/fontSize";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
-import { AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Ban, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Database, FileOutput, FileSearch, FolderKanban, KeyRound, Loader2, LogIn, LogOut, Mail, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, Sparkles, Trash2, Users, X, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Ban, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Database, FileOutput, FileSearch, FolderKanban, KeyRound, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, Sliders, Sparkles, Sun, Trash2, Users, X, XCircle } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchCrDetail, fetchCrList, fetchDashboard, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind } from "../api";
+import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchAdminSettings, fetchCrDetail, fetchCrList, fetchDashboard, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind } from "../api";
 import { IncompleteGroupCards } from "../components/IncompleteGroupCards";
 import { DisplayNameList } from "../components/DisplayNameList";
 import { DEFAULT_ISSUE_COLUMNS, IssueColumnMenu, type IssueColumnKey } from "../components/IssueColumnMenu";
@@ -17,7 +19,7 @@ import { nextExpandedSidebarGroup, type SidebarGroup } from "../navigation";
 import type { CrDetail, CrRequest, DashboardData, IssueDetail, IssueRow, SapSystemConfig, StatusTrendData } from "../../shared/types";
 import type { ProjectDetail as ProjectDetailModel } from "../../shared/projectTypes";
 
-type View = "dashboard" | "report" | "issue-display" | "issue-create" | "issue-change" | "user-management" | "project-report" | "project-create" | "project-change" | "master-data";
+type View = "dashboard" | "report" | "issue-display" | "issue-create" | "issue-change" | "user-management" | "project-report" | "project-create" | "project-change" | "master-data" | "settings";
 const VIEW_META: Record<View, { title: string; description: string }> = {
   dashboard: { title: "Dashboard", description: "Monitor CR and Issue activity across connected source systems." },
   report: { title: "CR Transport", description: "Review SAP change requests ordered from the latest CR number." },
@@ -28,7 +30,8 @@ const VIEW_META: Record<View, { title: string; description: string }> = {
   "project-report": { title: "Project Report", description: "Group related Issues and CR transports in one delivery view." },
   "project-create": { title: "Create Project", description: "Create a project and group its related Issues." },
   "project-change": { title: "Change Project", description: "Maintain project ownership, scope, and linked Issues." },
-  "master-data": { title: "Master Data & Settings", description: "Manage issue people roles and global AI instructions." },
+  "master-data": { title: "Master Data Workspace", description: "Manage people roles, emails, and group notifications." },
+  settings: { title: "System & Appearance Settings", description: "Configure AI instructions, Exchange Mail, Appearance Settings, Font Size, and Status Tag Colors." },
 };
 const SYNC_RESULT_VISIBLE_MS = 6000;
 const DASHBOARD_DB_REFRESH_MS = 60000;
@@ -64,6 +67,50 @@ export function App() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   useEffect(() => { fetchCurrentUser().then((result) => setAuthUser(result.user)).catch(() => setAuthUser(null)).finally(() => setAuthLoading(false)); }, []);
+
+  // Automatically load and apply appearance settings (font size & tag colors) on startup, login, and page refresh.
+  // Wait for auth to settle first — otherwise this fires once with username=undefined (before
+  // fetchCurrentUser resolves) and again with the real username, and the two async fetchAdminSettings
+  // calls race each other, applying mismatched font sizes out of order and causing visible jumps.
+  useEffect(() => {
+    if (authLoading) return;
+    const username = authUser?.username;
+    if (username) {
+      localStorage.setItem("last_auth_username", username);
+    }
+    applyCustomFontSize({}, username);
+    applyCustomStatusColors({}, username);
+
+    fetchAdminSettings()
+      .then((dbSettings) => {
+        // Cache the system settings in local storage so index.html can read them synchronously on next refresh
+        // This completely eliminates the layout shift (flicker) on all future page loads!
+        localStorage.setItem("system_appearance_settings", JSON.stringify(dbSettings));
+
+        applyCustomFontSize(dbSettings, username, true);
+        applyCustomStatusColors(dbSettings, username, true);
+      })
+      .catch(() => {});
+  }, [authLoading, authUser]);
+
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    const saved = localStorage.getItem("app_theme");
+    return saved === "dark" ? "dark" : "light";
+  });
+
+  useEffect(() => {
+    if (theme === "dark") {
+      document.body.classList.add("dark-theme");
+    } else {
+      document.body.classList.remove("dark-theme");
+    }
+    localStorage.setItem("app_theme", theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+  };
+
   const [view, setView] = useState<View>("dashboard");
   const workspaceRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
@@ -537,14 +584,29 @@ export function App() {
             </div>
           ) : null}
         </div> : null}
-        <div className={`sidebar-group ${view === "master-data" ? "active" : ""}`}>
-          <button className={view === "master-data" ? "active" : ""} onClick={() => navigateTo("master-data")}>
-            <Database size={18} /> Master Data & Settings
+        {authUser.role === "ADMIN" ? (
+          <div className={`sidebar-group ${view === "master-data" ? "active" : ""}`}>
+            <button className={view === "master-data" ? "active" : ""} onClick={() => navigateTo("master-data")}>
+              <Database size={18} /> Master Data
+            </button>
+          </div>
+        ) : null}
+        <div className={`sidebar-group ${view === "settings" ? "active" : ""}`}>
+          <button className={view === "settings" ? "active" : ""} onClick={() => navigateTo("settings")}>
+            <Sliders size={18} /> Settings
           </button>
         </div>
-        {USER_MANAGEMENT_ENABLED && authUser.role === "ADMIN" ? <button className={view === "user-management" ? "active" : ""} onClick={() => navigateTo("user-management")}><Users size={18} /> User Management</button> : null}
+        {USER_MANAGEMENT_ENABLED && authUser.role === "ADMIN" ? (
+          <button className={view === "user-management" ? "active" : ""} onClick={() => navigateTo("user-management")}>
+            <Users size={18} /> User Management
+          </button>
+        ) : null}
         </div>
         <div className="sidebar-footer">
+          <button className="sidebar-theme-toggle" type="button" onClick={toggleTheme}>
+            {theme === "dark" ? <Sun size={16} color="#fbbf24" /> : <Moon size={16} color="#cbd5e1" />}
+            <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
+          </button>
           <div className="sidebar-session">
             <span className="sidebar-user">{authUser.username}</span>
             <small>Last login: {authUser.lastLoginAt ? formatDateTime(authUser.lastLoginAt) : "First session"}</small>
@@ -633,7 +695,9 @@ export function App() {
             setView("dashboard");
           }}
         /> : view === "master-data" ? (
-          <MasterDataWorkspace />
+          <MasterDataWorkspace mode="master-data" isAdmin={authUser.role === "ADMIN"} username={authUser.username} />
+        ) : view === "settings" ? (
+          <MasterDataWorkspace mode="settings" isAdmin={authUser.role === "ADMIN"} username={authUser.username} />
         ) : view === "dashboard" ? (
           <Dashboard
             dashboard={dashboard}
@@ -3105,8 +3169,15 @@ function formatStatusLabel(value?: string) {
       return "Pending to PRD";
     case "in_prd":
       return "In PRD";
+    case "outstanding":
+      return "Outstanding";
+    case "released":
+      return "Released";
     default:
-      return value || "unknown";
+      if (!value) return "Unknown";
+      return value
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (char) => char.toUpperCase());
   }
 }
 

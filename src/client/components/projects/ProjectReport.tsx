@@ -131,7 +131,7 @@ export function ProjectReportView({ state, onSelect, onChange, onOpenIssue, onOp
         className={state.selectedId === project.id ? "is-selected" : ""}
         onClick={() => onSelect?.(project.id)}
       >
-        <span><strong>{project.projectKey}</strong><small>{project.projectStatus.replace("_", " ")}</small></span>
+        <span><strong>{project.projectKey}</strong><span className={`status ${project.projectStatus}`}>{project.projectStatus.replace(/_/g, " ")}</span></span>
         <span>{project.projectName}</span>
         <small>{project.ownerName} · {project.issueCount} Issues</small>
       </button>)}

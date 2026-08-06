@@ -1,9 +1,32 @@
 import { useEffect, useState } from "react";
 import { fetchAdminPeople, fetchAdminSettings, updateAdminPerson, updateAdminSettings, createAdminPerson, deleteAdminPerson, fetchGroupEmails, createGroupEmail, updateGroupEmail, deleteGroupEmail, type AdminPersonRow, type GroupEmailRow } from "../api";
-import { Check, Loader2, Save, X, Trash2, CheckCircle2, XCircle, AlertTriangle, Mail } from "lucide-react";
+import { Check, Loader2, Save, X, Trash2, CheckCircle2, XCircle, AlertTriangle, Mail, Palette, Type, Sliders, User, Database } from "lucide-react";
+import { STATUS_COLOR_CONFIGS, applyCustomStatusColors } from "../utils/tagColors";
+import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
 
-export function MasterDataWorkspace() {
-  const [activeTab, setActiveTab] = useState<"people" | "group_emails" | "general_settings" | "ai_instructions">("people");
+interface MasterDataWorkspaceProps {
+  mode?: "master-data" | "settings";
+  isAdmin?: boolean;
+  username?: string;
+}
+
+export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, username }: MasterDataWorkspaceProps) {
+  const storageKey = getActiveAppearanceKey(username);
+
+  const [activeTab, setActiveTab] = useState<"people" | "group_emails" | "general_settings" | "ai_instructions" | "appearance">("people");
+
+  useEffect(() => {
+    if (mode === "settings") {
+      if (!isAdmin) {
+        setActiveTab("appearance");
+      } else if (activeTab === "people" || activeTab === "group_emails") {
+        setActiveTab("general_settings");
+      }
+    } else if (mode === "master-data" && (activeTab === "general_settings" || activeTab === "ai_instructions" || activeTab === "appearance")) {
+      setActiveTab("people");
+    }
+  }, [mode, isAdmin]);
+
   const [people, setPeople] = useState<AdminPersonRow[]>([]);
   const [groupEmails, setGroupEmails] = useState<GroupEmailRow[]>([]);
   const [settings, setSettings] = useState<Record<string, string>>({
@@ -17,6 +40,7 @@ export function MasterDataWorkspace() {
     exchange_host: "",
     exchange_user: "",
     exchange_pass: "",
+    app_font_size: "14",
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -35,11 +59,21 @@ export function MasterDataWorkspace() {
   }
 
   useEffect(() => {
-    Promise.all([fetchAdminPeople(), fetchAdminSettings(), fetchGroupEmails()])
+    let localAppearance: Record<string, string> = {};
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) localAppearance = JSON.parse(saved);
+    } catch {}
+
+    Promise.all([
+      isAdmin ? fetchAdminPeople().catch(() => ({ rows: [] })) : Promise.resolve({ rows: [] }),
+      fetchAdminSettings().catch(() => ({} as Record<string, string>)),
+      isAdmin ? fetchGroupEmails().catch(() => ({ rows: [] })) : Promise.resolve({ rows: [] })
+    ])
       .then(([peopleRes, settingsRes, groupEmailsRes]) => {
-        setPeople(peopleRes.rows);
-        setGroupEmails(groupEmailsRes.rows);
-        setSettings({
+        setPeople(peopleRes.rows || []);
+        setGroupEmails(groupEmailsRes.rows || []);
+        const merged = {
           ai_instruction_glpi: settingsRes.ai_instruction_glpi || "",
           ai_instruction_email: settingsRes.ai_instruction_email || "",
           ai_instruction_issue_name: settingsRes.ai_instruction_issue_name || "",
@@ -50,10 +84,16 @@ export function MasterDataWorkspace() {
           exchange_host: settingsRes.exchange_host || "",
           exchange_user: settingsRes.exchange_user || "",
           exchange_pass: settingsRes.exchange_pass || "",
-        });
+          app_font_size: settingsRes.app_font_size || "14",
+          ...settingsRes,
+          ...localAppearance,
+        };
+        setSettings(merged);
+        
+        
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [isAdmin]);
 
   async function togglePersonFlag(id: number, field: keyof AdminPersonRow, value: boolean) {
     const person = people.find((p) => p.id === id);
@@ -140,9 +180,63 @@ export function MasterDataWorkspace() {
     setSaving(true);
     try {
       await updateAdminSettings(settings);
+      applyCustomStatusColors(settings);
+      applyCustomFontSize(settings);
       showToast("success", "Settings saved successfully!");
     } catch (err) {
       showToast("error", "Failed to save settings");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const [showAdminAppearanceModal, setShowAdminAppearanceModal] = useState(false);
+
+  function handleSaveAppearanceClick() {
+    if (isAdmin) {
+      setShowAdminAppearanceModal(true);
+    } else {
+      saveAppearanceSettingsLocalOnly();
+    }
+  }
+
+  function getAppearancePayload() {
+    const appearanceKeys = ["app_font_size"];
+    for (const cfg of STATUS_COLOR_CONFIGS) {
+      appearanceKeys.push(`status_color_${cfg.key}_bg`);
+      appearanceKeys.push(`status_color_${cfg.key}_text`);
+      appearanceKeys.push(`status_color_${cfg.key}_border`);
+    }
+
+    const appearanceSettings: Record<string, string> = {};
+    for (const k of appearanceKeys) {
+      if (settings[k] !== undefined) appearanceSettings[k] = settings[k];
+    }
+    return appearanceSettings;
+  }
+
+  function saveAppearanceSettingsLocalOnly() {
+    const appearanceSettings = getAppearancePayload();
+    localStorage.setItem(storageKey, JSON.stringify(appearanceSettings));
+    applyCustomStatusColors(settings, );
+    applyCustomFontSize(settings, );
+    setShowAdminAppearanceModal(false);
+    showToast("success", "Personal appearance preferences saved to your local storage!");
+  }
+
+  async function saveAppearanceSettingsGlobalAndLocal() {
+    const appearanceSettings = getAppearancePayload();
+    localStorage.setItem(storageKey, JSON.stringify(appearanceSettings));
+    applyCustomStatusColors(settings, );
+    applyCustomFontSize(settings, );
+
+    setSaving(true);
+    try {
+      await updateAdminSettings(settings);
+      setShowAdminAppearanceModal(false);
+      showToast("success", "Appearance settings saved to Database (System Default) & Local Storage!");
+    } catch (err) {
+      showToast("error", "Saved to local storage, but failed to save to server database.");
     } finally {
       setSaving(false);
     }
@@ -222,34 +316,52 @@ export function MasterDataWorkspace() {
   return (
     <div className="master-data-workspace">
       <div className="workspace-tabs" style={{ display: "flex", gap: "1rem", marginBottom: "1rem", borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
-        <button
-          className={activeTab === "people" ? "active" : ""}
-          style={{ fontWeight: activeTab === "people" ? "bold" : "normal", background: "none", border: "none", cursor: "pointer", color: "var(--text-color)" }}
-          onClick={() => setActiveTab("people")}
-        >
-          People Roles
-        </button>
-        <button
-          className={activeTab === "group_emails" ? "active" : ""}
-          style={{ fontWeight: activeTab === "group_emails" ? "bold" : "normal", background: "none", border: "none", cursor: "pointer", color: "var(--text-color)" }}
-          onClick={() => setActiveTab("group_emails")}
-        >
-          Group Emails
-        </button>
-        <button
-          className={activeTab === "general_settings" ? "active" : ""}
-          style={{ fontWeight: activeTab === "general_settings" ? "bold" : "normal", background: "none", border: "none", cursor: "pointer", color: "var(--text-color)" }}
-          onClick={() => setActiveTab("general_settings")}
-        >
-          General Settings
-        </button>
-        <button
-          className={activeTab === "ai_instructions" ? "active" : ""}
-          style={{ fontWeight: activeTab === "ai_instructions" ? "bold" : "normal", background: "none", border: "none", cursor: "pointer", color: "var(--text-color)" }}
-          onClick={() => setActiveTab("ai_instructions")}
-        >
-          AI Instructions
-        </button>
+        {mode === "master-data" ? (
+          <>
+            <button
+              className={activeTab === "people" ? "active" : ""}
+              style={{ fontWeight: activeTab === "people" ? "bold" : "normal", background: "none", border: "none", cursor: "pointer", color: "var(--text-color)" }}
+              onClick={() => setActiveTab("people")}
+            >
+              People Roles
+            </button>
+            <button
+              className={activeTab === "group_emails" ? "active" : ""}
+              style={{ fontWeight: activeTab === "group_emails" ? "bold" : "normal", background: "none", border: "none", cursor: "pointer", color: "var(--text-color)" }}
+              onClick={() => setActiveTab("group_emails")}
+            >
+              Group Emails
+            </button>
+          </>
+        ) : (
+          <>
+            {isAdmin ? (
+              <>
+                <button
+                  className={activeTab === "general_settings" ? "active" : ""}
+                  style={{ fontWeight: activeTab === "general_settings" ? "bold" : "normal", background: "none", border: "none", cursor: "pointer", color: "var(--text-color)" }}
+                  onClick={() => setActiveTab("general_settings")}
+                >
+                  General Settings
+                </button>
+                <button
+                  className={activeTab === "ai_instructions" ? "active" : ""}
+                  style={{ fontWeight: activeTab === "ai_instructions" ? "bold" : "normal", background: "none", border: "none", cursor: "pointer", color: "var(--text-color)" }}
+                  onClick={() => setActiveTab("ai_instructions")}
+                >
+                  AI Instructions
+                </button>
+              </>
+            ) : null}
+            <button
+              className={activeTab === "appearance" ? "active" : ""}
+              style={{ fontWeight: activeTab === "appearance" ? "bold" : "normal", background: "none", border: "none", cursor: "pointer", color: "var(--text-color)" }}
+              onClick={() => setActiveTab("appearance")}
+            >
+              Appearance Settings
+            </button>
+          </>
+        )}
       </div>
 
       {activeTab === "people" && (
@@ -576,6 +688,307 @@ export function MasterDataWorkspace() {
         </div>
       )}
 
+      {activeTab === "appearance" && (
+        <div className="settings-tab" style={{ display: "flex", flexDirection: "column", gap: "2rem", maxWidth: "880px", paddingBottom: "5rem" }}>
+          {!isAdmin ? (
+            <div style={{ padding: "0.875rem 1.25rem", borderRadius: "8px", background: "#f0fdf4", border: "1px solid #bbf7d0", color: "#166534", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "8px" }}>
+              <CheckCircle2 size={16} color="#16a34a" />
+              <span><strong>Personal Preferences Mode:</strong> Changes made here are saved <strong>ONLY to your browser's Local Storage</strong> and will not alter database defaults or affect other users.</span>
+            </div>
+          ) : null}
+          {/* Section 1: Font Size Settings */}
+          <div className="settings-card">
+            <div style={{ marginBottom: "1.5rem" }}>
+              <h3 style={{ marginTop: 0, marginBottom: "0.5rem", fontSize: "1.25rem", display: "flex", alignItems: "center", gap: "8px" }}>
+                <Type size={20} color="#059669" /> Dynamic Application Font Size
+              </h3>
+              <p style={{ margin: 0, fontSize: "0.875rem" }}>
+                Adjust the base font size for the entire application. Drag the slider to scale text smoothly across all pages and save as default.
+              </p>
+            </div>
+
+            <div className="settings-card-row" style={{ display: "flex", alignItems: "center", gap: "1.5rem", padding: "1.25rem", borderRadius: "10px", marginBottom: "1.5rem" }}>
+              <span style={{ fontSize: "0.85rem", fontWeight: "600" }}>Smaller (12px)</span>
+              <input
+                type="range"
+                min="12"
+                max="18"
+                step="1"
+                value={settings.app_font_size || "14"}
+                onChange={(e) => {
+                  const newSet = { ...settings, app_font_size: e.target.value };
+                  setSettings(newSet);
+                  applyCustomFontSize(newSet, username);
+                }}
+                style={{ flex: 1, accentColor: "#059669", cursor: "pointer", height: "6px" }}
+              />
+              <span style={{ fontSize: "0.85rem", fontWeight: "600" }}>Larger (18px)</span>
+              <span
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "8px",
+                  background: "#059669",
+                  color: "#ffffff",
+                  fontWeight: "700",
+                  fontSize: "0.9rem",
+                  minWidth: "60px",
+                  textAlign: "center"
+                }}
+              >
+                {settings.app_font_size || "14"}px
+              </span>
+            </div>
+
+            {/* Live Font Size Preview Box */}
+            <div className="settings-card-row" style={{ padding: "1.25rem", borderRadius: "10px" }}>
+              <div style={{ fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", marginBottom: "8px" }}>Live Text Scaling Preview</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <h4 style={{ margin: 0, fontSize: "1.15em" }}>Sample Page Header Title</h4>
+                <p style={{ margin: 0, fontSize: "0.95em" }}>
+                  This preview text, table headers, and form inputs scale dynamically as you slide the font size setting above. Current base font: {settings.app_font_size || "14"}px.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2: Status Tag Colors */}
+          <div className="settings-card">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.5rem" }}>
+              <div>
+                <h3 style={{ marginTop: 0, marginBottom: "0.5rem", fontSize: "1.25rem", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <Palette size={20} color="#059669" /> Status Tag Colors & Badges
+                </h3>
+                <p style={{ margin: 0, fontSize: "0.875rem" }}>
+                  Customize background, text, and border colors for status badges displayed across Dashboard, CR Transport, Issue Reports, and Project Reports.
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gap: "1.25rem" }}>
+              {STATUS_COLOR_CONFIGS.map((cfg) => {
+                const bgKey = `status_color_${cfg.key}_bg`;
+                const txtKey = `status_color_${cfg.key}_text`;
+                const bdrKey = `status_color_${cfg.key}_border`;
+
+                const currentBg = settings[bgKey] || cfg.defaultBg;
+                const currentText = settings[txtKey] || cfg.defaultText;
+                const currentBorder = settings[bdrKey] || cfg.defaultBorder;
+
+                const TAG_PRESETS = [
+                  { name: "Amber", bg: "#fef3c7", text: "#d97706", border: "#fde68a" },
+                  { name: "Emerald", bg: "#d1fae5", text: "#059669", border: "#a7f3d0" },
+                  { name: "Blue", bg: "#dbeafe", text: "#2563eb", border: "#bfdbfe" },
+                  { name: "Purple", bg: "#f3e8ff", text: "#7c3aed", border: "#ddd6fe" },
+                  { name: "Rose", bg: "#ffe4e6", text: "#e11d48", border: "#fecdd3" },
+                  { name: "Cyan", bg: "#cffafe", text: "#0891b2", border: "#a5f3fc" },
+                  { name: "Slate", bg: "#f1f5f9", text: "#475569", border: "#cbd5e1" },
+                  { name: "Orange", bg: "#ffedd5", text: "#ea580c", border: "#fed7aa" }
+                ];
+
+                return (
+                  <div
+                    key={cfg.key}
+                    className="settings-card-row"
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "0.875rem",
+                      padding: "1.15rem 1.25rem",
+                      borderRadius: "10px"
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                      <div>
+                        <strong style={{ display: "block", fontSize: "0.925rem" }}>{cfg.label}</strong>
+                        <small style={{ fontSize: "0.75rem", opacity: 0.7 }}>Category: <code>{cfg.key}</code></small>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ fontSize: "0.75rem", fontWeight: "600", color: "#64748b" }}>Live Preview:</span>
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            padding: "4px 12px",
+                            borderRadius: "9999px",
+                            fontSize: "0.75rem",
+                            fontWeight: "600",
+                            backgroundColor: currentBg,
+                            color: currentText,
+                            border: `1px solid ${currentBorder}`,
+                            textTransform: "capitalize",
+                            boxShadow: "0 1px 3px rgba(0,0,0,0.04)"
+                          }}
+                        >
+                          {cfg.key.replace(/_/g, " ")}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Quick Preset Color Swatches */}
+                    <div>
+                      <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "600", marginBottom: "6px", color: "var(--color-text-muted, #64748b)" }}>
+                        Quick Presets (Click to apply):
+                      </label>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                        {TAG_PRESETS.map((p) => {
+                          const isSelected = currentBg.toLowerCase() === p.bg.toLowerCase();
+                          return (
+                            <button
+                              key={p.name}
+                              type="button"
+                              onClick={() => {
+                                const newSet = {
+                                  ...settings,
+                                  [bgKey]: p.bg,
+                                  [txtKey]: p.text,
+                                  [bdrKey]: p.border
+                                };
+                                setSettings(newSet);
+                                applyCustomStatusColors(newSet, username);
+                              }}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                padding: "4px 10px",
+                                borderRadius: "6px",
+                                fontSize: "0.75rem",
+                                fontWeight: isSelected ? "700" : "500",
+                                backgroundColor: p.bg,
+                                color: p.text,
+                                border: isSelected ? `2px solid ${p.text}` : `1px solid ${p.border}`,
+                                cursor: "pointer",
+                                transition: "all 0.15s ease",
+                                transform: isSelected ? "scale(1.04)" : "scale(1)"
+                              }}
+                            >
+                              <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: p.text, display: "inline-block" }} />
+                              {p.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Fine-Tuning Inputs */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem", paddingTop: "6px", borderTop: "1px dashed var(--color-border, #e2e8f0)" }}>
+                      <div>
+                        <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "600", marginBottom: "4px" }}>Background Hex</label>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <input
+                            type="color"
+                            value={currentBg}
+                            onChange={(e) => {
+                              const newSet = { ...settings, [bgKey]: e.target.value };
+                              setSettings(newSet);
+                              applyCustomStatusColors(newSet, username);
+                            }}
+                            style={{ width: "32px", height: "32px", border: "none", borderRadius: "6px", cursor: "pointer" }}
+                          />
+                          <input
+                            type="text"
+                            value={currentBg}
+                            onChange={(e) => {
+                              const newSet = { ...settings, [bgKey]: e.target.value };
+                              setSettings(newSet);
+                              applyCustomStatusColors(newSet, username);
+                            }}
+                            style={{ width: "85px", padding: "4px 8px", fontSize: "0.8rem", borderRadius: "6px", textTransform: "uppercase" }}
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "600", marginBottom: "4px" }}>Text Color Hex</label>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <input
+                            type="color"
+                            value={currentText}
+                            onChange={(e) => {
+                              const newSet = { ...settings, [txtKey]: e.target.value };
+                              setSettings(newSet);
+                              applyCustomStatusColors(newSet, username);
+                            }}
+                            style={{ width: "32px", height: "32px", border: "none", borderRadius: "6px", cursor: "pointer" }}
+                          />
+                          <input
+                            type="text"
+                            value={currentText}
+                            onChange={(e) => {
+                              const newSet = { ...settings, [txtKey]: e.target.value };
+                              setSettings(newSet);
+                              applyCustomStatusColors(newSet, username);
+                            }}
+                            style={{ width: "85px", padding: "4px 8px", fontSize: "0.8rem", borderRadius: "6px", textTransform: "uppercase" }}
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "600", marginBottom: "4px" }}>Border Color Hex</label>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <input
+                            type="color"
+                            value={currentBorder}
+                            onChange={(e) => {
+                              const newSet = { ...settings, [bdrKey]: e.target.value };
+                              setSettings(newSet);
+                              applyCustomStatusColors(newSet, username);
+                            }}
+                            style={{ width: "32px", height: "32px", border: "none", borderRadius: "6px", cursor: "pointer" }}
+                          />
+                          <input
+                            type="text"
+                            value={currentBorder}
+                            onChange={(e) => {
+                              const newSet = { ...settings, [bdrKey]: e.target.value };
+                              setSettings(newSet);
+                              applyCustomStatusColors(newSet, username);
+                            }}
+                            style={{ width: "85px", padding: "4px 8px", fontSize: "0.8rem", borderRadius: "6px", textTransform: "uppercase" }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ marginTop: "2rem", paddingTop: "1.5rem", borderTop: "1px solid var(--color-border, #e5e7eb)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  localStorage.removeItem(storageKey);
+                  const resetSet: Record<string, string> = { ...settings, app_font_size: "14" };
+                  for (const cfg of STATUS_COLOR_CONFIGS) {
+                    resetSet[`status_color_${cfg.key}_bg`] = cfg.defaultBg;
+                    resetSet[`status_color_${cfg.key}_text`] = cfg.defaultText;
+                    resetSet[`status_color_${cfg.key}_border`] = cfg.defaultBorder;
+                  }
+                  setSettings(resetSet);
+                  applyCustomStatusColors(resetSet, username);
+                  applyCustomFontSize(resetSet, username);
+                  showToast("success", "Reset to default appearance settings!");
+                }}
+                style={{ padding: "0.5rem 1rem", borderRadius: "6px", background: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1", cursor: "pointer", fontWeight: "600", fontSize: "0.85rem" }}
+              >
+                Reset Default Appearance
+              </button>
+
+              <button
+                onClick={handleSaveAppearanceClick}
+                disabled={saving}
+                style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.625rem 1.25rem", borderRadius: "6px", background: "var(--color-primary, #059669)", color: "white", border: "none", cursor: "pointer", fontWeight: "600", fontSize: "0.875rem", transition: "all 0.2s" }}
+              >
+                {saving ? <Loader2 className="spinner" size={16} /> : <Save size={16} />}
+                {saving ? "Saving Changes..." : "Save Appearance Settings"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showAddModal && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
           <form onSubmit={handleAddPerson} style={{ background: "var(--color-bg, #ffffff)", padding: "2rem", borderRadius: "8px", width: "100%", maxWidth: "400px", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}>
@@ -651,6 +1064,87 @@ export function MasterDataWorkspace() {
             <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem" }}>
               <button type="button" onClick={() => setDeleteConfirmPerson(null)} disabled={saving} style={{ padding: "0.5rem 1rem", borderRadius: "6px", background: "transparent", border: "1px solid var(--color-border, #d1d5db)", cursor: "pointer", fontSize: "0.875rem", fontWeight: "500" }}>Cancel</button>
               <button type="button" onClick={confirmDeletePerson} disabled={saving} style={{ padding: "0.5rem 1rem", borderRadius: "6px", background: "#dc2626", color: "white", border: "none", cursor: "pointer", fontSize: "0.875rem", fontWeight: "600" }}>{saving ? "Deleting..." : "Yes, Delete"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAdminAppearanceModal && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "1rem" }}>
+          <div className="settings-card" style={{ width: "100%", maxWidth: "500px", borderRadius: "16px", padding: "1.75rem", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.3)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
+              <h3 style={{ margin: 0, fontSize: "1.2rem", display: "flex", alignItems: "center", gap: "8px" }}>
+                <Sliders size={20} color="#059669" /> Save Appearance Settings
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAdminAppearanceModal(false)}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", padding: "4px" }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <p style={{ color: "var(--color-text-muted, #64748b)", fontSize: "0.875rem", marginBottom: "1.5rem", lineHeight: "1.5" }}>
+              As an Administrator, choose where you would like to apply these appearance settings (Font Size & Status Tag Colors):
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+              <button
+                type="button"
+                onClick={saveAppearanceSettingsLocalOnly}
+                disabled={saving}
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "1rem",
+                  padding: "1.15rem",
+                  borderRadius: "10px",
+                  border: "1px solid var(--color-border, #cbd5e1)",
+                  background: "var(--surface-subtle, #f8fafc)",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  transition: "all 0.2s"
+                }}
+              >
+                <User size={22} color="#059669" style={{ marginTop: "2px", flexShrink: 0 }} />
+                <div>
+                  <strong style={{ display: "block", fontSize: "0.925rem", marginBottom: "4px" }}>
+                    Save for Me Only (Local Storage)
+                  </strong>
+                  <span style={{ fontSize: "0.8rem", color: "var(--color-text-muted, #64748b)", display: "block", lineHeight: "1.4" }}>
+                    Saves settings only to your browser local storage ({storageKey}). Does not affect system defaults for other users.
+                  </span>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={saveAppearanceSettingsGlobalAndLocal}
+                disabled={saving}
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "1rem",
+                  padding: "1.15rem",
+                  borderRadius: "10px",
+                  border: "1.5px solid #059669",
+                  background: "var(--surface-selected, #ecfdf5)",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  transition: "all 0.2s"
+                }}
+              >
+                <Database size={22} color="#059669" style={{ marginTop: "2px", flexShrink: 0 }} />
+                <div>
+                  <strong style={{ display: "block", fontSize: "0.925rem", marginBottom: "4px", color: "#047857" }}>
+                    Save as System Default (Database & Local Storage)
+                  </strong>
+                  <span style={{ fontSize: "0.8rem", color: "#065f46", display: "block", lineHeight: "1.4" }}>
+                    Saves settings to the server database as system defaults for ALL users (and updates your local storage).
+                  </span>
+                </div>
+              </button>
             </div>
           </div>
         </div>

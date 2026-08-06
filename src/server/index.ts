@@ -19,8 +19,9 @@ const projectRoot = path.resolve(__dirname, "..", "..");
 const clientDist = path.join(projectRoot, "dist", "client");
 
 app.use(express.json({ limit: "1mb" }));
-app.use((_req, res, next) => {
-  res.header("Access-Control-Allow-Origin", config.clientOrigin);
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  res.header("Access-Control-Allow-Origin", origin || config.clientOrigin);
   res.header("Access-Control-Allow-Headers", "Content-Type, Cookie");
   res.header("Access-Control-Allow-Credentials", "true");
   res.header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");

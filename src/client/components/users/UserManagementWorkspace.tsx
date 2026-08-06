@@ -100,10 +100,10 @@ export function UserManagementWorkspaceView({
         <option value="inactive">Inactive</option>
       </select>
     </div>
-    {loading && <p role="status" className="user-management__state">Memuat user…</p>}
+    {loading && <p role="status" className="user-management__state">Loading users…</p>}
     {error && <p role="alert" className="user-management__state user-management__state--error">{error}</p>}
     {!loading && !error && users.length === 0 &&
-      <p className="user-management__empty">Belum ada user pada scope ini.</p>}
+      <p className="user-management__empty">No users found in this scope.</p>}
     <div className="user-management__workspace">
       <div className="user-management__list" role="list" aria-label="Managed users">
         {users.map((user) => <button
@@ -330,7 +330,7 @@ export function UserManagementWorkspace({
         onRevokeSessions={() => setAction({ kind: "revoke", user: selectedUser })}
         onArchive={() => setAction({ kind: "archive", user: selectedUser })}
         onRestore={() => setEditor({ mode: "restore", user: selectedUser })}
-      /> : !loading && <p className="user-management__empty">Pilih user untuk melihat detail.</p>}
+      /> : !loading && <p className="user-management__empty">Select a user to view details.</p>}
     </UserManagementWorkspaceView>
     <UserEditorDialog
       open={Boolean(editor)}

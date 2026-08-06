@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
+import { requireAdmin } from "../auth/middleware.js";
 
 export const adminRoutes = Router();
 

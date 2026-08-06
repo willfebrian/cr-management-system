@@ -37,14 +37,14 @@ export function UserDetailPanel({
   const statusProtected = user.isActive && (isSelf || isFinalActiveAdmin);
   const archiveProtected = isSelf || isFinalActiveAdmin;
   const statusReason = isSelf
-    ? "Tidak dapat menonaktifkan akun sendiri"
+    ? "Cannot deactivate own account"
     : isFinalActiveAdmin
-      ? "Administrator aktif terakhir harus dipertahankan"
+      ? "Last active administrator must be preserved"
       : "";
   const archiveReason = isSelf
-    ? "Tidak dapat mengarsipkan akun sendiri"
+    ? "Cannot archive own account"
     : isFinalActiveAdmin
-      ? "Administrator aktif terakhir harus dipertahankan"
+      ? "Last active administrator must be preserved"
       : "";
 
   return <section className="user-detail" aria-label={`Detail ${user.username}`}>
@@ -84,7 +84,7 @@ export function UserDetailPanel({
         type="button"
         className="button"
         disabled={isSelf}
-        title={isSelf ? "Gunakan Change Password untuk akun sendiri" : ""}
+        title={isSelf ? "Use Change Password to update your own credentials" : ""}
         onClick={onResetPassword}
       >
         Reset Password
@@ -106,7 +106,7 @@ export function UserDetailPanel({
 
     <section className="user-audit" aria-labelledby="user-audit-title">
       <h3 id="user-audit-title">Audit history</h3>
-      {audit.length === 0 ? <p className="user-management__empty">Belum ada audit.</p> :
+      {audit.length === 0 ? <p className="user-management__empty">No audit history recorded.</p> :
         <ol className="user-audit__list">
           {audit.map((entry) => <li key={entry.id}>
             <div className="user-audit__heading">

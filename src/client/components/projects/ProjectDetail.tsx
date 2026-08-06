@@ -19,7 +19,7 @@ export function ProjectDetail({ detail, onOpenIssue, actions }: ProjectDetailPro
         {project.description && <p>{project.description}</p>}
       </div>
       <div className="project-detail-header-actions">
-        <span className={`project-status project-status-${project.projectStatus}`}>
+        <span className={`status ${project.projectStatus}`}>
           {project.projectStatus.replace("_", " ")}
         </span>
         {actions}

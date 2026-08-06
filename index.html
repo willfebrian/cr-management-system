@@ -4,6 +4,82 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CR Management System</title>
+    <script>
+      (function() {
+        try {
+          var lastUser = localStorage.getItem("last_auth_username");
+          var appearanceKey = lastUser ? ("user_appearance_settings_" + lastUser.trim().toLowerCase()) : null;
+          if (!appearanceKey) {
+            var keys = Object.keys(localStorage);
+            appearanceKey = keys.find(function(k) { return k.startsWith("user_appearance_settings_"); });
+          }
+          if (!appearanceKey) appearanceKey = "user_appearance_settings";
+
+          var savedTheme = localStorage.getItem("app_theme");
+          if (savedTheme === "dark") {
+            document.documentElement.classList.add("dark-theme");
+            document.body.classList.add("dark-theme");
+          }
+
+          var saved = localStorage.getItem(appearanceKey);
+          var systemSaved = localStorage.getItem("system_appearance_settings");
+          var settings = {};
+          
+          if (systemSaved) {
+            try {
+              var sysSettings = JSON.parse(systemSaved);
+              for (var k in sysSettings) settings[k] = sysSettings[k];
+            } catch(e) {}
+          }
+          
+          if (saved) {
+            try {
+              var localSettings = JSON.parse(saved);
+              for (var k in localSettings) settings[k] = localSettings[k];
+            } catch(e) {}
+          }
+
+          if (Object.keys(settings).length > 0) {
+            // FONT SIZE
+            var size = settings.app_font_size || "14";
+            var numSize = parseInt(size, 10) || 14;
+            var scaleRatio = (numSize / 14).toFixed(4);
+            var inverseScale = (14 / numSize).toFixed(4);
+            var fontStyleEl = document.createElement("style");
+            fontStyleEl.id = "dynamic-font-size";
+            fontStyleEl.innerHTML = `
+              :root { --app-font-size: ${numSize}px; --app-font-scale: ${scaleRatio}; }
+              .sidebar-nav button, .sidebar-brand span, .sidebar-theme-toggle span, .sidebar-user { font-size: ${numSize}px !important; }
+              .workspace, .auth-screen { zoom: ${scaleRatio}; ${numSize > 14 ? `height: calc(100vh * ${inverseScale}) !important; min-height: calc(100vh * ${inverseScale}) !important;` : `min-height: 100% !important; height: 100% !important;`} }
+              .ui-modal-content, .user-dialog { zoom: ${scaleRatio}; }
+            `;
+            document.head.appendChild(fontStyleEl);
+
+            // TAG COLORS
+            var colorConfigs = [
+              { key: "outstanding", defaultBg: "#fef3c7", defaultText: "#d97706", defaultBorder: "#fde68a", selectors: [".status.outstanding", ".status.open"] },
+              { key: "released", defaultBg: "#d1fae5", defaultText: "#059669", defaultBorder: "#a7f3d0", selectors: [".status.released", ".status.completed", ".status.ok", ".status.active"] },
+              { key: "in_progress", defaultBg: "#dbeafe", defaultText: "#2563eb", defaultBorder: "#bfdbfe", selectors: [".status.in_progress", ".status.in_qa", ".status.in_prd", ".status.pending_qa", ".status.pending_prd", ".status.planned"] },
+              { key: "created", defaultBg: "#f3e8ff", defaultText: "#7c3aed", defaultBorder: "#ddd6fe", selectors: [".status.created"] },
+              { key: "cancelled", defaultBg: "#ffe4e6", defaultText: "#e11d48", defaultBorder: "#fecdd3", selectors: [".status.cancelled", ".status.deleted", ".status.on_hold"] }
+            ];
+            
+            var colorStyleEl = document.createElement("style");
+            colorStyleEl.id = "dynamic-tag-colors";
+            var cssRules = "";
+            for (var i = 0; i < colorConfigs.length; i++) {
+              var cfg = colorConfigs[i];
+              var bg = settings["status_color_" + cfg.key + "_bg"] || cfg.defaultBg;
+              var txt = settings["status_color_" + cfg.key + "_text"] || cfg.defaultText;
+              var bdr = settings["status_color_" + cfg.key + "_border"] || cfg.defaultBorder;
+              cssRules += cfg.selectors.join(", ") + " { background-color: " + bg + " !important; color: " + txt + " !important; border-color: " + bdr + " !important; }\n";
+            }
+            colorStyleEl.innerHTML = cssRules;
+            document.head.appendChild(colorStyleEl);
+          }
+        } catch(e){}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
