@@ -18,13 +18,13 @@ export function AppLoadingScreen() {
   }, [statuses.length]);
 
   return (
-    <div className="interactive-auth-screen">
-      <div className="interactive-auth-card">
+    <div className="interactive-loading-backdrop">
+      <div className="interactive-loading-modal">
         <div className="app-loader-icon-wrapper">
           <div className="app-loader-pulse-ring" />
-          <Database size={36} className="app-loader-brand-icon" />
+          <Database size={32} className="app-loader-brand-icon" />
         </div>
-        <h2 className="app-loader-title">CR Management System</h2>
+        <h3 className="app-loader-title">CR Management System</h3>
         <p className="app-loader-status">{statuses[statusIdx]}</p>
 
         <div className="app-loader-progress-track">
