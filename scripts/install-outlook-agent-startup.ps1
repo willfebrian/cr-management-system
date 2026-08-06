@@ -37,8 +37,6 @@ Write-Host "Startup script created at: $vbsPath" -ForegroundColor Cyan
 Write-Host "Starting agent now..." -ForegroundColor Green
 
 # Kill existing node agent process if running, then restart
-Get-Process -Name "node" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*cr-outlook-agent.mjs*" } | Stop-Process -Force -ErrorAction SilentlyContinue
-
-Start-Process -FilePath $nodeCmd -ArgumentList "`"$scriptPath`"" -WorkingDirectory $workingDir -WindowStyle Hidden
-Write-Host "Agent is running locally at http://127.0.0.1:18888" -ForegroundColor Green
+Start-Process -FilePath "wscript.exe" -ArgumentList "`"$vbsPath`""
+Write-Host "Agent is running silently in background at http://127.0.0.1:18888" -ForegroundColor Green
 
