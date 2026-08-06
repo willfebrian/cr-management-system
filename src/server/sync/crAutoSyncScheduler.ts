@@ -2,6 +2,7 @@ import { config } from "../config.js";
 import { assertDatabaseConfigured } from "../db/pool.js";
 import { getLastSuccessfulSyncRun } from "../db/crRepository.js";
 import { runCrSync } from "./crSyncRunner.js";
+import { recordActivityLog } from "../db/auditRepository.js";
 
 let running = false;
 
@@ -29,11 +30,19 @@ export function startCrAutoSyncScheduler() {
         console.log("CR auto sync skipped because all configured systems are still fresh.");
         return;
       }
+
       const result = await runCrSync({
         systemCodes: staleSystems,
         syncMode: "incremental",
         lookbackDays: config.autoSync.lookbackDays,
         rowCount: config.autoSync.rowCount
+      });
+      await recordActivityLog({
+        activityType: "sync",
+        action: "auto_sync_cr",
+        username: "SYSTEM_SCHEDULER",
+        description: `Auto-scheduled SAP CR sync for systems [${staleSystems.join(", ")}] (Result: ${result.ok ? "Success" : "Failed"}, Requests: ${result.requestCount || 0})`,
+        metadata: { ok: result.ok, requestCount: result.requestCount, systems: staleSystems }
       });
       console.log(`CR auto sync finished: ${result.requestCount} request(s), ok=${result.ok}.`);
     } catch (error) {

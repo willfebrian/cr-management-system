@@ -223,10 +223,24 @@ crRoutes.get("/issues/:id/templates/:kind", async (req, res, next) => {
   }
 });
 
+import { recordActivityLog } from "../db/auditRepository.js";
+
 crRoutes.post("/issues", async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
-    res.json(await saveIssue(req.body || {}));
+    const isNew = !req.body?.id;
+    const result = await saveIssue(req.body || {});
+    const issueKey = result.issue ? `${result.issue.issue_no}-${result.issue.sub_issue_no}` : (req.body?.issueName || "");
+    const username = (req as any).user?.username || "system";
+    await recordActivityLog({
+      activityType: "issue",
+      action: isNew ? "create_issue" : "update_issue",
+      username,
+      userId: (req as any).user?.id || null,
+      description: isNew ? `Created issue ${issueKey} ("${req.body?.issueName || ''}")` : `Updated issue ${issueKey}`,
+      ipAddress: req.ip
+    });
+    res.json(result);
   } catch (error) {
     next(error);
   }
@@ -235,7 +249,19 @@ crRoutes.post("/issues", async (req, res, next) => {
 crRoutes.put("/issues/:id", async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
-    res.json(await saveIssue({ ...(req.body || {}), id: numberQuery(req.params.id, 0) }));
+    const id = numberQuery(req.params.id, 0);
+    const result = await saveIssue({ ...(req.body || {}), id });
+    const issueKey = result.issue ? `${result.issue.issue_no}-${result.issue.sub_issue_no}` : `ID ${id}`;
+    const username = (req as any).user?.username || "system";
+    await recordActivityLog({
+      activityType: "issue",
+      action: "update_issue",
+      username,
+      userId: (req as any).user?.id || null,
+      description: `Updated issue ${issueKey}`,
+      ipAddress: req.ip
+    });
+    res.json(result);
   } catch (error) {
     next(error);
   }
@@ -244,7 +270,19 @@ crRoutes.put("/issues/:id", async (req, res, next) => {
 crRoutes.post("/issues/:id/cancel", async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
-    res.json(await cancelIssue(numberQuery(req.params.id, 0), stringQuery(req.body?.reason) || ""));
+    const id = numberQuery(req.params.id, 0);
+    const reason = stringQuery(req.body?.reason) || "";
+    const result = await cancelIssue(id, reason);
+    const username = (req as any).user?.username || "system";
+    await recordActivityLog({
+      activityType: "issue",
+      action: "cancel_issue",
+      username,
+      userId: (req as any).user?.id || null,
+      description: `Cancelled issue ID ${id}${reason ? ` (Reason: ${reason})` : ""}`,
+      ipAddress: req.ip
+    });
+    res.json(result);
   } catch (error) {
     next(error);
   }
@@ -253,7 +291,18 @@ crRoutes.post("/issues/:id/cancel", async (req, res, next) => {
 crRoutes.delete("/issues/:id", async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
-    res.json(await deleteIssue(numberQuery(req.params.id, 0)));
+    const id = numberQuery(req.params.id, 0);
+    const result = await deleteIssue(id);
+    const username = (req as any).user?.username || "system";
+    await recordActivityLog({
+      activityType: "issue",
+      action: "delete_issue",
+      username,
+      userId: (req as any).user?.id || null,
+      description: `Deleted issue ID ${id}`,
+      ipAddress: req.ip
+    });
+    res.json(result);
   } catch (error) {
     next(error);
   }
@@ -262,14 +311,24 @@ crRoutes.delete("/issues/:id", async (req, res, next) => {
 crRoutes.post("/sync/cr", async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
+    const systemCodes = normalizeSystemCodes(req.body?.systemCodes || req.body?.systemCode);
     const result = await runCrSync({
-      systemCodes: normalizeSystemCodes(req.body?.systemCodes || req.body?.systemCode),
+      systemCodes,
       rowCount: Number(req.body?.rowCount || 5000),
       syncMode: normalizeSyncMode(req.body?.syncMode),
       lookbackDays: normalizeLookbackDays(req.body?.lookbackDays),
       fromDate: req.body?.fromDate,
-      toDate: req.body?.toDate,
-      owner: req.body?.owner
+      toDate: req.body?.toDate
+    });
+    const username = (req as any).user?.username || "system";
+    await recordActivityLog({
+      activityType: "sync",
+      action: "sync_cr",
+      username,
+      userId: (req as any).user?.id || null,
+      description: `Executed SAP CR sync for systems [${systemCodes.join(", ")}] (Result: ${result.ok ? "Success" : "Failed"}, Requests: ${result.requestCount || 0})`,
+      metadata: { ok: result.ok, requestCount: result.requestCount, systems: systemCodes },
+      ipAddress: req.ip
     });
     res.json(result.ok ? result : { ...result, message: "Sync CR failed for all selected systems." });
   } catch (error) {

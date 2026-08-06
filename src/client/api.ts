@@ -435,4 +435,52 @@ export async function fetchCurrentUser() { return fetchJson<{ user: AuthUser }>(
 export async function logout() { return fetchJson<{ ok: boolean }>("/api/auth/logout", { method: "POST" }); }
 export async function changePassword(currentPassword: string, newPassword: string) { return fetchJson<{ ok: boolean }>("/api/auth/change-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currentPassword, newPassword }) }); }
 
+export type ActivityLogItem = {
+  id: number;
+  created_at: string;
+  activity_type: "sync" | "issue" | "project" | "master_data" | "setting" | "auth";
+  action: string;
+  username: string;
+  user_id?: number | null;
+  description: string;
+  metadata?: Record<string, unknown> | null;
+  ip_address?: string | null;
+};
+
+export type ActivityLogFilters = {
+  activityType?: string;
+  q?: string;
+  username?: string;
+  fromDate?: string;
+  toDate?: string;
+  page?: number;
+  pageSize?: number;
+};
+
+export type ActivityLogSummary = {
+  total: number;
+  sync_count: number;
+  issue_count: number;
+  project_count: number;
+  master_data_count: number;
+  setting_count: number;
+  auth_count: number;
+};
+
+export async function fetchAuditLogs(filters: ActivityLogFilters = {}): Promise<{
+  rows: ActivityLogItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  summary: ActivityLogSummary;
+}> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value) params.set(key, String(value));
+  }
+  const suffix = params.toString() ? `?${params}` : "";
+  return fetchJson(`/api/audit-logs${suffix}`);
+}
+
 export * from "./api/projectApi.js";

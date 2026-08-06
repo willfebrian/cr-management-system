@@ -543,11 +543,21 @@ CREATE TABLE IF NOT EXISTS app_user_sessions (
   revoked_at TIMESTAMPTZ, user_agent TEXT, ip_address TEXT
 );
 
-CREATE TABLE IF NOT EXISTS app_user_audit_logs (
-  id BIGSERIAL PRIMARY KEY, actor_user_id BIGINT REFERENCES app_users(id) ON DELETE SET NULL,
-  target_user_id BIGINT REFERENCES app_users(id) ON DELETE SET NULL, action TEXT NOT NULL,
-  metadata JSONB, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+CREATE TABLE IF NOT EXISTS activity_logs (
+  id BIGSERIAL PRIMARY KEY,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  activity_type VARCHAR(50) NOT NULL,
+  action VARCHAR(100) NOT NULL,
+  username TEXT NOT NULL,
+  user_id BIGINT REFERENCES app_users(id) ON DELETE SET NULL,
+  description TEXT NOT NULL,
+  metadata JSONB,
+  ip_address TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_type ON activity_logs(activity_type);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_username ON activity_logs(username);
 CREATE INDEX IF NOT EXISTS idx_app_sessions_token ON app_user_sessions(token_hash);
 CREATE INDEX IF NOT EXISTS idx_app_sessions_active ON app_user_sessions(user_id, revoked_at, expires_at);
 

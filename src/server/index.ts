@@ -11,6 +11,7 @@ import { projectRoutes } from "./routes/projectRoutes.js";
 import { adminRoutes } from "./routes/adminRoutes.js";
 import { outlookRoutes, outlookPublicRoutes } from "./routes/outlookRoutes.js";
 import { aiRoutes } from "./routes/aiRoutes.js";
+import { auditRoutes } from "./routes/auditRoutes.js";
 import { ProjectRepositoryError } from "./db/projectRepository.js";
 
 const app = express();
@@ -37,6 +38,7 @@ app.use("/api/admin", requireAuth, adminRoutes);
 app.use("/api/outlook", outlookPublicRoutes);
 app.use("/api/outlook", requireAuth, outlookRoutes);
 app.use("/api/ai", requireAuth, aiRoutes);
+app.use("/api", requireAuth, auditRoutes);
 app.use("/api", requireAuth, crRoutes);
 app.use(express.static(clientDist));
 

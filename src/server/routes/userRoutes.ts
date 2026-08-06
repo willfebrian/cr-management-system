@@ -17,6 +17,7 @@ import {
   updateManagedUserProfile
 } from "../users/userManagementService";
 import { UserManagementError } from "../users/userManagementDomain";
+import { recordActivityLog } from "../db/auditRepository.js";
 
 type UserManagementService = {
   listManagedUsers: typeof listManagedUsers;
@@ -142,6 +143,15 @@ export function createUserRoutes(service: UserManagementService = defaultService
       },
       actorFrom(req)
     );
+    const actor = actorFrom(req);
+    await recordActivityLog({
+      activityType: "master_data",
+      action: "create_user",
+      username: actor.username,
+      userId: actor.id,
+      description: `Created new user "${user.username}" (Role: ${user.role})`,
+      ipAddress: req.ip
+    });
     res.status(201).json({ user });
   }));
 
@@ -158,6 +168,15 @@ export function createUserRoutes(service: UserManagementService = defaultService
       },
       actorFrom(req)
     );
+    const actor = actorFrom(req);
+    await recordActivityLog({
+      activityType: "master_data",
+      action: "update_user_profile",
+      username: actor.username,
+      userId: actor.id,
+      description: `Updated profile for user "${user.username}"`,
+      ipAddress: req.ip
+    });
     res.json({ user });
   }));
 
@@ -170,6 +189,15 @@ export function createUserRoutes(service: UserManagementService = defaultService
       req.body.isActive,
       actorFrom(req)
     );
+    const actor = actorFrom(req);
+    await recordActivityLog({
+      activityType: "master_data",
+      action: "update_user_status",
+      username: actor.username,
+      userId: actor.id,
+      description: `Changed user "${user.username}" status to ${req.body.isActive ? "Active" : "Inactive"}`,
+      ipAddress: req.ip
+    });
     res.json({ user });
   }));
 
@@ -179,20 +207,48 @@ export function createUserRoutes(service: UserManagementService = defaultService
       String(req.body?.password ?? ""),
       actorFrom(req)
     );
+    const actor = actorFrom(req);
+    await recordActivityLog({
+      activityType: "master_data",
+      action: "reset_user_password",
+      username: actor.username,
+      userId: actor.id,
+      description: `Reset password for user ID ${req.params.id}`,
+      ipAddress: req.ip
+    });
     res.json({ ok: true });
   }));
 
   router.post("/:id/revoke-sessions", route(async (req, res) => {
     await service.revokeManagedUserSessions(parseUserId(req), actorFrom(req));
+    const actor = actorFrom(req);
+    await recordActivityLog({
+      activityType: "master_data",
+      action: "revoke_user_sessions",
+      username: actor.username,
+      userId: actor.id,
+      description: `Revoked all active sessions for user ID ${req.params.id}`,
+      ipAddress: req.ip
+    });
     res.json({ ok: true });
   }));
 
   router.delete("/:id", route(async (req, res) => {
+    const reason = String(req.body?.reason ?? "");
     await service.archiveManagedUser(
       parseUserId(req),
-      String(req.body?.reason ?? ""),
+      reason,
       actorFrom(req)
     );
+    const actor = actorFrom(req);
+    await recordActivityLog({
+      activityType: "master_data",
+      action: "delete_user",
+      username: actor.username,
+      userId: actor.id,
+      description: `Archived/Deleted user ID ${req.params.id}${reason ? ` (Reason: ${reason})` : ""}`,
+      ipAddress: req.ip
+    });
     res.json({ ok: true });
   }));
 
@@ -213,6 +269,15 @@ export function createUserRoutes(service: UserManagementService = defaultService
       },
       actorFrom(req)
     );
+    const actor = actorFrom(req);
+    await recordActivityLog({
+      activityType: "master_data",
+      action: "restore_user",
+      username: actor.username,
+      userId: actor.id,
+      description: `Restored archived user "${user.username}"`,
+      ipAddress: req.ip
+    });
     res.json({ user });
   }));
 

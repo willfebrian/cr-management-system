@@ -8,6 +8,7 @@ import {
   getProjectCrTransportReadiness,
   ProjectCrTransportReadinessError
 } from "../templates/projectCrTransportService.js";
+import { recordActivityLog } from "../db/auditRepository.js";
 
 type ProjectRepositoryContract = Pick<
   typeof projectRepository,
@@ -78,23 +79,65 @@ export function createProjectRoutes(dependencies: ProjectRouteDependencies) {
   }));
 
   routes.post("/", handle(async (req, res) => {
-    res.status(201).json(await repository.saveProject(req.body, req.authUser!));
+    const isNew = !req.body?.id;
+    const result = await repository.saveProject(req.body, req.authUser!);
+    const username = req.authUser?.username || "system";
+    await recordActivityLog({
+      activityType: "project",
+      action: isNew ? "create_project" : "update_project",
+      username,
+      userId: req.authUser?.id || null,
+      description: `${isNew ? "Created" : "Updated"} project "${result.project?.projectName || req.body?.projectName || ''}" (ID: ${result.project?.id})`,
+      ipAddress: req.ip
+    });
+    res.status(201).json(result);
   }));
 
   routes.put("/:id", handle(async (req, res) => {
-    res.json(await repository.saveProject({ ...req.body, id: Number(req.params.id) }, req.authUser!));
+    const result = await repository.saveProject({ ...req.body, id: Number(req.params.id) }, req.authUser!);
+    const username = req.authUser?.username || "system";
+    await recordActivityLog({
+      activityType: "project",
+      action: "update_project",
+      username,
+      userId: req.authUser?.id || null,
+      description: `Updated project "${result.project?.projectName || req.body?.projectName || ''}" (ID: ${req.params.id})`,
+      ipAddress: req.ip
+    });
+    res.json(result);
   }));
 
   routes.post("/:id/cancel", handle(async (req, res) => {
-    res.json(await repository.cancelProject(
+    const reason = String(req.body?.reason || "");
+    const result = await repository.cancelProject(
       Number(req.params.id),
-      String(req.body?.reason || ""),
+      reason,
       req.authUser!
-    ));
+    );
+    const username = req.authUser?.username || "system";
+    await recordActivityLog({
+      activityType: "project",
+      action: "cancel_project",
+      username,
+      userId: req.authUser?.id || null,
+      description: `Cancelled project ID ${req.params.id}${reason ? ` (Reason: ${reason})` : ""}`,
+      ipAddress: req.ip
+    });
+    res.json(result);
   }));
 
   routes.delete("/:id", dependencies.requireAdmin, handle(async (req, res) => {
-    res.json(await repository.deleteProject(Number(req.params.id), req.authUser!));
+    const result = await repository.deleteProject(Number(req.params.id), req.authUser!);
+    const username = req.authUser?.username || "system";
+    await recordActivityLog({
+      activityType: "project",
+      action: "delete_project",
+      username,
+      userId: req.authUser?.id || null,
+      description: `Deleted project ID ${req.params.id}`,
+      ipAddress: req.ip
+    });
+    res.json(result);
   }));
 
   return routes;

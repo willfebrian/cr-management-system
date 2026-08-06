@@ -1,7 +1,7 @@
 import { applyCustomStatusColors } from "../utils/tagColors";
 import { applyCustomFontSize } from "../utils/fontSize";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
-import { AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Ban, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Database, FileOutput, FileSearch, FolderKanban, KeyRound, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, Sliders, Sparkles, Sun, Trash2, Users, X, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Ban, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Database, FileOutput, FileSearch, FolderKanban, KeyRound, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Trash2, Users, X, XCircle } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchAdminSettings, fetchCrDetail, fetchCrList, fetchDashboard, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind } from "../api";
 import { IncompleteGroupCards } from "../components/IncompleteGroupCards";
@@ -12,6 +12,7 @@ import { ProjectEditor } from "../components/projects/ProjectEditor";
 import { ProjectReport } from "../components/projects/ProjectReport";
 import { UserManagementWorkspace } from "../components/users/UserManagementWorkspace";
 import { MasterDataWorkspace } from "./MasterDataWorkspace";
+import { AuditLogReport } from "./AuditLogReport";
 import { UIModal, type ModalType } from "../components/common/UIModal";
 import { fetchProjectDetail } from "../api/projectApi";
 import { afterIncompleteSectionRender, expandSection, getIncompleteItems, groupIncompleteItems, markIncompleteTarget, type ExpandedIssueSections, type IncompleteItem, type IssueSection } from "../issueIncomplete";
@@ -19,7 +20,7 @@ import { nextExpandedSidebarGroup, type SidebarGroup } from "../navigation";
 import type { CrDetail, CrRequest, DashboardData, IssueDetail, IssueRow, SapSystemConfig, StatusTrendData } from "../../shared/types";
 import type { ProjectDetail as ProjectDetailModel } from "../../shared/projectTypes";
 
-type View = "dashboard" | "report" | "issue-display" | "issue-create" | "issue-change" | "user-management" | "project-report" | "project-create" | "project-change" | "master-data" | "settings";
+type View = "dashboard" | "report" | "issue-display" | "issue-create" | "issue-change" | "user-management" | "project-report" | "project-create" | "project-change" | "master-data" | "settings" | "audit-log";
 const VIEW_META: Record<View, { title: string; description: string }> = {
   dashboard: { title: "Dashboard", description: "Monitor CR and Issue activity across connected source systems." },
   report: { title: "CR Transport", description: "Review SAP change requests ordered from the latest CR number." },
@@ -32,6 +33,7 @@ const VIEW_META: Record<View, { title: string; description: string }> = {
   "project-change": { title: "Change Project", description: "Maintain project ownership, scope, and linked Issues." },
   "master-data": { title: "Master Data Workspace", description: "Manage people roles, emails, and group notifications." },
   settings: { title: "System & Appearance Settings", description: "Configure AI instructions, Exchange Mail, Appearance Settings, Font Size, and Status Tag Colors." },
+  "audit-log": { title: "Audit Log & Activity Report", description: "Audit trail report recording system and user activities." },
 };
 const SYNC_RESULT_VISIBLE_MS = 6000;
 const DASHBOARD_DB_REFRESH_MS = 60000;
@@ -636,6 +638,11 @@ export function App() {
             <Sliders size={18} /> Settings
           </button>
         </div>
+        <div className={`sidebar-group ${view === "audit-log" ? "active" : ""}`}>
+          <button className={view === "audit-log" ? "active" : ""} onClick={() => navigateTo("audit-log")}>
+            <ShieldCheck size={18} /> Audit Log
+          </button>
+        </div>
         {USER_MANAGEMENT_ENABLED && authUser.role === "ADMIN" ? (
           <button className={view === "user-management" ? "active" : ""} onClick={() => navigateTo("user-management")}>
             <Users size={18} /> User Management
@@ -738,6 +745,8 @@ export function App() {
           <MasterDataWorkspace mode="master-data" isAdmin={authUser.role === "ADMIN"} username={authUser.username} />
         ) : view === "settings" ? (
           <MasterDataWorkspace mode="settings" isAdmin={authUser.role === "ADMIN"} username={authUser.username} />
+        ) : view === "audit-log" ? (
+          <AuditLogReport />
         ) : view === "dashboard" ? (
           <Dashboard
             dashboard={dashboard}
