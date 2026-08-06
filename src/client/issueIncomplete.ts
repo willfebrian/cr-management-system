@@ -154,3 +154,22 @@ export function afterIncompleteSectionRender(
     cancelled = true;
   };
 }
+
+export function getIssueRowMissingItems(issue: {
+  requester_name_snapshot?: string;
+  abaper_name_snapshot?: string;
+  primary_glpi_ticket?: number;
+  primary_cr?: string;
+  missing_data_count?: number;
+}): string[] {
+  const missing: string[] = [];
+  if (!issue.requester_name_snapshot?.trim()) missing.push("Requester name missing");
+  if (!issue.abaper_name_snapshot?.trim()) missing.push("ABAPer assigned missing");
+  if (!issue.primary_glpi_ticket) missing.push("GLPI Ticket missing");
+  if (!issue.primary_cr?.trim()) missing.push("CR SAP Transport missing");
+
+  if (missing.length === 0 && (issue.missing_data_count || 0) > 0) {
+    missing.push(`${issue.missing_data_count} incomplete detail items`);
+  }
+  return missing;
+}

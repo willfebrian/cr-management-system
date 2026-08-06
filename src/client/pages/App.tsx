@@ -8,6 +8,7 @@ import { IncompleteGroupCards } from "../components/IncompleteGroupCards";
 import { DisplayNameList } from "../components/DisplayNameList";
 import { DEFAULT_ISSUE_COLUMNS, IssueColumnMenu, type IssueColumnKey } from "../components/IssueColumnMenu";
 import { SummaryStrip } from "../components/SummaryStrip";
+import { PaginationControls } from "../components/PaginationControls";
 import { ProjectEditor } from "../components/projects/ProjectEditor";
 import { ProjectReport } from "../components/projects/ProjectReport";
 import { UserManagementWorkspace } from "../components/users/UserManagementWorkspace";
@@ -15,7 +16,7 @@ import { MasterDataWorkspace } from "./MasterDataWorkspace";
 import { AuditLogReport } from "./AuditLogReport";
 import { UIModal, type ModalType } from "../components/common/UIModal";
 import { fetchProjectDetail } from "../api/projectApi";
-import { afterIncompleteSectionRender, expandSection, getIncompleteItems, groupIncompleteItems, markIncompleteTarget, type ExpandedIssueSections, type IncompleteItem, type IssueSection } from "../issueIncomplete";
+import { afterIncompleteSectionRender, expandSection, getIncompleteItems, getIssueRowMissingItems, groupIncompleteItems, markIncompleteTarget, type ExpandedIssueSections, type IncompleteItem, type IssueSection } from "../issueIncomplete";
 import { nextExpandedSidebarGroup, type SidebarGroup } from "../navigation";
 import type { CrDetail, CrRequest, DashboardData, IssueDetail, IssueRow, SapSystemConfig, StatusTrendData } from "../../shared/types";
 import { AppLoadingScreen, SkeletonDetailLoader } from "../components/InteractiveLoaders";
@@ -3657,16 +3658,18 @@ function ResizableHeader<T extends string>({
   label,
   column,
   width,
+  align = "left",
   onResize
 }: {
   label: string;
   column: T;
   width: number;
+  align?: "left" | "center" | "right";
   onResize: (column: T, event: ReactMouseEvent) => void;
 }) {
   return (
-    <th className="resizable-header" style={{ width }}>
-      <span>{label}</span>
+    <th className="resizable-header" style={{ width, textAlign: align }}>
+      <span style={{ display: "block", textAlign: align, width: "100%" }}>{label}</span>
       <button
         className="column-resize-handle"
         type="button"
@@ -3760,16 +3763,11 @@ function Report({
             </table>
             {requests.length === 0 ? <div className="table-empty">No parent CR found for the current filter.</div> : null}
           </div>
-          <div className="pagination">
-            <span>{pageText(pagination)}</span>
-            <select value={pagination.pageSize} onChange={(event) => onPageSize(Number(event.target.value))}>
-              {[10, 25, 50, 100].map((size) => <option value={size} key={size}>{size} / page</option>)}
-            </select>
-            <button className="secondary" onClick={() => onPage(1)} disabled={pagination.page <= 1}><ArrowLeft size={14} /> First</button>
-            <button className="secondary" onClick={() => onPage(pagination.page - 1)} disabled={pagination.page <= 1}><ArrowLeft size={14} /> Prev</button>
-            <button className="secondary" onClick={() => onPage(pagination.page + 1)} disabled={pagination.page >= pagination.totalPages}><ArrowRight size={14} /> Next</button>
-            <button className="secondary" onClick={() => onPage(pagination.totalPages)} disabled={pagination.page >= pagination.totalPages}><ArrowRight size={14} /> Last</button>
-          </div>
+          <PaginationControls
+            pagination={pagination}
+            onPage={onPage}
+            onPageSize={onPageSize}
+          />
         </section>
       </div>
 
@@ -4018,6 +4016,22 @@ function IssueDisplay({
   visibleIssueColumns?: IssueColumnKey[];
 }) {
   const [detailMenuOpen, setDetailMenuOpen] = useState(false);
+  const [rowMenuOpenId, setRowMenuOpenId] = useState<number | null>(null);
+  const [rowMenuPos, setRowMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const [hoveredCompletionId, setHoveredCompletionId] = useState<number | null>(null);
+  const [hoveredCompletionPos, setHoveredCompletionPos] = useState<{ top: number; right: number } | null>(null);
+
+  useEffect(() => {
+    function handleOutsideClick() {
+      if (rowMenuOpenId !== null) {
+        setRowMenuOpenId(null);
+        setRowMenuPos(null);
+      }
+    }
+    window.addEventListener("click", handleOutsideClick);
+    return () => window.removeEventListener("click", handleOutsideClick);
+  }, [rowMenuOpenId]);
+
   const selectedIssue = issues.find((issue) => issue.id === selectedId) || detail?.issue || null;
   const hasDetail = Boolean(selectedId && selectedIssue);
   const canGenerateCrForm = Boolean(detail?.crLinks?.length);
@@ -4026,24 +4040,26 @@ function IssueDisplay({
     ?? selectedIssue?.primary_glpi_ticket;
   const detailIncompleteItems = detail?.issue?.issue_status !== "cancelled" && detail ? getIncompleteItems(detail) : [];
   const detailIncompleteGroups = groupIncompleteItems(detailIncompleteItems);
-  const issueColumns = useResizableColumns("issue-report-columns", {
-    issue: 112,
-    name: 280,
-    abaper: 160,
-    glpi: 110,
-    crHelpdesk: 140,
-    cr: 132,
-    status: 120,
-    completeness: 48
-  }, {
-    issue: 100,
-    name: 220,
-    abaper: 130,
-    glpi: 90,
-    crHelpdesk: 115,
-    cr: 115,
+  const issueColumns = useResizableColumns("issue-report-columns-v4", {
+    issue: 95,
+    name: 340,
+    abaper: 190,
+    glpi: 100,
+    crHelpdesk: 130,
+    cr: 100,
     status: 115,
-    completeness: 44
+    completeness: 110,
+    actions: 90
+  }, {
+    issue: 85,
+    name: 240,
+    abaper: 140,
+    glpi: 85,
+    crHelpdesk: 110,
+    cr: 90,
+    status: 100,
+    completeness: 85,
+    actions: 80
   });
   const issueTableWidth = visibleIssueColumns.reduce((total, column) => total + issueColumns.widths[column], 0);
 
@@ -4066,6 +4082,7 @@ function IssueDisplay({
                 <col style={{ width: issueColumns.widths.cr }} />
                 <col style={{ width: issueColumns.widths.status }} />
                 <col style={{ width: issueColumns.widths.completeness }} />
+                {hasIssueColumn("actions") ? <col style={{ width: issueColumns.widths.actions }} /> : null}
               </colgroup>
               <thead>
                 <tr>
@@ -4075,43 +4092,244 @@ function IssueDisplay({
                   {hasIssueColumn("glpi") ? <ResizableHeader label="GLPI" column="glpi" width={issueColumns.widths.glpi} onResize={issueColumns.startResize} /> : null}
                   {hasIssueColumn("crHelpdesk") ? <ResizableHeader label="CR Helpdesk" column="crHelpdesk" width={issueColumns.widths.crHelpdesk} onResize={issueColumns.startResize} /> : null}
                   <ResizableHeader label="CR" column="cr" width={issueColumns.widths.cr} onResize={issueColumns.startResize} />
-                  <ResizableHeader label="Status" column="status" width={issueColumns.widths.status} onResize={issueColumns.startResize} />
-                  <ResizableHeader label="" column="completeness" width={issueColumns.widths.completeness} onResize={issueColumns.startResize} />
+                  <ResizableHeader label="Status" column="status" align="center" width={issueColumns.widths.status} onResize={issueColumns.startResize} />
+                  <ResizableHeader label="Completion" column="completeness" align="center" width={issueColumns.widths.completeness} onResize={issueColumns.startResize} />
+                  {hasIssueColumn("actions") ? <ResizableHeader label="Actions" column="actions" align="center" width={issueColumns.widths.actions} onResize={issueColumns.startResize} /> : null}
                 </tr>
               </thead>
               <tbody>
-                {issues.map((issue) => (
-                  <tr key={issue.id} className={selectedId === issue.id ? "selected" : ""} onClick={() => onSelect(issue.id)}>
-                    <td>{issue.issue_key}</td>
-                    <td>{issue.issue_name}</td>
-                    <td>{issue.abaper_name_snapshot || "-"}</td>
-                    {hasIssueColumn("glpi") ? <td>{formatGlpi(issue.primary_glpi_ticket)}</td> : null}
-                    {hasIssueColumn("crHelpdesk") ? <td>{issue.primary_cr_helpdesk_no || "-"}</td> : null}
-                    <td>{issue.primary_cr || "-"}</td>
-                    <td><Status value={issue.issue_status} /></td>
-                    <td className="completeness-cell">{issue.issue_status === "cancelled" ? (
-                      <span aria-label="Not applicable">-</span>
-                    ) : (issue.missing_data_count || 0) === 0 ? (
-                      <CheckCircle2 size={18} className="complete-icon" aria-label="Complete" />
-                    ) : (
-                      <AlertTriangle size={18} className="warning-icon" aria-label={`${issue.missing_data_count} missing item(s)`} />
-                    )}</td>
-                  </tr>
-                ))}
+                {issues.map((issue) => {
+                  const isMenuOpen = rowMenuOpenId === issue.id;
+                  const rowMissingItems = getIssueRowMissingItems(issue);
+
+                  return (
+                    <tr
+                      key={issue.id}
+                      className={selectedId === issue.id ? "selected" : ""}
+                      onClick={() => onSelect(issue.id)}
+                    >
+                      <td>{issue.issue_key}</td>
+                      <td>{issue.issue_name}</td>
+                      <td>{issue.abaper_name_snapshot || "-"}</td>
+                      {hasIssueColumn("glpi") ? <td>{formatGlpi(issue.primary_glpi_ticket)}</td> : null}
+                      {hasIssueColumn("crHelpdesk") ? <td>{issue.primary_cr_helpdesk_no || "-"}</td> : null}
+                      <td>{issue.primary_cr || "-"}</td>
+                      <td style={{ textAlign: "center" }}><Status value={issue.issue_status} /></td>
+                      <td className="completeness-cell" style={{ textAlign: "center" }}>
+                        {issue.issue_status === "cancelled" ? (
+                          <span aria-label="Not applicable">-</span>
+                        ) : (
+                          <div
+                            className="completion-tooltip-target"
+                            onMouseEnter={(e) => {
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              setHoveredCompletionId(issue.id);
+                              setHoveredCompletionPos({
+                                top: rect.top + rect.height / 2,
+                                right: window.innerWidth - rect.left + 10
+                              });
+                            }}
+                            onMouseLeave={() => {
+                              setHoveredCompletionId(null);
+                              setHoveredCompletionPos(null);
+                            }}
+                            style={{ display: "inline-flex", cursor: "pointer" }}
+                          >
+                            {(issue.missing_data_count || 0) === 0 ? (
+                              <CheckCircle2 size={18} className="complete-icon" aria-label="Complete" />
+                            ) : (
+                              <AlertTriangle size={18} className="warning-icon" aria-label={`${issue.missing_data_count} missing item(s)`} />
+                            )}
+
+                            {hoveredCompletionId === issue.id && hoveredCompletionPos && (
+                              <div
+                                style={{
+                                  position: "fixed",
+                                  top: hoveredCompletionPos.top,
+                                  right: hoveredCompletionPos.right,
+                                  transform: "translateY(-50%)",
+                                  zIndex: 999999,
+                                  minWidth: "220px",
+                                  maxWidth: "280px",
+                                  padding: "10px 14px",
+                                  borderRadius: "10px",
+                                  background: "#ffffff",
+                                  border: "1px solid var(--color-border, #cbd5e1)",
+                                  boxShadow: "0 12px 28px -6px rgba(15, 23, 42, 0.25)",
+                                  fontSize: "0.8rem",
+                                  textAlign: "left",
+                                  pointerEvents: "none",
+                                  lineHeight: 1.4,
+                                  color: "#1e293b"
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    position: "absolute",
+                                    left: "100%",
+                                    top: "50%",
+                                    transform: "translateY(-50%)",
+                                    borderWidth: "6px",
+                                    borderStyle: "solid",
+                                    borderColor: "transparent transparent transparent #ffffff"
+                                  }}
+                                />
+                                {(issue.missing_data_count || 0) === 0 ? (
+                                  <div style={{ color: "#15803d", fontWeight: "600", display: "flex", alignItems: "center", gap: "6px" }}>
+                                    <CheckCircle2 size={14} /> All required fields complete
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <div style={{ fontWeight: "700", color: "#b45309", marginBottom: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
+                                      <AlertTriangle size={14} /> Incomplete Items ({issue.missing_data_count}):
+                                    </div>
+                                    <ul style={{ margin: 0, paddingLeft: "16px", display: "flex", flexDirection: "column", gap: "3px", color: "#334155" }}>
+                                      {rowMissingItems.map((itemText, i) => (
+                                        <li key={i}>{itemText}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      {hasIssueColumn("actions") ? (
+                        <td onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap", textAlign: "center" }}>
+                          <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                            <button
+                              type="button"
+                              onClick={() => onChangeIssue(issue.id)}
+                              title="Edit Issue"
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                width: "30px",
+                                height: "30px",
+                                borderRadius: "8px",
+                                border: "1px solid var(--color-border, #cbd5e1)",
+                                background: "#ffffff",
+                                color: "#0f766e",
+                                cursor: "pointer",
+                                transition: "all 0.15s ease",
+                                boxShadow: "0 1px 2px rgba(0,0,0,0.04)"
+                              }}
+                            >
+                              <PencilLine size={15} />
+                            </button>
+
+                            <div style={{ position: "relative" }}>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (isMenuOpen) {
+                                    setRowMenuOpenId(null);
+                                    setRowMenuPos(null);
+                                  } else {
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    setRowMenuOpenId(issue.id);
+                                    setRowMenuPos({
+                                      top: rect.bottom + 4,
+                                      right: window.innerWidth - rect.right
+                                    });
+                                  }
+                                }}
+                                title="More Actions"
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  width: "30px",
+                                  height: "30px",
+                                  borderRadius: "8px",
+                                  border: "none",
+                                  background: "#0f766e",
+                                  color: "#ffffff",
+                                  cursor: "pointer",
+                                  transition: "all 0.15s ease",
+                                  boxShadow: "0 1px 3px rgba(15,118,110,0.2)"
+                                }}
+                              >
+                                <MoreVertical size={16} />
+                              </button>
+
+                              {isMenuOpen && rowMenuPos && (
+                                <div
+                                  className="detail-action-menu-list"
+                                  style={{
+                                    position: "fixed",
+                                    top: rowMenuPos.top,
+                                    right: rowMenuPos.right,
+                                    zIndex: 999999,
+                                    textAlign: "left",
+                                    boxShadow: "0 12px 28px -6px rgba(15, 23, 42, 0.25)",
+                                    border: "1px solid var(--color-border, #cbd5e1)",
+                                    background: "var(--color-bg-elevated, #ffffff)"
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setRowMenuOpenId(null);
+                                      setRowMenuPos(null);
+                                      onChangeIssue(issue.id);
+                                    }}
+                                  >
+                                    <PencilLine size={14} /> Change Issue
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setRowMenuOpenId(null);
+                                      setRowMenuPos(null);
+                                      onGenerateCrForm(issue.id);
+                                    }}
+                                  >
+                                    <FileSearch size={14} /> Generate CR Form
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={issue.issue_status === "cancelled"}
+                                    onClick={() => {
+                                      setRowMenuOpenId(null);
+                                      setRowMenuPos(null);
+                                      onIssueAction(issue.id, "cancel");
+                                    }}
+                                  >
+                                    <XCircle size={14} /> Cancel Issue
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="danger-menu-item"
+                                    onClick={() => {
+                                      setRowMenuOpenId(null);
+                                      setRowMenuPos(null);
+                                      onIssueAction(issue.id, "delete");
+                                    }}
+                                  >
+                                    <X size={14} /> Delete Issue
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      ) : null}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
             {issues.length === 0 ? <div className="table-empty">No issue found for the current filter.</div> : null}
           </div>
-          <div className="pagination">
-            <span>{pageText(pagination)}</span>
-            <select value={pagination.pageSize} onChange={(event) => onPageSize(Number(event.target.value))}>
-              {[10, 25, 50, 100].map((size) => <option value={size} key={size}>{size} / page</option>)}
-            </select>
-            <button className="secondary" onClick={() => onPage(1)} disabled={pagination.page <= 1}><ArrowLeft size={14} /> First</button>
-            <button className="secondary" onClick={() => onPage(pagination.page - 1)} disabled={pagination.page <= 1}><ArrowLeft size={14} /> Prev</button>
-            <button className="secondary" onClick={() => onPage(pagination.page + 1)} disabled={pagination.page >= pagination.totalPages}><ArrowRight size={14} /> Next</button>
-            <button className="secondary" onClick={() => onPage(pagination.totalPages)} disabled={pagination.page >= pagination.totalPages}><ArrowRight size={14} /> Last</button>
-          </div>
+          <PaginationControls
+            pagination={pagination}
+            onPage={onPage}
+            onPageSize={onPageSize}
+          />
         </section>
       </div>
 

@@ -931,10 +931,10 @@ body.dark-theme .popup-table-row:hover {
 }
 
 .cr-data-workspace {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  height: calc(100vh - 165px);
-  min-height: 480px;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 120px);
+  min-height: 520px;
   overflow: hidden;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
@@ -949,15 +949,20 @@ body.dark-theme .popup-table-row:hover {
 
 .cr-data-workspace .report-layout {
   gap: 0;
-  height: 100%;
+  flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .cr-data-workspace .table-panel,
 .cr-data-workspace .detail-panel {
   border: 0;
   border-radius: 0;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .cr-data-workspace .report-detail-panel {
@@ -969,10 +974,10 @@ body.dark-theme .popup-table-row:hover {
 }
 
 .issue-report-workspace {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  height: calc(100vh - 165px);
-  min-height: 480px;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 120px);
+  min-height: 520px;
   overflow: hidden;
 }
 
@@ -4114,8 +4119,8 @@ table th {
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 12px 18px;
+  letter-spacing: 0.04em;
+  padding: 10px 16px;
   border-bottom: 2px solid #e2e8f0;
   text-align: left;
   white-space: nowrap;
@@ -4144,10 +4149,10 @@ table tbody tr.selected {
 .record-table td,
 .cr-record-table td,
 table td {
-  padding: 14px 18px;
+  padding: 10px 16px;
   border-bottom: 1px solid #f1f5f9;
   color: #334155;
-  font-size: 14px;
+  font-size: 13.5px;
   vertical-align: middle;
 }
 
@@ -4158,6 +4163,46 @@ table td {
   font-weight: 600;
   color: #0f172a;
   letter-spacing: -0.01em;
+}
+
+/* Completion Column Hover Tooltip (Opens to the left so it never clips with header or footer) */
+.completion-tooltip-target {
+  position: relative;
+}
+
+.completion-tooltip-popover {
+  display: none;
+  position: absolute;
+  right: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 99999;
+  min-width: 220px;
+  max-width: 280px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid var(--color-border, #cbd5e1);
+  box-shadow: 0 10px 25px -4px rgba(15, 23, 42, 0.2);
+  font-size: 0.8rem;
+  text-align: left;
+  pointer-events: none;
+  line-height: 1.4;
+}
+
+.completion-tooltip-popover::after {
+  content: "";
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border-width: 6px;
+  border-style: solid;
+  border-color: transparent transparent transparent #ffffff;
+}
+
+.completion-tooltip-target:hover .completion-tooltip-popover {
+  display: block;
 }
 
 /* Pagination Footer Bar */

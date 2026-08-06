@@ -6,7 +6,8 @@ export const DEFAULT_ISSUE_COLUMNS = [
   "abaper",
   "cr",
   "status",
-  "completeness"
+  "completeness",
+  "actions"
 ] as const;
 
 export type IssueColumnKey =
