@@ -68,12 +68,20 @@ export async function listIssues(filters: IssueFilters = {}) {
     where.push(`h.create_issue_date <= $${params.length}::date`);
   }
   if (filters.requester) {
-    params.push(`%${filters.requester.toUpperCase()}%`);
-    where.push(`upper(coalesce(h.requester_name_snapshot, '')) LIKE $${params.length}`);
+    if (filters.requester === "Unknown" || filters.requester === "unknown") {
+      where.push(`((h.requester_name_snapshot IS NULL OR TRIM(h.requester_name_snapshot) = '') AND NOT EXISTS (SELECT 1 FROM issue_participants p WHERE p.issue_id = h.id AND p.role = 'requester' AND TRIM(COALESCE(p.person_name_snapshot, '')) <> ''))`);
+    } else {
+      params.push(filters.requester.toUpperCase());
+      where.push(`(upper(coalesce(h.requester_name_snapshot, '')) = $${params.length} OR upper(coalesce(h.requester_name_snapshot, '')) LIKE '%' || $${params.length} || '%' OR EXISTS (SELECT 1 FROM issue_participants p LEFT JOIN issue_people people ON people.id = p.person_id WHERE p.issue_id = h.id AND p.role = 'requester' AND (upper(coalesce(people.nickname, '')) = $${params.length} OR upper(coalesce(people.full_name, '')) = $${params.length} OR upper(coalesce(p.person_name_snapshot, '')) = $${params.length} OR upper(coalesce(people.full_name, '')) LIKE '%' || $${params.length} || '%')))`);
+    }
   }
   if (filters.abaper) {
-    params.push(`%${filters.abaper.toUpperCase()}%`);
-    where.push(`upper(coalesce(h.abaper_name_snapshot, '')) LIKE $${params.length}`);
+    if (filters.abaper === "Unassigned" || filters.abaper === "unassigned") {
+      where.push(`((h.abaper_name_snapshot IS NULL OR TRIM(h.abaper_name_snapshot) = '') AND NOT EXISTS (SELECT 1 FROM issue_participants p WHERE p.issue_id = h.id AND p.role = 'abaper' AND TRIM(COALESCE(p.person_name_snapshot, '')) <> ''))`);
+    } else {
+      params.push(filters.abaper.toUpperCase());
+      where.push(`(upper(coalesce(h.abaper_name_snapshot, '')) = $${params.length} OR upper(coalesce(h.abaper_name_snapshot, '')) LIKE '%' || $${params.length} || '%' OR EXISTS (SELECT 1 FROM issue_participants p LEFT JOIN issue_people people ON people.id = p.person_id WHERE p.issue_id = h.id AND p.role = 'abaper' AND (upper(coalesce(people.nickname, '')) = $${params.length} OR upper(coalesce(people.full_name, '')) = $${params.length} OR upper(coalesce(p.person_name_snapshot, '')) = $${params.length} OR upper(coalesce(people.full_name, '')) LIKE '%' || $${params.length} || '%')))`);
+    }
   }
   if (filters.cr) {
     params.push(`%${filters.cr.toUpperCase()}%`);
@@ -143,8 +151,8 @@ export async function listIssues(filters: IssueFilters = {}) {
       h.create_issue_date::text AS create_issue_date,
       CASE
         WHEN lower(coalesce(h.issue_status, '')) = 'cancelled' THEN 'cancelled'
+        WHEN primary_cr.lifecycle_status = 'in_prd' OR lower(coalesce(h.issue_status, '')) = 'ok' THEN 'ok'
         WHEN primary_cr.trkorr IS NULL THEN 'open'
-        WHEN primary_cr.lifecycle_status = 'in_prd' THEN 'ok'
         ELSE 'in_progress'
       END AS issue_status,
       h.issue_status AS source_issue_status,
@@ -251,8 +259,12 @@ export async function listIssues(filters: IssueFilters = {}) {
   const filteredParams = [...params];
 
   if (statusFilter) {
-    filteredParams.push(statusFilter);
-    outerWhere.push(`issue_status = $${filteredParams.length}`);
+    if (statusFilter === "active") {
+      outerWhere.push(`issue_status IN ('open', 'in_progress')`);
+    } else {
+      filteredParams.push(statusFilter);
+      outerWhere.push(`issue_status = $${filteredParams.length}`);
+    }
   }
 
   if (filters.completionStatus) {
@@ -545,14 +557,16 @@ export async function getLeaderDashboardInsights() {
     pool.query(`
       WITH active_issues AS (
         SELECT 
-          COALESCE(NULLIF(TRIM(h.abaper_name_snapshot), ''), 'Unassigned') AS name,
+          COALESCE(people.full_name, people.nickname, p.person_name_snapshot, NULLIF(TRIM(h.abaper_name_snapshot), ''), 'Unassigned') AS name,
           CASE
             WHEN LOWER(COALESCE(h.issue_status, '')) = 'cancelled' THEN 'cancelled'
             WHEN primary_cr.trkorr IS NULL THEN 'open'
-            WHEN primary_cr.lifecycle_status = 'in_prd' THEN 'ok'
+            WHEN primary_cr.lifecycle_status = 'in_prd' OR LOWER(COALESCE(h.issue_status, '')) = 'ok' THEN 'ok'
             ELSE 'in_progress'
           END AS calc_status
         FROM issue_headers h
+        LEFT JOIN issue_participants p ON p.issue_id = h.id AND p.role = 'abaper'
+        LEFT JOIN issue_people people ON people.id = p.person_id
         LEFT JOIN LATERAL (
           SELECT link.trkorr, cr.lifecycle_status
           FROM issue_cr_links link
@@ -602,21 +616,16 @@ export async function getLeaderDashboardInsights() {
     pool.query(`
       WITH requester_issues AS (
         SELECT 
-          COALESCE(req_p.name, NULLIF(TRIM(h.requester_name_snapshot), ''), 'Unknown') AS name,
+          COALESCE(people.full_name, people.nickname, p.person_name_snapshot, NULLIF(TRIM(h.requester_name_snapshot), ''), 'Unknown') AS name,
           CASE
             WHEN LOWER(COALESCE(h.issue_status, '')) = 'cancelled' THEN 'cancelled'
             WHEN primary_cr.lifecycle_status = 'in_prd' OR LOWER(COALESCE(h.issue_status, '')) = 'ok' THEN 'done'
-            ELSE 'open'
+            WHEN primary_cr.trkorr IS NULL THEN 'open'
+            ELSE 'in_progress'
           END AS calc_status
         FROM issue_headers h
-        LEFT JOIN LATERAL (
-          SELECT COALESCE(people.nickname, people.full_name, p.person_name_snapshot) AS name
-          FROM issue_participants p
-          LEFT JOIN issue_people people ON people.id = p.person_id
-          WHERE p.issue_id = h.id AND p.role = 'requester'
-          ORDER BY p.is_primary DESC, p.id
-          LIMIT 1
-        ) req_p ON true
+        LEFT JOIN issue_participants p ON p.issue_id = h.id AND p.role = 'requester'
+        LEFT JOIN issue_people people ON people.id = p.person_id
         LEFT JOIN LATERAL (
           SELECT link.trkorr, cr.lifecycle_status
           FROM issue_cr_links link
@@ -641,7 +650,7 @@ export async function getLeaderDashboardInsights() {
       )
       SELECT
         name,
-        COUNT(*) FILTER (WHERE calc_status = 'open')::int AS open_count,
+        COUNT(*) FILTER (WHERE calc_status IN ('open', 'in_progress'))::int AS open_count,
         COUNT(*) FILTER (WHERE calc_status = 'done')::int AS done_count,
         COUNT(*)::int AS total_count,
         COUNT(*)::int AS count

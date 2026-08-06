@@ -1296,8 +1296,34 @@ function Dashboard({
                   <YAxis dataKey="name" type="category" width={150} tick={{ fontSize: 12, fill: "var(--color-text)" }} />
                   <Tooltip />
                   <Legend />
-                  <Bar dataKey="open" stackId="a" fill="#93c5fd" name="Open" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="in_progress" stackId="a" fill="#2563eb" name="In Progress" radius={[0, 4, 4, 0]} />
+                  <Bar
+                    dataKey="open"
+                    stackId="a"
+                    fill="#93c5fd"
+                    name="Open"
+                    radius={[0, 0, 0, 0]}
+                    style={{ cursor: "pointer" }}
+                    onClick={(data) => {
+                      if (data?.payload?.name) {
+                        const name = data.payload.name;
+                        onMetricClick?.(`Open Issues for ABAPer: ${name}`, "issue", { abaper: name, status: "open" });
+                      }
+                    }}
+                  />
+                  <Bar
+                    dataKey="in_progress"
+                    stackId="a"
+                    fill="#2563eb"
+                    name="In Progress"
+                    radius={[0, 4, 4, 0]}
+                    style={{ cursor: "pointer" }}
+                    onClick={(data) => {
+                      if (data?.payload?.name) {
+                        const name = data.payload.name;
+                        onMetricClick?.(`In Progress Issues for ABAPer: ${name}`, "issue", { abaper: name, status: "in_progress" });
+                      }
+                    }}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -1311,7 +1337,7 @@ function Dashboard({
           <div className="panel-heading" style={{ marginBottom: "1rem", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
             <div>
               <h2>Top Requesters / Functional Leads</h2>
-              <p>Highest volume issue submission by requester</p>
+              <p>Highest volume issue submission by requester (Click to view issues)</p>
             </div>
             <div style={{ display: "flex", background: "var(--color-bg-subtle, #f1f5f9)", padding: "3px", borderRadius: "8px", fontSize: "0.75rem", border: "1px solid var(--color-border, #e2e8f0)" }}>
               <button
@@ -1381,7 +1407,29 @@ function Dashboard({
                   : { bg: "#f8fafc", color: "#64748b", border: "#e2e8f0" };
 
                 return (
-                  <div key={req.name} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <div
+                    key={req.name}
+                    onClick={() => {
+                      onMetricClick?.(
+                        `Issues by Requester: ${req.name} (${requesterFilter.toUpperCase()})`,
+                        "issue",
+                        {
+                          requester: req.name,
+                          status: requesterFilter === "done" ? "ok" : requesterFilter === "open" ? "active" : "all"
+                        }
+                      );
+                    }}
+                    title="Click to view detailed issues"
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "6px",
+                      cursor: "pointer",
+                      padding: "4px 6px",
+                      borderRadius: "6px",
+                      transition: "background 0.15s ease"
+                    }}
+                  >
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.875rem" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                         <span style={{ fontSize: "0.7rem", fontWeight: "700", padding: "2px 7px", borderRadius: "10px", background: rankBadgeStyle.bg, color: rankBadgeStyle.color, border: `1px solid ${rankBadgeStyle.border}` }}>
@@ -1390,7 +1438,7 @@ function Dashboard({
                         <span style={{ fontWeight: "600", color: "var(--color-text-heading)" }}>{req.name}</span>
                       </div>
                       <span style={{ fontWeight: "700", color: "#0284c7", fontSize: "0.85rem", background: "#f0f9ff", padding: "2px 10px", borderRadius: "12px", border: "1px solid #bae6fd" }}>
-                        {req.count} {req.count === 1 ? "Issue" : "Issues"}
+                        {req.count} {req.count === 1 ? "Issue" : "Issues"} &rarr;
                       </span>
                     </div>
                     <div style={{ background: "var(--color-bg-subtle, #f1f5f9)", height: "8px", borderRadius: "4px", overflow: "hidden" }}>
