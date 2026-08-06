@@ -194,6 +194,35 @@ export function App() {
     if (!options?.preserveSelection && !issueData.rows.some((issue) => issue.id === selectedIssueId)) setSelectedIssueId(null);
   }
 
+  const [masterDataTab, setMasterDataTab] = useState<string>("people");
+  const [settingsTab, setSettingsTab] = useState<string>("general_settings");
+  const [userMgmtScope, setUserMgmtScope] = useState<"current" | "archived">("current");
+
+  useEffect(() => {
+    const handleTabChange = (e: Event) => {
+      const customEvent = e as CustomEvent<{ mode: string; activeTab: string }>;
+      if (customEvent.detail) {
+        if (customEvent.detail.mode === "master-data") {
+          setMasterDataTab(customEvent.detail.activeTab);
+        } else if (customEvent.detail.mode === "settings") {
+          setSettingsTab(customEvent.detail.activeTab);
+        }
+      }
+    };
+    const handleScopeChange = (e: Event) => {
+      const customEvent = e as CustomEvent<"current" | "archived">;
+      if (customEvent.detail) {
+        setUserMgmtScope(customEvent.detail);
+      }
+    };
+    window.addEventListener("master-data-tab-changed", handleTabChange);
+    window.addEventListener("user-management-scope-changed", handleScopeChange);
+    return () => {
+      window.removeEventListener("master-data-tab-changed", handleTabChange);
+      window.removeEventListener("user-management-scope-changed", handleScopeChange);
+    };
+  }, []);
+
   async function load(nextFilters = filters) {
     setError("");
     try {
@@ -701,51 +730,199 @@ export function App() {
               </div>
             ) : null}
           </div>
-          <div className={`sync-controls report-sync-controls page-sync-toolbar ${syncMode === "full_period" ? "full-mode" : "incremental-mode"}`}>
-            <label>
-              Source Systems
-              <div className="system-checks">
-                {systems.map((system) => (
-                  <label key={system.code} className={!system.enabled ? "disabled" : ""} title={!system.enabled ? "Disabled in .env" : systemLabel(system)}>
-                    <input
-                      type="checkbox"
-                      checked={syncSystems.includes(system.code)}
-                      disabled={!system.enabled}
-                      onChange={() => setSyncSystems(toggleSystem(syncSystems, system.code))}
-                    />
-                    {system.code}
-                  </label>
-                ))}
+          {view === "user-management" ? (
+            <div className="topbar-action-slot" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div style={{ display: "flex", gap: "4px", background: "var(--color-bg-subtle, #f1f5f9)", padding: "4px", borderRadius: "8px", border: "1px solid var(--color-border, #e2e8f0)" }}>
+                <button
+                  type="button"
+                  onClick={() => window.dispatchEvent(new CustomEvent("set-user-management-scope", { detail: "current" }))}
+                  style={{
+                    padding: "6px 14px",
+                    borderRadius: "6px",
+                    border: "none",
+                    background: userMgmtScope === "current" ? "var(--color-primary, #0f766e)" : "transparent",
+                    color: userMgmtScope === "current" ? "#ffffff" : "var(--color-text-muted)",
+                    fontWeight: userMgmtScope === "current" ? "700" : "500",
+                    fontSize: "0.85rem",
+                    cursor: "pointer"
+                  }}
+                >
+                  Users
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.dispatchEvent(new CustomEvent("set-user-management-scope", { detail: "archived" }))}
+                  style={{
+                    padding: "6px 14px",
+                    borderRadius: "6px",
+                    border: "none",
+                    background: userMgmtScope === "archived" ? "var(--color-primary, #0f766e)" : "transparent",
+                    color: userMgmtScope === "archived" ? "#ffffff" : "var(--color-text-muted)",
+                    fontWeight: userMgmtScope === "archived" ? "700" : "500",
+                    fontSize: "0.85rem",
+                    cursor: "pointer"
+                  }}
+                >
+                  Archived Users
+                </button>
               </div>
-            </label>
-            <label>
-              Sync Mode
-              <select value={syncMode} onChange={(event) => setSyncMode(event.target.value as "incremental" | "full_period")}>
-                <option value="incremental">Incremental</option>
-                <option value="full_period">Full by Period</option>
-              </select>
-            </label>
-            {syncMode === "incremental" ? (
+              <button
+                type="button"
+                className="primary sync-button"
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "#0f766e", border: "none", color: "#ffffff", padding: "8px 18px", borderRadius: "8px", fontWeight: "600", cursor: "pointer", fontSize: "0.875rem" }}
+                onClick={() => window.dispatchEvent(new CustomEvent("trigger-create-user"))}
+              >
+                <Plus size={16} /> <span>Create User</span>
+              </button>
+            </div>
+          ) : view === "audit-log" ? (
+            <div className="topbar-action-slot" style={{ display: "flex", alignItems: "center" }}>
+              <button
+                type="button"
+                className="secondary"
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "8px 16px", borderRadius: "8px" }}
+                onClick={() => window.dispatchEvent(new CustomEvent("trigger-refresh-audit-log"))}
+              >
+                <RefreshCw size={14} /> <span>Refresh</span>
+              </button>
+            </div>
+          ) : view === "master-data" ? (
+            <div className="topbar-action-slot" style={{ display: "flex", gap: "6px", background: "var(--color-bg-subtle, #f1f5f9)", padding: "4px", borderRadius: "8px", border: "1px solid var(--color-border, #e2e8f0)" }}>
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent("set-master-data-tab", { detail: "people" }))}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "6px",
+                  border: "none",
+                  background: masterDataTab === "people" ? "var(--color-primary, #0f766e)" : "transparent",
+                  color: masterDataTab === "people" ? "#ffffff" : "var(--color-text-muted)",
+                  fontWeight: masterDataTab === "people" ? "700" : "500",
+                  fontSize: "0.85rem",
+                  cursor: "pointer"
+                }}
+              >
+                People Roles
+              </button>
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent("set-master-data-tab", { detail: "group_emails" }))}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "6px",
+                  border: "none",
+                  background: masterDataTab === "group_emails" ? "var(--color-primary, #0f766e)" : "transparent",
+                  color: masterDataTab === "group_emails" ? "#ffffff" : "var(--color-text-muted)",
+                  fontWeight: masterDataTab === "group_emails" ? "700" : "500",
+                  fontSize: "0.85rem",
+                  cursor: "pointer"
+                }}
+              >
+                Group Emails
+              </button>
+            </div>
+          ) : view === "settings" ? (
+            <div className="topbar-action-slot" style={{ display: "flex", gap: "6px", background: "var(--color-bg-subtle, #f1f5f9)", padding: "4px", borderRadius: "8px", border: "1px solid var(--color-border, #e2e8f0)" }}>
+              {authUser?.role === "ADMIN" && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => window.dispatchEvent(new CustomEvent("set-settings-tab", { detail: "general_settings" }))}
+                    style={{
+                      padding: "6px 14px",
+                      borderRadius: "6px",
+                      border: "none",
+                      background: settingsTab === "general_settings" ? "var(--color-primary, #0f766e)" : "transparent",
+                      color: settingsTab === "general_settings" ? "#ffffff" : "var(--color-text-muted)",
+                      fontWeight: settingsTab === "general_settings" ? "700" : "500",
+                      fontSize: "0.85rem",
+                      cursor: "pointer"
+                    }}
+                  >
+                    General Settings
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.dispatchEvent(new CustomEvent("set-settings-tab", { detail: "ai_instructions" }))}
+                    style={{
+                      padding: "6px 14px",
+                      borderRadius: "6px",
+                      border: "none",
+                      background: settingsTab === "ai_instructions" ? "var(--color-primary, #0f766e)" : "transparent",
+                      color: settingsTab === "ai_instructions" ? "#ffffff" : "var(--color-text-muted)",
+                      fontWeight: settingsTab === "ai_instructions" ? "700" : "500",
+                      fontSize: "0.85rem",
+                      cursor: "pointer"
+                    }}
+                  >
+                    AI Instructions
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent("set-settings-tab", { detail: "appearance" }))}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "6px",
+                  border: "none",
+                  background: settingsTab === "appearance" ? "var(--color-primary, #0f766e)" : "transparent",
+                  color: settingsTab === "appearance" ? "#ffffff" : "var(--color-text-muted)",
+                  fontWeight: settingsTab === "appearance" ? "700" : "500",
+                  fontSize: "0.85rem",
+                  cursor: "pointer"
+                }}
+              >
+                Appearance
+              </button>
+            </div>
+          ) : (
+            <div className={`sync-controls report-sync-controls page-sync-toolbar ${syncMode === "full_period" ? "full-mode" : "incremental-mode"}`}>
               <label>
-                Lookback Days
-                <input type="number" min="0" max="30" value={lookbackDays} onChange={(event) => setLookbackDays(Number(event.target.value || 0))} />
+                Source Systems
+                <div className="system-checks">
+                  {systems.map((system) => (
+                    <label key={system.code} className={!system.enabled ? "disabled" : ""} title={!system.enabled ? "Disabled in .env" : systemLabel(system)}>
+                      <input
+                        type="checkbox"
+                        checked={syncSystems.includes(system.code)}
+                        disabled={!system.enabled}
+                        onChange={() => setSyncSystems(toggleSystem(syncSystems, system.code))}
+                      />
+                      {system.code}
+                    </label>
+                  ))}
+                </div>
               </label>
-            ) : (
-              <>
-            <label>
-              From Period
-              <input type="month" value={syncFromPeriod} onChange={(event) => setSyncFromPeriod(event.target.value)} />
-            </label>
-            <label>
-              To Period
-              <input type="month" value={syncToPeriod} onChange={(event) => setSyncToPeriod(event.target.value)} />
-            </label>
-              </>
-            )}
-            <button className="primary sync-button" onClick={runSync} disabled={loading || syncSystems.length === 0}>
-              <RefreshCw size={18} /> <span>{loading ? "Syncing" : "Sync CR"}</span>
-            </button>
-          </div>
+              <label>
+                Sync Mode
+                <select value={syncMode} onChange={(event) => setSyncMode(event.target.value as "incremental" | "full_period")}>
+                  <option value="incremental">Incremental</option>
+                  <option value="full_period">Full by Period</option>
+                </select>
+              </label>
+              {syncMode === "incremental" ? (
+                <label>
+                  Lookback Days
+                  <input type="number" min="0" max="30" value={lookbackDays} onChange={(event) => setLookbackDays(Number(event.target.value || 0))} />
+                </label>
+              ) : (
+                <>
+              <label>
+                From Period
+                <input type="month" value={syncFromPeriod} onChange={(event) => setSyncFromPeriod(event.target.value)} />
+              </label>
+              <label>
+                To Period
+                <input type="month" value={syncToPeriod} onChange={(event) => setSyncToPeriod(event.target.value)} />
+              </label>
+                </>
+              )}
+              <button className="primary sync-button" onClick={runSync} disabled={loading || syncSystems.length === 0}>
+                <RefreshCw size={18} /> <span>{loading ? "Syncing" : "Sync CR"}</span>
+              </button>
+            </div>
+          )}
         </header>
 
         {error ? <div className="notice">{error}</div> : null}
@@ -1015,10 +1192,10 @@ export function App() {
                   <thead style={{ background: "#f8fafc", position: "sticky", top: 0, zIndex: 1, borderBottom: "1px solid #e2e8f0" }}>
                     <tr>
                       <th style={{ padding: "10px 14px", textAlign: "left", width: "130px" }}>CR NUMBER</th>
-                      <th style={{ padding: "10px 14px", textAlign: "left", width: "80px" }}>SYSTEM</th>
                       <th style={{ padding: "10px 14px", textAlign: "left" }}>DESCRIPTION</th>
-                      <th style={{ padding: "10px 14px", textAlign: "left", width: "160px" }}>OWNER</th>
-                      <th style={{ padding: "10px 14px", textAlign: "center", width: "120px" }}>STATUS</th>
+                      <th style={{ padding: "10px 14px", textAlign: "left", width: "140px" }}>LINKED ISSUE</th>
+                      <th style={{ padding: "10px 14px", textAlign: "left", width: "130px" }}>OWNER</th>
+                      <th style={{ padding: "10px 14px", textAlign: "center", width: "100px" }}>STATUS</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1026,7 +1203,7 @@ export function App() {
                       <tr><td colSpan={5} style={{ padding: "24px", textAlign: "center", color: "#64748b" }}>No data found.</td></tr>
                     ) : (
                       (metricModalData.crs || [])
-                        .filter(c => !metricModalData.search || `${c.trkorr} ${c.description} ${c.owner}`.toLowerCase().includes(metricModalData.search.toLowerCase()))
+                        .filter(c => !metricModalData.search || `${c.trkorr} ${c.description} ${c.owner} ${c.linked_issue_key || ""} ${c.linked_issue_name || ""}`.toLowerCase().includes(metricModalData.search.toLowerCase()))
                         .slice(0, 100)
                         .map((c) => (
                           <tr
@@ -1034,12 +1211,19 @@ export function App() {
                             className="popup-table-row"
                             onClick={() => {
                               setMetricModal(prev => ({ ...prev, isOpen: false }));
-                              openReportFromCrLink({ trkorr: c.trkorr, sap_system_code: c.sap_system_code });
+                              if (c.linked_issue_id) {
+                                setChangeIssueInitialId(c.linked_issue_id);
+                                setChangeIssueInitialAction("");
+                                setChangeIssueInitialItem(null);
+                                navigateTo("issue-change");
+                              } else {
+                                openReportFromCrLink({ trkorr: c.trkorr, sap_system_code: c.sap_system_code });
+                              }
                             }}
                           >
                             <td style={{ padding: "10px 14px", fontWeight: "700", color: "#0f766e" }}>{c.trkorr}</td>
-                            <td style={{ padding: "10px 14px", fontWeight: "600", color: "#475569" }}>{c.sap_system_code}</td>
                             <td style={{ padding: "10px 14px", color: "#1e293b" }}>{c.description}</td>
+                            <td style={{ padding: "10px 14px", color: c.linked_issue_key ? "#2563eb" : "#94a3b8", fontWeight: c.linked_issue_key ? "600" : "400" }}>{c.linked_issue_key || "-"}</td>
                             <td style={{ padding: "10px 14px", color: "#475569" }}>{c.owner}</td>
                             <td style={{ padding: "10px 14px", textAlign: "center" }}><Status value={c.status_group} /></td>
                           </tr>

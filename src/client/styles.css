@@ -207,7 +207,7 @@ html, body {
 }
 
 .workspace {
-  padding: 24px;
+  padding: 24px 24px 40px 24px;
   height: 100vh;
   overflow: auto;
 }

@@ -52,28 +52,6 @@ export function UserManagementWorkspaceView({
   children
 }: ViewProps) {
   return <section className="user-management" aria-labelledby="user-management-title">
-    <header className="user-management__toolbar">
-      <div>
-        <p className="user-management__eyebrow">Administration</p>
-        <h1 id="user-management-title">User Management</h1>
-      </div>
-      {scope === "current" &&
-        <button type="button" className="button button--primary" onClick={onCreate}>Create User</button>}
-    </header>
-    <div className="user-management__tabs" role="tablist" aria-label="User scope">
-      <button
-        type="button"
-        role="tab"
-        aria-selected={scope === "current"}
-        onClick={() => onScopeChange("current")}
-      >Users</button>
-      <button
-        type="button"
-        role="tab"
-        aria-selected={scope === "archived"}
-        onClick={() => onScopeChange("archived")}
-      >Archived Users</button>
-    </div>
     <div className="user-management__filters">
       <input
         aria-label="Search users"
@@ -296,6 +274,27 @@ export function UserManagementWorkspace({
     setScope("archived");
     setFilters({ q: "", role: "", status: "" });
   }
+
+  useEffect(() => {
+    const handleCreate = () => setEditor({ mode: "create" });
+    const handleSetScope = (e: Event) => {
+      const customEvent = e as CustomEvent<ManagedUserScope>;
+      if (customEvent.detail) {
+        setScope(customEvent.detail);
+        setFilters({ q: "", role: "", status: "" });
+      }
+    };
+    window.addEventListener("trigger-create-user", handleCreate);
+    window.addEventListener("set-user-management-scope", handleSetScope);
+    return () => {
+      window.removeEventListener("trigger-create-user", handleCreate);
+      window.removeEventListener("set-user-management-scope", handleSetScope);
+    };
+  }, []);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("user-management-scope-changed", { detail: scope }));
+  }, [scope]);
 
   return <>
     {notice && <p role="status" className="user-management__notice">{notice}</p>}

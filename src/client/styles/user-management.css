@@ -98,7 +98,7 @@
   display: grid;
   grid-template-columns: minmax(18rem, 32%) minmax(0, 1fr);
   min-height: 32rem;
-  overflow: hidden;
+  height: auto;
   border: 1px solid var(--color-border-soft, #f1f5f9);
   border-radius: var(--radius-card, 16px);
   background: var(--surface-card, #fff);
@@ -106,7 +106,6 @@
 }
 
 .user-management__list {
-  overflow-y: auto;
   border-right: 1px solid var(--color-border-soft, #e2e8f0);
 }
 
@@ -261,8 +260,26 @@
 .user-audit__list {
   display: grid;
   gap: 0.75rem;
-  padding: 0;
+  padding: 4px;
   list-style: none;
+  max-height: 140px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.user-audit__list::-webkit-scrollbar {
+  width: 6px;
+}
+.user-audit__list::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+.user-audit__list::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+.user-audit__list::-webkit-scrollbar-thumb:hover {
+  background: #0f766e;
 }
 
 .user-audit__list li {

@@ -133,6 +133,9 @@ export type CrRequest = {
   requester_name?: string | null;
   abaper_name?: string | null;
   tester_name?: string | null;
+  linked_issue_id?: number | null;
+  linked_issue_key?: string | null;
+  linked_issue_name?: string | null;
 };
 
 export type CrDetail = {

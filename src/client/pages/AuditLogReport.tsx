@@ -100,26 +100,17 @@ export function AuditLogReport() {
       day: "2-digit",
       hour: "2-digit",
       minute: "2-digit",
-      second: "2-digit"
     });
   };
 
+  useEffect(() => {
+    const handleRefresh = () => loadData(activeFilters, page);
+    window.addEventListener("trigger-refresh-audit-log", handleRefresh);
+    return () => window.removeEventListener("trigger-refresh-audit-log", handleRefresh);
+  }, [activeFilters, page]);
+
   return (
     <div className="report-container" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-      {/* Header Title */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div>
-          <h1 style={{ fontSize: "24px", fontWeight: "700", display: "flex", alignItems: "center", gap: "10px", margin: 0 }}>
-            <ShieldCheck size={26} color="#0f766e" /> Audit Log & Activity Report
-          </h1>
-          <p style={{ color: "#64748b", margin: "4px 0 0", fontSize: "14px" }}>
-            Comprehensive audit trail of all user and system activities (automatically retained for 1 year).
-          </p>
-        </div>
-        <button className="secondary" onClick={() => loadData(activeFilters, page)} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-          <RefreshCw size={14} className={loading ? "animate-spin" : ""} /> Refresh
-        </button>
-      </div>
 
       {/* Metric Collages */}
       <div className="summary-metrics-bar summary-metrics-bar-6">
