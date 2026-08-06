@@ -137,6 +137,7 @@ export function App() {
   const [draftIssueFilters, setDraftIssueFilters] = useState<IssueFilters>({ status: "all", page: 1, pageSize: 25 });
   const [selectedIssueId, setSelectedIssueId] = useState<number | null>(null);
   const [issueDetail, setIssueDetail] = useState<IssueDetail | null>(null);
+  const [loadingIssueDetail, setLoadingIssueDetail] = useState(false);
   const [changeIssueInitialId, setChangeIssueInitialId] = useState<number | null>(null);
   const [changeIssueInitialAction, setChangeIssueInitialAction] = useState<"" | "cancel" | "delete">("");
   const [changeIssueInitialItem, setChangeIssueInitialItem] = useState<IncompleteItem | null>(null);
