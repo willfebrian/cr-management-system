@@ -18,6 +18,7 @@ import { fetchProjectDetail } from "../api/projectApi";
 import { afterIncompleteSectionRender, expandSection, getIncompleteItems, groupIncompleteItems, markIncompleteTarget, type ExpandedIssueSections, type IncompleteItem, type IssueSection } from "../issueIncomplete";
 import { nextExpandedSidebarGroup, type SidebarGroup } from "../navigation";
 import type { CrDetail, CrRequest, DashboardData, IssueDetail, IssueRow, SapSystemConfig, StatusTrendData } from "../../shared/types";
+import { AppLoadingScreen, SkeletonDetailLoader } from "../components/InteractiveLoaders";
 import type { ProjectDetail as ProjectDetailModel } from "../../shared/projectTypes";
 
 type View = "dashboard" | "report" | "issue-display" | "issue-create" | "issue-change" | "user-management" | "project-report" | "project-create" | "project-change" | "master-data" | "settings" | "audit-log";
@@ -611,7 +612,7 @@ export function App() {
 
   const selectedRequest = useMemo(() => requests.find((request) => requestKey(request) === selected), [requests, selected]);
 
-  if (authLoading) return <div className="auth-screen"><div className="auth-panel"><h1>CR Management System</h1><p>Loading...</p></div></div>;
+  if (authLoading) return <AppLoadingScreen />;
   if (!authUser) return <LoginScreen onLogin={(user) => { setAuthUser(user); window.location.reload(); }} />;
   if (authUser.mustChangePassword) return <ChangePasswordScreen onDone={() => window.location.reload()} />;
 
@@ -631,7 +632,13 @@ export function App() {
         </button>
         <div className={`sidebar-group ${view.startsWith("issue-") ? "active" : ""}`}>
           <button className={view.startsWith("issue-") ? "active" : ""} onClick={() => {
-            setExpandedSidebarGroup((current) => nextExpandedSidebarGroup(current, "issue"));
+            setExpandedSidebarGroup("issue");
+            setChangeIssueInitialId(null);
+            setChangeIssueInitialAction("");
+            setChangeIssueInitialItem(null);
+            if (navigateTo("issue-display")) {
+              loadIssues(issueFilters).catch((err) => setError(err instanceof Error ? err.message : String(err)));
+            }
           }}>
             <ClipboardList size={18} /> Issue
           </button>
@@ -662,7 +669,11 @@ export function App() {
           ) : null}
         </div>
         {PROJECTS_ENABLED ? <div className={`sidebar-group ${view.startsWith("project-") ? "active" : ""}`}>
-          <button className={view.startsWith("project-") ? "active" : ""} onClick={() => setExpandedSidebarGroup((current) => nextExpandedSidebarGroup(current, "project"))}>
+          <button className={view.startsWith("project-") ? "active" : ""} onClick={() => {
+            setExpandedSidebarGroup("project");
+            setProjectEditorDetail(null);
+            navigateTo("project-report");
+          }}>
             <FolderKanban size={18} /> Project
           </button>
           {expandedSidebarGroup === "project" ? (
@@ -1177,7 +1188,7 @@ export function App() {
                 placeholder="Search by number, description, owner/ABAPer..."
                 value={metricModalData.search}
                 onChange={(e) => setMetricModalData(prev => ({ ...prev, search: e.target.value }))}
-                style={{ padding: "9px 12px 9px 36px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%", boxSizing: "border-box", fontSize: "13px" }}
+                style={{ padding: "9px 12px 9px 36px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%", boxSizing: "border-box", fontSize: "0.875rem" }}
               />
             </div>
 
@@ -1188,7 +1199,7 @@ export function App() {
               </div>
             ) : metricModal.kind === "cr" ? (
               <div style={{ overflowY: "auto", maxHeight: "420px", border: "1px solid #e2e8f0", borderRadius: "8px" }}>
-                <table className="report-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                <table className="report-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
                   <thead style={{ background: "#f8fafc", position: "sticky", top: 0, zIndex: 1, borderBottom: "1px solid #e2e8f0" }}>
                     <tr>
                       <th style={{ padding: "10px 14px", textAlign: "left", width: "130px" }}>CR NUMBER</th>
@@ -1234,7 +1245,7 @@ export function App() {
               </div>
             ) : (
               <div style={{ overflowY: "auto", maxHeight: "420px", border: "1px solid #e2e8f0", borderRadius: "8px" }}>
-                <table className="report-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                <table className="report-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
                   <thead style={{ background: "#f8fafc", position: "sticky", top: 0, zIndex: 1, borderBottom: "1px solid #e2e8f0" }}>
                     <tr>
                       <th style={{ padding: "10px 14px", textAlign: "left", width: "120px" }}>ISSUE KEY</th>
@@ -2041,10 +2052,7 @@ function Report({
         hideFooter
       >
         {loadingDetail ? (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "260px", gap: "14px", color: "var(--color-text-muted)" }}>
-            <Loader2 className="animate-spin" size={34} color="#0f766e" />
-            <span style={{ fontSize: "0.925rem", fontWeight: "600", color: "#0f766e" }}>Loading CR detail & SAP transport objects...</span>
-          </div>
+          <SkeletonDetailLoader title="Fetching CR Transport Detail & SAP Objects..." />
         ) : (
         <div className="cr-modal-content-animated" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
           {/* 1. Header Banner & Quick Metadata */}
@@ -2418,10 +2426,7 @@ function IssueDisplay({
         hideFooter
       >
         {loadingDetail ? (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "260px", gap: "14px", color: "var(--color-text-muted)" }}>
-            <Loader2 className="animate-spin" size={34} color="#0f766e" />
-            <span style={{ fontSize: "0.925rem", fontWeight: "600", color: "#0f766e" }}>Loading Issue detail & linked CRs...</span>
-          </div>
+          <SkeletonDetailLoader title="Fetching Issue Details & Linked CR Transports..." />
         ) : (
           <div className="cr-modal-content-animated" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
             {/* Header Actions & Summary Strip Banner */}
