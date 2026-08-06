@@ -711,12 +711,11 @@ export function App() {
                 setChangeIssueInitialItem(null);
                 navigateTo("issue-create");
               }}><Plus size={15} /> Create</button>
-              <button className={view === "issue-change" ? "active" : ""} onClick={() => {
-                setChangeIssueInitialId(null);
-                setChangeIssueInitialAction("");
-                setChangeIssueInitialItem(null);
-                navigateTo("issue-change");
-              }}><PencilLine size={15} /> Change</button>
+              {view === "issue-change" ? (
+                <button className="active" onClick={() => {}}>
+                  <PencilLine size={15} /> Change
+                </button>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -735,10 +734,11 @@ export function App() {
                 setProjectEditorDetail(null);
                 navigateTo("project-create");
               }}><Plus size={15} /> Create</button>
-              <button className={view === "project-change" ? "active" : ""} onClick={() => {
-                setProjectEditorDetail(null);
-                navigateTo("project-change");
-              }}><PencilLine size={15} /> Change</button>
+              {view === "project-change" ? (
+                <button className="active" onClick={() => {}}>
+                  <PencilLine size={15} /> Change
+                </button>
+              ) : null}
             </div>
           ) : null}
         </div> : null}
@@ -4387,11 +4387,7 @@ function IssueEditor({
   const fetchedGlpiTicketRef = useRef<number | null>(null);
   const [generatingAi, setGeneratingAi] = useState(false);
   const [showAiOverwriteModal, setShowAiOverwriteModal] = useState(false);
-  const [aiOverwriteSelections, setAiOverwriteSelections] = useState<{
-    issueName: boolean;
-    problemAnalysis: boolean;
-    impactAnalysis: boolean;
-  }>({ issueName: true, problemAnalysis: true, impactAnalysis: true });
+  const [aiOverwriteSelections, setAiOverwriteSelections] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (mode === "create" && createMode === "sub" && selectedBaseIssue) {
@@ -4498,7 +4494,66 @@ function IssueEditor({
     }
   }, [mode, form.emailSubject]);
 
-  async function executeAiGeneration(selections: { issueName: boolean; problemAnalysis: boolean; impactAnalysis: boolean }) {
+  function getExistingFormFields() {
+    const list: Array<{ key: string; label: string; currentValue: string; category: "Analysis" | "People" | "Timeline" }> = [];
+    
+    if (form.issueName?.trim()) {
+      list.push({ key: "issueName", label: "Issue Name", currentValue: form.issueName.trim(), category: "Analysis" });
+    }
+    if (form.problemAnalysis?.trim()) {
+      list.push({ key: "problemAnalysis", label: "Problem Analysis", currentValue: form.problemAnalysis.trim(), category: "Analysis" });
+    }
+    if (form.impactAnalysis?.trim()) {
+      list.push({ key: "impactAnalysis", label: "Impact Analysis", currentValue: form.impactAnalysis.trim(), category: "Analysis" });
+    }
+
+    const participantLabels: Record<string, string> = {
+      requester: "Requester Name",
+      abaper: "ABAPer Name",
+      dev_tester: "DEV Tester",
+      dev_evaluator: "DEV Evaluator",
+      qa_transporter: "QA Transporter",
+      qa_tester: "QA Tester",
+      qa_evaluator: "QA Evaluator",
+      prd_requester: "PRD Requester",
+      prd_evaluator: "PRD Evaluator",
+      approval: "PRD Approver",
+      executor: "PRD Transporter"
+    };
+
+    if (form.participants) {
+      for (const [role, label] of Object.entries(participantLabels)) {
+        const val = form.participants[role]?.trim();
+        if (val) {
+          list.push({ key: `participant:${role}`, label, currentValue: val, category: "People" });
+        }
+      }
+    }
+
+    const timelineLabels: Record<string, string> = {
+      testing_date: "DEV Testing Date",
+      evaluation_date: "DEV Evaluation Date",
+      qa_transport_date: "QA Transport Date",
+      qa_testing_date: "QA Testing Date",
+      qa_evaluation_date: "QA Evaluation Date",
+      request_date: "PRD Request Date",
+      prd_evaluated_date: "PRD Evaluation Date",
+      approval_date: "PRD Approval Date"
+    };
+
+    if (form.timeline) {
+      for (const [tKey, label] of Object.entries(timelineLabels)) {
+        const val = form.timeline[tKey]?.trim();
+        if (val) {
+          list.push({ key: `timeline:${tKey}`, label, currentValue: val, category: "Timeline" });
+        }
+      }
+    }
+
+    return list;
+  }
+
+  async function executeAiGeneration(selections: Record<string, boolean>) {
     let combinedContext = "";
     if (fetchedEmailContext) {
       combinedContext += `=== OUTLOOK EMAIL CONTEXT ===\n${fetchedEmailContext}\n\n`;
@@ -4557,20 +4612,26 @@ function IssueEditor({
       const result = await generateAnalysis(combinedContext, form.emailSubject, form.issueName);
       
       let updatedCount = 0;
-      if (selections.issueName && result.issueName) {
+      
+      const canUpdateName = selections.issueName !== false || !form.issueName?.trim();
+      if (canUpdateName && result.issueName) {
         update("issueName", result.issueName);
         updatedCount++;
       }
-      if (selections.problemAnalysis && result.problemAnalysis) {
+      
+      const canUpdateProblem = selections.problemAnalysis !== false || !form.problemAnalysis?.trim();
+      if (canUpdateProblem && result.problemAnalysis) {
         update("problemAnalysis", result.problemAnalysis);
         updatedCount++;
       }
-      if (selections.impactAnalysis && result.impactAnalysis) {
+      
+      const canUpdateImpact = selections.impactAnalysis !== false || !form.impactAnalysis?.trim();
+      if (canUpdateImpact && result.impactAnalysis) {
         update("impactAnalysis", result.impactAnalysis);
         updatedCount++;
       }
 
-      // Auto-fill empty participant fields (never overwrite existing non-empty fields)
+      // Auto-fill participant fields
       if (result.participants) {
         const roleAliases: Record<string, string> = {
           prd_approver: "approval",
@@ -4583,7 +4644,8 @@ function IssueEditor({
           const role = roleAliases[rawRole.toLowerCase()] || rawRole;
           if (nameVal && nameVal.trim() && nameVal.trim().toUpperCase() !== "N/A") {
             const existingVal = form.participants?.[role]?.trim();
-            if (!existingVal) {
+            const canOverwrite = !existingVal || selections[`participant:${role}`] !== false;
+            if (canOverwrite) {
               updateParticipant(role, nameVal.trim());
               updatedCount++;
             }
@@ -4591,12 +4653,13 @@ function IssueEditor({
         }
       }
 
-      // Auto-fill empty timeline date fields (never overwrite existing non-empty fields)
+      // Auto-fill timeline date fields
       if (result.timeline) {
         for (const [tKey, dateVal] of Object.entries(result.timeline)) {
           if (dateVal && dateVal.trim() && dateVal.trim().toUpperCase() !== "N/A") {
             const existingVal = form.timeline?.[tKey]?.trim();
-            if (!existingVal) {
+            const canOverwrite = !existingVal || selections[`timeline:${tKey}`] !== false;
+            if (canOverwrite) {
               const formattedDate = toDatetimeInput(dateVal.trim()) || dateVal.trim();
               updateTimeline(tKey, formattedDate);
               updatedCount++;
@@ -4608,7 +4671,7 @@ function IssueEditor({
       if (updatedCount > 0) {
         onNotify?.("success", `Generated & filled AI data for ${updatedCount} field(s) successfully!`);
       } else {
-        onNotify?.("error", "AI generation returned empty or already existing results. Please try clicking Generate AI again.");
+        onNotify?.("error", "AI generation completed. No new changes were made to selected fields.");
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -4619,26 +4682,24 @@ function IssueEditor({
   }
 
   async function handleGenerateAiAnalysis() {
-    if (!fetchedEmailContext || !fetchedGlpiContext) {
-      onNotify?.("error", "Both Email context and GLPI context are required. Please fetch Email and GLPI content first.");
+    if (!fetchedEmailContext && !fetchedGlpiContext) {
+      onNotify?.("error", "Please fetch Outlook Email or GLPI Ticket context first before using AI Analysis.");
       return;
     }
     
-    const hasExistingName = Boolean(form.issueName?.trim());
-    const hasExistingProblem = Boolean(form.problemAnalysis?.trim());
-    const hasExistingImpact = Boolean(form.impactAnalysis?.trim());
+    const existingFields = getExistingFormFields();
 
-    if (hasExistingName || hasExistingProblem || hasExistingImpact) {
-      setAiOverwriteSelections({
-        issueName: true,
-        problemAnalysis: true,
-        impactAnalysis: true
-      });
+    if (existingFields.length > 0) {
+      const initialSelections: Record<string, boolean> = {};
+      for (const field of existingFields) {
+        initialSelections[field.key] = true;
+      }
+      setAiOverwriteSelections(initialSelections);
       setShowAiOverwriteModal(true);
       return;
     }
 
-    await executeAiGeneration({ issueName: true, problemAnalysis: true, impactAnalysis: true });
+    await executeAiGeneration({});
   }
 
   const [templatePreview, setTemplatePreview] = useState<{ title: string; body: string; bodyHtml?: string } | null>(null);
@@ -5413,7 +5474,7 @@ function IssueEditor({
         isOpen={showAiOverwriteModal}
         onClose={() => setShowAiOverwriteModal(false)}
         title="Replace Existing Content?"
-        subtitle="Some fields already contain text. Check the fields you want AI to replace:"
+        subtitle="The following fields already contain data. Uncheck any field you want AI to KEEP without replacing:"
         type="purple"
         confirmText="Generate AI"
         cancelText="Cancel"
@@ -5423,58 +5484,120 @@ function IssueEditor({
           await executeAiGeneration(aiOverwriteSelections);
         }}
       >
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", background: "var(--color-bg-subtle, #f8fafc)", padding: "1rem", borderRadius: "10px", border: "1px solid var(--color-border, #e2e8f0)" }}>
-          {Boolean(form.issueName?.trim()) && (
-            <label style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem", cursor: "pointer", fontSize: "0.875rem", color: "var(--color-text, #1f2937)", padding: "0.375rem 0" }}>
-              <input
-                type="checkbox"
-                checked={aiOverwriteSelections.issueName}
-                onChange={(e) => setAiOverwriteSelections(prev => ({ ...prev, issueName: e.target.checked }))}
-                style={{ marginTop: "0.2rem", width: "1.1rem", height: "1.1rem", accentColor: "#6366f1" }}
-              />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600 }}>Replace Issue Name</div>
-                <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #6b7280)", fontStyle: "italic", marginTop: "0.125rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "380px" }}>
-                  Current: "{form.issueName}"
-                </div>
-              </div>
-            </label>
-          )}
+        {(() => {
+          const fields = getExistingFormFields();
+          const selectedCount = fields.filter((f) => aiOverwriteSelections[f.key] !== false).length;
 
-          {Boolean(form.problemAnalysis?.trim()) && (
-            <label style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem", cursor: "pointer", fontSize: "0.875rem", color: "var(--color-text, #1f2937)", padding: "0.375rem 0" }}>
-              <input
-                type="checkbox"
-                checked={aiOverwriteSelections.problemAnalysis}
-                onChange={(e) => setAiOverwriteSelections(prev => ({ ...prev, problemAnalysis: e.target.checked }))}
-                style={{ marginTop: "0.2rem", width: "1.1rem", height: "1.1rem", accentColor: "#6366f1" }}
-              />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600 }}>Replace Problem Analysis</div>
-                <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #6b7280)", fontStyle: "italic", marginTop: "0.125rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "380px" }}>
-                  Current: "{form.problemAnalysis?.slice(0, 60)}..."
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  borderBottom: "1px solid var(--color-border, #e2e8f0)",
+                  paddingBottom: "8px",
+                  position: "sticky",
+                  top: "-20px",
+                  background: "var(--color-bg-elevated, #ffffff)",
+                  zIndex: 10,
+                  paddingTop: "4px",
+                  marginTop: "-4px"
+                }}
+              >
+                <span style={{ fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)" }}>
+                  Fields to Replace ({selectedCount} of {fields.length} selected)
+                </span>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const all: Record<string, boolean> = {};
+                      fields.forEach((f) => { all[f.key] = true; });
+                      setAiOverwriteSelections(all);
+                    }}
+                    style={{ border: "none", background: "none", color: "#0f766e", fontSize: "0.75rem", fontWeight: "600", cursor: "pointer", padding: 0 }}
+                  >
+                    Select All
+                  </button>
+                  <span style={{ color: "var(--color-border, #cbd5e1)", fontSize: "0.75rem" }}>|</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const none: Record<string, boolean> = {};
+                      fields.forEach((f) => { none[f.key] = false; });
+                      setAiOverwriteSelections(none);
+                    }}
+                    style={{ border: "none", background: "none", color: "#dc2626", fontSize: "0.75rem", fontWeight: "600", cursor: "pointer", padding: 0 }}
+                  >
+                    Deselect All
+                  </button>
                 </div>
               </div>
-            </label>
-          )}
 
-          {Boolean(form.impactAnalysis?.trim()) && (
-            <label style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem", cursor: "pointer", fontSize: "0.875rem", color: "var(--color-text, #1f2937)", padding: "0.375rem 0" }}>
-              <input
-                type="checkbox"
-                checked={aiOverwriteSelections.impactAnalysis}
-                onChange={(e) => setAiOverwriteSelections(prev => ({ ...prev, impactAnalysis: e.target.checked }))}
-                style={{ marginTop: "0.2rem", width: "1.1rem", height: "1.1rem", accentColor: "#6366f1" }}
-              />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600 }}>Replace Impact Analysis</div>
-                <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #6b7280)", fontStyle: "italic", marginTop: "0.125rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "380px" }}>
-                  Current: "{form.impactAnalysis?.slice(0, 60)}..."
-                </div>
-              </div>
-            </label>
-          )}
-        </div>
+              {fields.map((field) => {
+                const isChecked = aiOverwriteSelections[field.key] !== false;
+                const categoryColor = field.category === "Analysis" ? "#6366f1" : field.category === "People" ? "#0f766e" : "#d97706";
+
+                return (
+                  <label
+                    key={field.key}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.85rem",
+                      cursor: "pointer",
+                      fontSize: "0.85rem",
+                      color: "var(--color-text, #1f2937)",
+                      background: isChecked ? "var(--color-bg-subtle, #f8fafc)" : "var(--color-bg, #ffffff)",
+                      padding: "10px 14px",
+                      borderRadius: "10px",
+                      border: isChecked ? "1px solid #c7d2fe" : "1px solid var(--color-border, #e2e8f0)",
+                      transition: "all 0.15s ease"
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={(e) => setAiOverwriteSelections((prev) => ({ ...prev, [field.key]: e.target.checked }))}
+                      style={{ margin: 0, width: "1.1rem", height: "1.1rem", accentColor: "#6366f1", flexShrink: 0 }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ fontWeight: 600 }}>Replace {field.label}</span>
+                        <span
+                          style={{
+                            fontSize: "0.7rem",
+                            padding: "1px 6px",
+                            borderRadius: "4px",
+                            background: `${categoryColor}15`,
+                            color: categoryColor,
+                            fontWeight: 600
+                          }}
+                        >
+                          {field.category}
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "0.75rem",
+                          color: "var(--color-text-muted, #6b7280)",
+                          fontStyle: "italic",
+                          marginTop: "2px",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis"
+                        }}
+                      >
+                        Current: "{field.currentValue.length > 55 ? `${field.currentValue.slice(0, 55)}...` : field.currentValue}"
+                      </div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          );
+        })()}
       </UIModal>
     </form>
   );
