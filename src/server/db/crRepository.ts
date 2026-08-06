@@ -186,6 +186,7 @@ export type CrRequestFilters = {
   sapSystemCode?: string;
   status?: string;
   lifecycleStatus?: string;
+  agingDays?: number;
   owner?: string;
   q?: string;
   fromDate?: string;
@@ -208,6 +209,9 @@ export async function listCrRequests(filters: CrRequestFilters = {}) {
   if (filters.status && filters.status !== "all") {
     params.push(filters.status);
     where.push(`status_group = $${params.length}`);
+  }
+  if (filters.agingDays) {
+    where.push(`changed_date < current_date - interval '${Number(filters.agingDays)} days'`);
   }
   if (filters.lifecycleStatus && filters.lifecycleStatus !== "all") {
     if (filters.lifecycleStatus === "pending_qa") {

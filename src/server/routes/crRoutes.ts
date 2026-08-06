@@ -55,6 +55,7 @@ crRoutes.get("/cr", async (_req, res, next) => {
       ...(await listCrRequests({
         status: stringQuery(_req.query.status),
         lifecycleStatus: stringQuery(_req.query.lifecycleStatus),
+        agingDays: numberQuery(_req.query.agingDays, 0) || undefined,
         sapSystemCode: stringQuery(_req.query.sapSystemCode),
         owner: stringQuery(_req.query.owner),
         q: stringQuery(_req.query.q),
@@ -84,6 +85,8 @@ crRoutes.get("/issues", async (req, res, next) => {
     await assertDatabaseConfigured();
     res.json(await listIssues({
       status: stringQuery(req.query.status),
+      lifecycleStatus: stringQuery(req.query.lifecycleStatus),
+      completionStatus: stringQuery(req.query.completionStatus),
       q: stringQuery(req.query.q),
       requester: stringQuery(req.query.requester),
       abaper: stringQuery(req.query.abaper),

@@ -16,6 +16,7 @@ export type CrFilters = {
   sapSystemCode?: string;
   status?: string;
   lifecycleStatus?: string;
+  agingDays?: number;
   owner?: string;
   q?: string;
   fromDate?: string;
@@ -53,6 +54,8 @@ export async function fetchSystems(): Promise<{ rows: SapSystemConfig[] }> {
 
 export type IssueFilters = {
   status?: string;
+  lifecycleStatus?: string;
+  completionStatus?: string;
   q?: string;
   requester?: string;
   abaper?: string;

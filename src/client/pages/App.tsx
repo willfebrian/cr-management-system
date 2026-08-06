@@ -214,6 +214,46 @@ export function App() {
     onConfirm: () => {}
   });
 
+  const [metricModal, setMetricModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    kind: "cr" | "issue";
+    filters: CrFilters | IssueFilters;
+  }>({
+    isOpen: false,
+    title: "",
+    kind: "cr",
+    filters: {}
+  });
+
+  const [metricModalData, setMetricModalData] = useState<{
+    crs: CrRequest[];
+    issues: IssueRow[];
+    total: number;
+    loading: boolean;
+    search: string;
+  }>({
+    crs: [],
+    issues: [],
+    total: 0,
+    loading: false,
+    search: ""
+  });
+
+  const openMetricPopup = (title: string, kind: "cr" | "issue", filters: CrFilters | IssueFilters) => {
+    setMetricModal({ isOpen: true, title, kind, filters });
+    setMetricModalData({ crs: [], issues: [], total: 0, loading: true, search: "" });
+    if (kind === "cr") {
+      fetchCrList({ ...(filters as CrFilters), pageSize: 100 })
+        .then((res) => setMetricModalData({ crs: res.rows, issues: [], total: res.total, loading: false, search: "" }))
+        .catch(() => setMetricModalData({ crs: [], issues: [], total: 0, loading: false, search: "" }));
+    } else {
+      fetchIssueList({ ...(filters as IssueFilters), pageSize: 100 })
+        .then((res) => setMetricModalData({ crs: [], issues: res.rows, total: res.total, loading: false, search: "" }))
+        .catch(() => setMetricModalData({ crs: [], issues: [], total: 0, loading: false, search: "" }));
+    }
+  };
+
   async function runSync() {
     const period = resolveMonthPeriod(syncFromPeriod, syncToPeriod);
     const options = { ...syncOptions, systemCodes: syncSystems, syncMode, lookbackDays, ...period };
@@ -708,6 +748,7 @@ export function App() {
             onApplyTrend={() => load()}
             onTrendClick={openReportFromTrend}
             onIssueTrendClick={openIssueFromTrend}
+            onMetricClick={openMetricPopup}
           />
         ) : view === "report" ? (
           <Report
@@ -905,6 +946,118 @@ export function App() {
           />
         )}
       </section>
+      {metricModal.isOpen && (
+        <UIModal
+          isOpen={metricModal.isOpen}
+          onClose={() => setMetricModal(prev => ({ ...prev, isOpen: false }))}
+          title={`${metricModal.title} (${metricModalData.total} Data)`}
+          subtitle={`Klik pada salah satu baris untuk membuka detail ${metricModal.kind === "cr" ? "CR Transport" : "Issue"}`}
+          type="primary"
+          cancelText="Tutup"
+          maxWidth="980px"
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: "14px", width: "100%" }}>
+            <div style={{ position: "relative", width: "100%" }}>
+              <Search size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#64748b" }} />
+              <input
+                type="text"
+                placeholder="Cari berdasarkan nomor, nama, owner/ABAPer..."
+                value={metricModalData.search}
+                onChange={(e) => setMetricModalData(prev => ({ ...prev, search: e.target.value }))}
+                style={{ padding: "9px 12px 9px 36px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%", boxSizing: "border-box", fontSize: "13px" }}
+              />
+            </div>
+
+            {metricModalData.loading ? (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "50px 0", gap: "10px", color: "#0f766e" }}>
+                <Loader2 className="animate-spin" size={22} />
+                <span style={{ fontWeight: "600" }}>Memuat daftar data...</span>
+              </div>
+            ) : metricModal.kind === "cr" ? (
+              <div style={{ overflowY: "auto", maxHeight: "420px", border: "1px solid #e2e8f0", borderRadius: "8px" }}>
+                <table className="report-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                  <thead style={{ background: "#f8fafc", position: "sticky", top: 0, zIndex: 1, borderBottom: "1px solid #e2e8f0" }}>
+                    <tr>
+                      <th style={{ padding: "10px 14px", textAlign: "left", width: "130px" }}>CR NUMBER</th>
+                      <th style={{ padding: "10px 14px", textAlign: "left", width: "80px" }}>SYSTEM</th>
+                      <th style={{ padding: "10px 14px", textAlign: "left" }}>DESCRIPTION</th>
+                      <th style={{ padding: "10px 14px", textAlign: "left", width: "160px" }}>OWNER</th>
+                      <th style={{ padding: "10px 14px", textAlign: "center", width: "120px" }}>STATUS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(metricModalData.crs || []).length === 0 ? (
+                      <tr><td colSpan={5} style={{ padding: "24px", textAlign: "center", color: "#64748b" }}>Tidak ada data ditemukan.</td></tr>
+                    ) : (
+                      (metricModalData.crs || [])
+                        .filter(c => !metricModalData.search || `${c.trkorr} ${c.description} ${c.owner}`.toLowerCase().includes(metricModalData.search.toLowerCase()))
+                        .slice(0, 100)
+                        .map((c) => (
+                          <tr
+                            key={`${c.sap_system_code}-${c.trkorr}`}
+                            className="popup-table-row"
+                            onClick={() => {
+                              setMetricModal(prev => ({ ...prev, isOpen: false }));
+                              openReportFromCrLink({ trkorr: c.trkorr, sap_system_code: c.sap_system_code });
+                            }}
+                          >
+                            <td style={{ padding: "10px 14px", fontWeight: "700", color: "#0f766e" }}>{c.trkorr}</td>
+                            <td style={{ padding: "10px 14px", fontWeight: "600", color: "#475569" }}>{c.sap_system_code}</td>
+                            <td style={{ padding: "10px 14px", color: "#1e293b" }}>{c.description}</td>
+                            <td style={{ padding: "10px 14px", color: "#475569" }}>{c.owner}</td>
+                            <td style={{ padding: "10px 14px", textAlign: "center" }}><Status value={c.status_group} /></td>
+                          </tr>
+                        ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{ overflowY: "auto", maxHeight: "420px", border: "1px solid #e2e8f0", borderRadius: "8px" }}>
+                <table className="report-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                  <thead style={{ background: "#f8fafc", position: "sticky", top: 0, zIndex: 1, borderBottom: "1px solid #e2e8f0" }}>
+                    <tr>
+                      <th style={{ padding: "10px 14px", textAlign: "left", width: "120px" }}>ISSUE KEY</th>
+                      <th style={{ padding: "10px 14px", textAlign: "left" }}>ISSUE NAME</th>
+                      <th style={{ padding: "10px 14px", textAlign: "left", width: "160px" }}>ABAPER</th>
+                      <th style={{ padding: "10px 14px", textAlign: "left", width: "140px" }}>LINKED CR</th>
+                      <th style={{ padding: "10px 14px", textAlign: "center", width: "120px" }}>STATUS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(metricModalData.issues || []).length === 0 ? (
+                      <tr><td colSpan={5} style={{ padding: "24px", textAlign: "center", color: "#64748b" }}>Tidak ada data ditemukan.</td></tr>
+                    ) : (
+                      (metricModalData.issues || [])
+                        .filter(i => !metricModalData.search || `${i.issue_key} ${i.issue_name} ${i.abaper_name_snapshot}`.toLowerCase().includes(metricModalData.search.toLowerCase()))
+                        .slice(0, 100)
+                        .map((i) => (
+                          <tr
+                            key={i.id}
+                            className="popup-table-row"
+                            onClick={() => {
+                              setMetricModal(prev => ({ ...prev, isOpen: false }));
+                              setChangeIssueInitialId(i.id);
+                              setChangeIssueInitialAction("");
+                              setChangeIssueInitialItem(null);
+                              navigateTo("issue-change");
+                            }}
+                          >
+                            <td style={{ padding: "10px 14px", fontWeight: "700", color: "#0f766e" }}>{i.issue_key}</td>
+                            <td style={{ padding: "10px 14px", color: "#1e293b" }}>{i.issue_name}</td>
+                            <td style={{ padding: "10px 14px", color: "#475569" }}>{i.abaper_name_snapshot || "-"}</td>
+                            <td style={{ padding: "10px 14px", color: "#475569", fontWeight: "600" }}>{i.primary_cr || "-"}</td>
+                            <td style={{ padding: "10px 14px", textAlign: "center" }}><Status value={i.issue_status || "open"} /></td>
+                          </tr>
+                        ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </UIModal>
+      )}
       <UIModal
         isOpen={confirmModal.isOpen}
         onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
@@ -984,7 +1137,8 @@ function Dashboard({
   onTrendFilters,
   onApplyTrend,
   onTrendClick,
-  onIssueTrendClick
+  onIssueTrendClick,
+  onMetricClick
 }: {
   dashboard: DashboardData | null;
   requests: CrRequest[];
@@ -994,6 +1148,7 @@ function Dashboard({
   onApplyTrend: () => void;
   onTrendClick: (status: string, monthStart: string) => void;
   onIssueTrendClick: (status: string, monthStart: string) => void;
+  onMetricClick?: (title: string, kind: "cr" | "issue", filters: CrFilters | IssueFilters) => void;
 }) {
   const outstanding = dashboard?.byStatus.find((row) => row.status_group === "outstanding")?.count || 0;
   const released = dashboard?.byStatus.find((row) => row.status_group === "released")?.count || 0;
@@ -1003,11 +1158,11 @@ function Dashboard({
   return (
     <div className="dashboard-grid">
       <div className="summary-metrics-bar">
-        <Metric label="Outstanding" value={outstanding} />
-        <Metric label="Released" value={released} />
-        <Metric label="Aging > 14 Days" value={dashboard?.aging?.older_than_14_days || 0} />
-        <Metric label="Pending to QA" value={dashboard?.landscape?.pending_qa || 0} />
-        <Metric label="Pending to PRD" value={dashboard?.landscape?.pending_prd || 0} />
+        <Metric label="Outstanding" value={outstanding} onClick={() => onMetricClick?.("Outstanding CR Transports", "cr", { status: "outstanding" })} />
+        <Metric label="Released" value={released} onClick={() => onMetricClick?.("Released CR Transports", "cr", { status: "released" })} />
+        <Metric label="Aging > 14 Days" value={dashboard?.aging?.older_than_14_days || 0} onClick={() => onMetricClick?.("Aging > 14 Days CR Transports", "cr", { status: "outstanding", agingDays: 14 })} />
+        <Metric label="Pending to QA" value={dashboard?.landscape?.pending_qa || 0} onClick={() => onMetricClick?.("Pending to QA CR Transports", "cr", { status: "all", lifecycleStatus: "pending_qa" })} />
+        <Metric label="Pending to PRD" value={dashboard?.landscape?.pending_prd || 0} onClick={() => onMetricClick?.("Pending to PRD CR Transports", "cr", { status: "all", lifecycleStatus: "pending_prd" })} />
       </div>
       <section className="panel chart-panel">
         <div className="panel-heading">
@@ -1045,21 +1200,21 @@ function Dashboard({
       
       {/* Row 1: Issue Completion & Status Metrics */}
       <div className="summary-metrics-bar">
-        <Metric label="Complete Issues" value={issueInsights?.completion?.complete || 0} />
-        <Metric label="Incomplete Active" value={issueInsights?.completion?.incomplete || 0} />
-        <Metric label="Open Issues" value={issueStatusCount("open")} />
-        <Metric label="In Progress Issues" value={issueStatusCount("in_progress")} />
-        <Metric label="OK Issues" value={issueStatusCount("ok")} />
+        <Metric label="Complete Issues" value={issueInsights?.completion?.complete || 0} onClick={() => onMetricClick?.("Complete Issues List", "issue", { status: "all", completionStatus: "complete" })} />
+        <Metric label="Incomplete Active" value={issueInsights?.completion?.incomplete || 0} onClick={() => onMetricClick?.("Incomplete Active Issues List", "issue", { status: "all", completionStatus: "incomplete" })} />
+        <Metric label="Open Issues" value={issueStatusCount("open")} onClick={() => onMetricClick?.("Open Issues List", "issue", { status: "open" })} />
+        <Metric label="In Progress Issues" value={issueStatusCount("in_progress")} onClick={() => onMetricClick?.("In Progress Issues List", "issue", { status: "in_progress" })} />
+        <Metric label="OK Issues" value={issueStatusCount("ok")} onClick={() => onMetricClick?.("OK Issues List", "issue", { status: "ok" })} />
       </div>
 
       {/* Row 2: Issue by CR Lifecycle Metrics */}
       <div className="summary-metrics-bar summary-metrics-bar-6">
-        <Metric label="No CR Assigned" value={issueLifecycleCount("no_cr")} />
-        <Metric label="CR Created" value={issueLifecycleCount("created")} />
-        <Metric label="CR Released" value={issueLifecycleCount("released")} />
-        <Metric label="CR In QA" value={issueLifecycleCount("in_qa")} />
-        <Metric label="CR In PRD" value={issueLifecycleCount("in_prd")} />
-        <Metric label="Cancelled / Excluded" value={issueLifecycleCount("cancelled")} />
+        <Metric label="No CR Assigned" value={issueLifecycleCount("no_cr")} onClick={() => onMetricClick?.("Issues with No CR Assigned", "issue", { lifecycleStatus: "no_cr" })} />
+        <Metric label="CR Created" value={issueLifecycleCount("created")} onClick={() => onMetricClick?.("Issues with CR Created", "issue", { lifecycleStatus: "created" })} />
+        <Metric label="CR Released" value={issueLifecycleCount("released")} onClick={() => onMetricClick?.("Issues with CR Released", "issue", { lifecycleStatus: "released" })} />
+        <Metric label="CR In QA" value={issueLifecycleCount("in_qa")} onClick={() => onMetricClick?.("Issues with CR In QA", "issue", { lifecycleStatus: "in_qa" })} />
+        <Metric label="CR In PRD" value={issueLifecycleCount("in_prd")} onClick={() => onMetricClick?.("Issues with CR In PRD", "issue", { lifecycleStatus: "in_prd" })} />
+        <Metric label="Cancelled / Excluded" value={issueLifecycleCount("cancelled")} onClick={() => onMetricClick?.("Cancelled / Excluded Issues List", "issue", { status: "cancelled" })} />
       </div>
 
       <section className="panel chart-panel">
@@ -1101,9 +1256,13 @@ function Dashboard({
   );
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
+function Metric({ label, value, onClick }: { label: string; value: number; onClick?: () => void }) {
   return (
-    <section className="metric">
+    <section
+      className={`metric ${onClick ? "clickable" : ""}`}
+      onClick={onClick}
+      title={onClick ? `Klik untuk melihat popup data ${label}` : undefined}
+    >
       <span>{label}</span>
       <strong>{value}</strong>
     </section>

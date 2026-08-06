@@ -3,6 +3,8 @@ import { findActiveProjectForIssue, ProjectRepositoryError } from "./projectRepo
 
 export type IssueFilters = {
   status?: string;
+  lifecycleStatus?: string;
+  completionStatus?: string;
   q?: string;
   requester?: string;
   abaper?: string;
@@ -245,12 +247,35 @@ export async function listIssues(filters: IssueFilters = {}) {
     LEFT JOIN issue_prd_timeline prd ON prd.issue_id = h.id
     ${whereSql}
   `;
+  const outerWhere: string[] = [];
   const filteredParams = [...params];
-  const statusWhereSql = statusFilter ? `WHERE issue_status = $${filteredParams.push(statusFilter)}` : "";
+
+  if (statusFilter) {
+    filteredParams.push(statusFilter);
+    outerWhere.push(`issue_status = $${filteredParams.length}`);
+  }
+
+  if (filters.completionStatus) {
+    if (filters.completionStatus === "complete") {
+      outerWhere.push(`issue_status <> 'cancelled' AND missing_data_count = 0`);
+    } else if (filters.completionStatus === "incomplete") {
+      outerWhere.push(`issue_status <> 'cancelled' AND missing_data_count > 0`);
+    } else if (filters.completionStatus === "cancelled") {
+      outerWhere.push(`issue_status = 'cancelled'`);
+    }
+  }
+
+  if (filters.lifecycleStatus && filters.lifecycleStatus !== "all") {
+    filteredParams.push(filters.lifecycleStatus);
+    outerWhere.push(`coalesce(primary_cr_status, 'no_cr') = $${filteredParams.length}`);
+  }
+
+  const outerWhereSql = outerWhere.length ? `WHERE ${outerWhere.join(" AND ")}` : "";
+
   const countResult = await pool.query(`
     SELECT COUNT(*)::int AS total
     FROM (${baseSelectSql}) issue_rows
-    ${statusWhereSql}
+    ${outerWhereSql}
   `, filteredParams);
   const total = Number(countResult.rows[0]?.total || 0);
   filteredParams.push(pageSize, offset);
@@ -258,7 +283,7 @@ export async function listIssues(filters: IssueFilters = {}) {
   const { rows } = await pool.query(`
     SELECT *
     FROM (${baseSelectSql}) issue_rows
-    ${statusWhereSql}
+    ${outerWhereSql}
     ORDER BY issue_no DESC, sub_issue_no DESC
     LIMIT $${filteredParams.length - 1} OFFSET $${filteredParams.length}
   `, filteredParams);
