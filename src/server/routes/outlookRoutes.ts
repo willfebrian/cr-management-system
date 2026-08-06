@@ -60,17 +60,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "New-Item -ItemType Directory -Force -Path $targetDir | Out-Null;" ^
   "$scriptPath = Join-Path $targetDir 'cr-outlook-agent.mjs';" ^
   "Invoke-WebRequest -Uri '${baseUrl}/api/outlook/agent-script' -OutFile $scriptPath -UseBasicParsing;" ^
+  "$nodeCmd = (Get-Command 'node' -ErrorAction SilentlyContinue).Source;" ^
+  "if (-not $nodeCmd) { $nodeCmd = 'node.exe' };" ^
   "$startupDir = [System.IO.Path]::Combine($env:APPDATA, 'Microsoft\\Windows\\Start Menu\\Programs\\Startup');" ^
   "$shortcutPath = Join-Path $startupDir 'CR_Outlook_Agent.lnk';" ^
-  "$WScriptShell = New-Object -ComObject WScript.Shell;" ^
-  "$Shortcut = $WScriptShell.CreateShortcut($shortcutPath);" ^
-  "$Shortcut.TargetPath = 'node.exe';" ^
-  "$Shortcut.Arguments = '\\\"' + $scriptPath + '\\\"';" ^
-  "$Shortcut.WindowStyle = 7;" ^
-  "$Shortcut.Description = 'CR Management System Local Outlook Agent';" ^
-  "$Shortcut.Save();" ^
-  "Start-Process 'node.exe' -ArgumentList ('\\\"' + $scriptPath + '\\\"') -WindowStyle Hidden;" ^
-  "Write-Host 'Agent installed and running at http://127.0.0.1:18888' -ForegroundColor Green;"
+  "$vbsPath = Join-Path $startupDir 'CR_Outlook_Agent.vbs';" ^
+  "if (Test-Path $shortcutPath) { Remove-Item $shortcutPath -Force -ErrorAction SilentlyContinue };" ^
+  "$vbsContent = 'Set WshShell = CreateObject(\"WScript.Shell\")' + [Environment]::NewLine + 'WshShell.CurrentDirectory = \"' + $targetDir + '\"' + [Environment]::NewLine + 'WshShell.Run Chr(34) & \"' + $nodeCmd + '\" & Chr(34) & \" \" & Chr(34) & \"' + $scriptPath + '\" & Chr(34), 0, False';" ^
+  "Set-Content -Path $vbsPath -Value $vbsContent -Encoding String;" ^
+  "Get-Process -Name 'node' -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like '*cr-outlook-agent.mjs*' } | Stop-Process -Force -ErrorAction SilentlyContinue;" ^
+  "Start-Process -FilePath 'wscript.exe' -ArgumentList ('\"' + $vbsPath + '\"');" ^
+  "Write-Host 'Agent installed and running silently in background at http://127.0.0.1:18888' -ForegroundColor Green;"
 
 if errorlevel 1 (
   echo.
@@ -83,9 +83,9 @@ if errorlevel 1 (
 
 echo.
 echo ========================================================
-echo   Installation Complete! Agent is running locally.
-echo   It will also start automatically on next Windows login.
+echo   Installation Complete! Agent is running silently in background.
+echo   It will start automatically on next Windows login.
 echo ========================================================
-pause
+timeout /t 5
 `;
 }

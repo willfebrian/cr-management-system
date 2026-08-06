@@ -23,11 +23,11 @@ if (Test-Path $shortcutPath) {
     Remove-Item $shortcutPath -Force -ErrorAction SilentlyContinue
 }
 
-# Create silent VBScript launcher in Startup folder
+# Create silent VBScript launcher in Startup folder using Chr(34) quote escaping
 $vbsContent = @"
 Set WshShell = CreateObject("WScript.Shell")
 WshShell.CurrentDirectory = "$workingDir"
-WshShell.Run """$nodeCmd"" ""$scriptPath""", 0, False
+WshShell.Run Chr(34) & "$nodeCmd" & Chr(34) & " " & Chr(34) & "$scriptPath" & Chr(34), 0, False
 "@
 
 Set-Content -Path $vbsPath -Value $vbsContent -Encoding String
