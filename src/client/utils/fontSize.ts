@@ -45,8 +45,8 @@ export function applyCustomFontSize(settings: Record<string, string> = {}, usern
   if (!styleEl) {
     styleEl = document.createElement("style");
     styleEl.id = "dynamic-font-size";
-    document.head.appendChild(styleEl);
   }
+  document.head.appendChild(styleEl);
 
   const scaleRatio = (numSize / 14).toFixed(4);
   const inverseScale = (14 / numSize).toFixed(4);

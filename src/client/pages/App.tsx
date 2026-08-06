@@ -1002,11 +1002,13 @@ function Dashboard({
   const issueLifecycleCount = (status: string) => issueInsights?.byLifecycle.find((row) => row.lifecycle_status === status)?.count || 0;
   return (
     <div className="dashboard-grid">
-      <Metric label="Outstanding" value={outstanding} />
-      <Metric label="Released" value={released} />
-      <Metric label="Aging > 14 Days" value={dashboard?.aging?.older_than_14_days || 0} />
-      <Metric label="Pending to QA" value={dashboard?.landscape?.pending_qa || 0} />
-      <Metric label="Pending to PRD" value={dashboard?.landscape?.pending_prd || 0} />
+      <div className="summary-metrics-bar">
+        <Metric label="Outstanding" value={outstanding} />
+        <Metric label="Released" value={released} />
+        <Metric label="Aging > 14 Days" value={dashboard?.aging?.older_than_14_days || 0} />
+        <Metric label="Pending to QA" value={dashboard?.landscape?.pending_qa || 0} />
+        <Metric label="Pending to PRD" value={dashboard?.landscape?.pending_prd || 0} />
+      </div>
       <section className="panel chart-panel">
         <div className="panel-heading">
           <div>
@@ -1039,12 +1041,27 @@ function Dashboard({
           </ResponsiveContainer>
         </div>
       </section>
-      <h2 className="dashboard-section-title">Issue Overview</h2>
-      <Metric label="Open Issues" value={issueStatusCount("open")} />
-      <Metric label="In Progress Issues" value={issueStatusCount("in_progress")} />
-      <Metric label="OK Issues" value={issueStatusCount("ok")} />
-      <Metric label="Cancelled Issues" value={issueStatusCount("cancelled")} />
-      <Metric label="Incomplete Active Issues" value={issueInsights?.completion?.incomplete || 0} />
+      <h2 className="dashboard-section-title" style={{ gridColumn: "1 / -1", margin: "16px 0 4px" }}>Issue Overview</h2>
+      
+      {/* Row 1: Issue Completion & Status Metrics */}
+      <div className="summary-metrics-bar">
+        <Metric label="Complete Issues" value={issueInsights?.completion?.complete || 0} />
+        <Metric label="Incomplete Active" value={issueInsights?.completion?.incomplete || 0} />
+        <Metric label="Open Issues" value={issueStatusCount("open")} />
+        <Metric label="In Progress Issues" value={issueStatusCount("in_progress")} />
+        <Metric label="OK Issues" value={issueStatusCount("ok")} />
+      </div>
+
+      {/* Row 2: Issue by CR Lifecycle Metrics */}
+      <div className="summary-metrics-bar summary-metrics-bar-6">
+        <Metric label="No CR Assigned" value={issueLifecycleCount("no_cr")} />
+        <Metric label="CR Created" value={issueLifecycleCount("created")} />
+        <Metric label="CR Released" value={issueLifecycleCount("released")} />
+        <Metric label="CR In QA" value={issueLifecycleCount("in_qa")} />
+        <Metric label="CR In PRD" value={issueLifecycleCount("in_prd")} />
+        <Metric label="Cancelled / Excluded" value={issueLifecycleCount("cancelled")} />
+      </div>
+
       <section className="panel chart-panel">
         <div className="panel-heading">
           <div>
@@ -1066,40 +1083,6 @@ function Dashboard({
               <Bar dataKey="cancelled" fill="#b91c1c" name="Cancelled" radius={[4, 4, 0, 0]} onClick={(data) => onIssueTrendClick("cancelled", data.payload.month_start)} />
             </BarChart>
           </ResponsiveContainer>
-        </div>
-      </section>
-      <section className="panel lifecycle-panel">
-        <h2>Issue Completion</h2>
-        <div className="funnel-list">
-          <div className="funnel-item">
-            <span>Complete</span>
-            <strong>{issueInsights?.completion?.complete || 0}</strong>
-            <div><i style={{ width: `${completionWidth(issueInsights?.completion?.complete || 0, issueInsights?.completion?.active || 0)}%` }} /></div>
-            <small>Active issues with complete data</small>
-          </div>
-          <div className="funnel-item">
-            <span>Incomplete</span>
-            <strong>{issueInsights?.completion?.incomplete || 0}</strong>
-            <div><i className="warning-bar" style={{ width: `${completionWidth(issueInsights?.completion?.incomplete || 0, issueInsights?.completion?.active || 0)}%` }} /></div>
-            <small>Active issues still need data</small>
-          </div>
-          <div className="funnel-item">
-            <span>Cancelled</span>
-            <strong>{issueInsights?.completion?.cancelled || 0}</strong>
-            <div><i className="danger-bar" style={{ width: `${completionWidth(issueInsights?.completion?.cancelled || 0, issueInsights?.completion?.total || 0)}%` }} /></div>
-            <small>Excluded from completeness</small>
-          </div>
-        </div>
-      </section>
-      <section className="panel issue-insight-panel">
-        <h2>Issue by CR Lifecycle</h2>
-        <div className="insight-list">
-          {["no_cr", "created", "released", "in_qa", "in_prd", "cancelled", "unknown"].map((status) => (
-            <div className="insight-row" key={status}>
-              <span>{issueLifecycleLabel(status)}</span>
-              <strong>{issueLifecycleCount(status)}</strong>
-            </div>
-          ))}
         </div>
       </section>
       <section className="panel wide">
