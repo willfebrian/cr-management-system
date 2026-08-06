@@ -8,6 +8,8 @@ export interface UIModalProps {
   onClose: () => void;
   title: string;
   subtitle?: string;
+  titleBadge?: React.ReactNode;
+  headerActions?: React.ReactNode;
   type?: ModalType;
   icon?: React.ReactNode;
   children?: React.ReactNode;
@@ -25,6 +27,8 @@ export function UIModal({
   onClose,
   title,
   subtitle,
+  titleBadge,
+  headerActions,
   type = "primary",
   icon,
   children,
@@ -104,24 +108,30 @@ export function UIModal({
         style={{ maxWidth }}
       >
         {/* Header */}
-        <div className="ui-modal-header">
-          <div className="ui-modal-title-group">
-            <div className="ui-modal-badge" style={{ backgroundColor: style.badgeBg, color: style.badgeColor }}>
+        <div className="ui-modal-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+          <div className="ui-modal-title-group" style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1, minWidth: 0 }}>
+            <div className="ui-modal-badge" style={{ backgroundColor: style.badgeBg, color: style.badgeColor, flexShrink: 0 }}>
               {icon || style.defaultIcon}
             </div>
-            <div>
-              <h3 className="ui-modal-title">{title}</h3>
-              {subtitle && <p className="ui-modal-subtitle">{subtitle}</p>}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                <h3 className="ui-modal-title" style={{ margin: 0 }}>{title}</h3>
+                {titleBadge}
+              </div>
+              {subtitle && <p className="ui-modal-subtitle" style={{ margin: "2px 0 0 0" }}>{subtitle}</p>}
             </div>
           </div>
-          <button
-            type="button"
-            className="ui-modal-close-btn"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            <X size={18} />
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
+            {headerActions}
+            <button
+              type="button"
+              className="ui-modal-close-btn"
+              onClick={onClose}
+              aria-label="Close"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Body Content */}

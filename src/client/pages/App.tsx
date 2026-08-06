@@ -4119,7 +4119,41 @@ function IssueDisplay({
         isOpen={hasDetail}
         onClose={onCloseDetail}
         title={selectedIssue?.issue_key || "Issue Detail"}
+        titleBadge={selectedIssue ? <Status value={selectedIssue.issue_status} /> : null}
         subtitle={selectedIssue?.issue_name}
+        headerActions={
+          selectedIssue ? (
+            <div className="detail-action-menu" style={{ position: "relative" }}>
+              <button
+                className="primary"
+                type="button"
+                onClick={() => setDetailMenuOpen((current) => !current)}
+                style={{ display: "flex", alignItems: "center", gap: "6px", padding: "6px 14px", fontSize: "0.85rem", background: "#0f766e", color: "#ffffff", borderRadius: "8px", border: "none", cursor: "pointer" }}
+              >
+                <span>Actions</span>
+                <ChevronDown size={15} />
+              </button>
+              {detailMenuOpen && (
+                <div className="detail-action-menu-list" style={{ right: 0, top: "100%", marginTop: "4px" }}>
+                  <button type="button" onClick={() => { setDetailMenuOpen(false); onCloseDetail(); onChangeIssue(selectedIssue.id); }}>
+                    <PencilLine size={15} /> Change Issue
+                  </button>
+                  {canGenerateCrForm && (
+                    <button type="button" onClick={() => { setDetailMenuOpen(false); onGenerateCrForm(selectedIssue.id); }}>
+                      <FileSearch size={15} /> Generate CR Form
+                    </button>
+                  )}
+                  <button type="button" disabled={selectedIssue.issue_status === "cancelled"} onClick={() => { setDetailMenuOpen(false); onIssueAction(selectedIssue.id, "cancel"); }}>
+                    <XCircle size={15} /> Cancel Issue
+                  </button>
+                  <button type="button" className="danger-menu-item" onClick={() => { setDetailMenuOpen(false); onIssueAction(selectedIssue.id, "delete"); }}>
+                    <X size={15} /> Delete Issue
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : null
+        }
         type="primary"
         maxWidth="980px"
         hideFooter
@@ -4128,71 +4162,81 @@ function IssueDisplay({
           <SkeletonDetailLoader title="Fetching Issue Details & Linked CR Transports..." />
         ) : (
           <div className="cr-modal-content-animated" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-            {/* Header Actions & Summary Strip Banner */}
+            {/* Summary Strip Banner */}
             <div style={{
               display: "flex",
               flexDirection: "column",
-              gap: "0.85rem",
+              gap: "12px",
               background: "var(--color-bg-subtle, #f8fafc)",
-              padding: "1rem 1.25rem",
+              padding: "14px 16px",
               borderRadius: "12px",
               border: "1px solid var(--color-border, #e2e8f0)"
             }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <span style={{ fontSize: "1.1rem", fontWeight: "700", color: "var(--color-text-heading)" }}>
-                    {selectedIssue?.issue_key}
-                  </span>
-                  {selectedIssue && <Status value={selectedIssue.issue_status} />}
+              {/* Row 1: Email Subject (Left) + GLPI & CR Helpdesk badges (Right Aligned) */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" }}>
+                <div style={{ flex: 1, minWidth: "220px" }}>
+                  <div style={{ fontSize: "0.8rem", fontWeight: "400", color: "var(--color-text-muted, #64748b)", marginBottom: "4px" }}>
+                    Email Subject
+                  </div>
+                  <div style={{ fontSize: "0.95rem", fontWeight: "700", color: "var(--color-text-heading, #0f172a)", wordBreak: "break-word", lineHeight: 1.4 }}>
+                    {detail?.issue?.email_subject || "-"}
+                  </div>
                 </div>
 
-                {/* Actions Dropdown */}
-                {selectedIssue && (
-                  <div className="detail-action-menu" style={{ position: "relative" }}>
-                    <button
-                      className="primary"
-                      type="button"
-                      onClick={() => setDetailMenuOpen((current) => !current)}
-                      style={{ display: "flex", alignItems: "center", gap: "6px", padding: "6px 14px", fontSize: "0.85rem", background: "#0f766e", color: "#ffffff", borderRadius: "8px", border: "none", cursor: "pointer" }}
-                    >
-                      <span>Actions</span>
-                      <ChevronDown size={15} />
-                    </button>
-                    {detailMenuOpen && (
-                      <div className="detail-action-menu-list" style={{ right: 0, top: "100%", marginTop: "4px" }}>
-                        <button type="button" onClick={() => { setDetailMenuOpen(false); onCloseDetail(); onChangeIssue(selectedIssue.id); }}>
-                          <PencilLine size={15} /> Change Issue
-                        </button>
-                        {canGenerateCrForm && (
-                          <button type="button" onClick={() => { setDetailMenuOpen(false); onGenerateCrForm(selectedIssue.id); }}>
-                            <FileSearch size={15} /> Generate CR Form
-                          </button>
-                        )}
-                        <button type="button" disabled={selectedIssue.issue_status === "cancelled"} onClick={() => { setDetailMenuOpen(false); onIssueAction(selectedIssue.id, "cancel"); }}>
-                          <XCircle size={15} /> Cancel Issue
-                        </button>
-                        <button type="button" className="danger-menu-item" onClick={() => { setDetailMenuOpen(false); onIssueAction(selectedIssue.id, "delete"); }}>
-                          <X size={15} /> Delete Issue
-                        </button>
-                      </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", flexShrink: 0 }}>
+                  {/* GLPI Ticket Badge */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "#f0fdf4", border: "1px solid #bbf7d0", padding: "4px 10px", borderRadius: "8px" }}>
+                    <span style={{ fontSize: "0.75rem", fontWeight: "600", color: "#166534" }}>GLPI:</span>
+                    {primaryGlpiTicket ? (
+                      <a href={glpiUrl(primaryGlpiTicket)} target="_blank" rel="noreferrer" style={{ fontSize: "0.85rem", fontWeight: "700", color: "#059669", textDecoration: "underline" }}>
+                        #{primaryGlpiTicket}
+                      </a>
+                    ) : (
+                      <span style={{ fontSize: "0.85rem", fontWeight: "600", color: "#64748b" }}>-</span>
                     )}
                   </div>
-                )}
+
+                  {/* CR Helpdesk No. Badge */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "var(--color-bg, #ffffff)", border: "1px solid var(--color-border, #cbd5e1)", padding: "4px 10px", borderRadius: "8px" }}>
+                    <span style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>CR Helpdesk:</span>
+                    <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "var(--color-text, #1e293b)" }}>
+                      {formatCrHelpdeskNumbers(detail) || selectedIssue?.primary_cr_helpdesk_no || "-"}
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              <SummaryStrip items={[
-                { label: "Email Subject", value: detail?.issue?.email_subject || "-", wide: true },
-                { label: "Requester", value: <DisplayNameList value={selectedIssue?.requester_name_snapshot} /> },
-                { label: "ABAPer", value: <DisplayNameList value={selectedIssue?.abaper_name_snapshot} /> },
-                { label: "Created", value: formatIssueTimestamp(selectedIssue?.create_issue_date) },
-                {
-                  label: "GLPI",
-                  value: primaryGlpiTicket
-                    ? <a className="summary-strip-link" href={glpiUrl(primaryGlpiTicket)} target="_blank" rel="noreferrer">{primaryGlpiTicket}</a>
-                    : "-"
-                },
-                { label: "CR Helpdesk No.", value: formatCrHelpdeskNumbers(detail) || selectedIssue?.primary_cr_helpdesk_no || "-" }
-              ]} />
+              {/* Row 2: Requester | ABAPer | Created Date */}
+              <div style={{ borderTop: "1px solid var(--color-border-soft, #e2e8f0)", paddingTop: "10px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px" }}>
+                  <div>
+                    <div style={{ fontSize: "0.8rem", fontWeight: "400", color: "var(--color-text-muted, #64748b)", marginBottom: "4px" }}>
+                      Requester
+                    </div>
+                    <div style={{ fontSize: "0.9rem", fontWeight: "700", color: "var(--color-text, #1e293b)" }}>
+                      <DisplayNameList value={selectedIssue?.requester_name_snapshot} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: "0.8rem", fontWeight: "400", color: "var(--color-text-muted, #64748b)", marginBottom: "4px" }}>
+                      ABAPer
+                    </div>
+                    <div style={{ fontSize: "0.9rem", fontWeight: "700", color: "var(--color-text, #1e293b)" }}>
+                      <DisplayNameList value={selectedIssue?.abaper_name_snapshot} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: "0.8rem", fontWeight: "400", color: "var(--color-text-muted, #64748b)", marginBottom: "4px" }}>
+                      Created
+                    </div>
+                    <div style={{ fontSize: "0.9rem", fontWeight: "700", color: "var(--color-text, #1e293b)" }}>
+                      {formatIssueTimestamp(selectedIssue?.create_issue_date)}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Incomplete Warning if any */}
