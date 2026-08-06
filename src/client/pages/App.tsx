@@ -2364,17 +2364,30 @@ function IssueDisplay({
                         <strong>{group.title}</strong>
                         {group.roles.map((role) => {
                           const matches = group.participants.filter((participant) => participant.role === role);
-                          return matches.length ? matches.map((participant) => (
+                          const showTags = matches.length > 1;
+                          return matches.length ? matches.map((participant, index) => (
                             <div className="row participant-row" key={participant.id}>
-                              <span>{formatParticipantRole(role)}{participant.is_primary ? " *" : ""}</span>
-                              <small>{participant.full_name || participant.person_name_snapshot}{participant.nickname ? ` (${participant.nickname})` : ""}</small>
-                              <small>{participant.department || "-"}</small>
+                              <span className="participant-role-title">{formatParticipantRole(role)}</span>
+                              <div className="participant-num-cell">
+                                {showTags ? (
+                                  <span className={`participant-num-badge ${participant.is_primary ? "primary" : "secondary"}`}>
+                                    #{index + 1}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <small style={{ fontWeight: participant.is_primary ? 600 : 400, color: "var(--color-text)" }}>
+                                {participant.full_name || participant.person_name_snapshot}{participant.nickname ? ` (${participant.nickname})` : ""}
+                              </small>
+                              <small style={{ textAlign: "right", color: "var(--color-text-muted)" }}>
+                                {participant.department || "-"}
+                              </small>
                             </div>
                           )) : (
                             <div className="row participant-row empty-participant" key={role}>
-                              <span>{formatParticipantRole(role)}</span>
-                              <small>-</small>
-                              <small>-</small>
+                              <span className="participant-role-title">{formatParticipantRole(role)}</span>
+                              <div className="participant-num-cell" />
+                              <small style={{ color: "var(--color-text-muted)" }}>-</small>
+                              <small style={{ textAlign: "right", color: "var(--color-text-muted)" }}>-</small>
                             </div>
                           );
                         })}
