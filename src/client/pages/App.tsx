@@ -153,6 +153,7 @@ export function App() {
   });
   const [selected, setSelected] = useState("");
   const [detail, setDetail] = useState<CrDetail | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [syncResult, setSyncResult] = useState<SyncCrResult | null>(null);
@@ -542,18 +543,40 @@ export function App() {
   useEffect(() => {
     if (!selected) {
       setDetail(null);
+      setLoadingDetail(false);
       return;
     }
+    setDetail(null);
+    setLoadingDetail(true);
     const key = parseRequestKey(selected);
-    fetchCrDetail(key.trkorr, key.sapSystemCode).then(setDetail).catch((err) => setError(err.message));
+    fetchCrDetail(key.trkorr, key.sapSystemCode)
+      .then((res) => {
+        setDetail(res);
+        setLoadingDetail(false);
+      })
+      .catch((err) => {
+        setError(err.message);
+        setLoadingDetail(false);
+      });
   }, [selected]);
 
   useEffect(() => {
     if (!selectedIssueId) {
       setIssueDetail(null);
+      setLoadingIssueDetail(false);
       return;
     }
-    fetchIssueDetail(selectedIssueId).then(setIssueDetail).catch((err) => setError(err.message));
+    setIssueDetail(null);
+    setLoadingIssueDetail(true);
+    fetchIssueDetail(selectedIssueId)
+      .then((res) => {
+        setIssueDetail(res);
+        setLoadingIssueDetail(false);
+      })
+      .catch((err) => {
+        setError(err.message);
+        setLoadingIssueDetail(false);
+      });
   }, [selectedIssueId]);
 
   const selectedRequest = useMemo(() => requests.find((request) => requestKey(request) === selected), [requests, selected]);
@@ -782,6 +805,7 @@ export function App() {
             onCloseDetail={() => setSelected("")}
             selectedRequest={selectedRequest}
             detail={detail}
+            loadingDetail={loadingDetail}
             onOpenIssue={openIssueFromCrLink}
           />
         ) : view === "issue-display" ? (
@@ -791,6 +815,7 @@ export function App() {
             pagination={issuePagination}
             selectedId={selectedIssueId}
             detail={issueDetail}
+            loadingDetail={loadingIssueDetail}
             onFilters={setDraftIssueFilters}
             onSelect={setSelectedIssueId}
             onCloseDetail={() => setSelectedIssueId(null)}
@@ -1723,6 +1748,7 @@ function Report({
   onCloseDetail,
   selectedRequest,
   detail,
+  loadingDetail,
   onOpenIssue
 }: {
   requests: CrRequest[];
@@ -1736,6 +1762,7 @@ function Report({
   onCloseDetail: () => void;
   selectedRequest?: CrRequest;
   detail: CrDetail | null;
+  loadingDetail?: boolean;
   onOpenIssue: (link: { issue_id?: number | null }) => void;
 }) {
   const displayRequest = selectedRequest || detail?.request;
@@ -1778,7 +1805,7 @@ function Report({
         <input type="date" value={filters.toDate || ""} onChange={(event) => updateFilter("toDate", event.target.value)} />
       </section>
 
-      <div className={`report-layout ${hasDetail ? "" : "detail-closed"}`}>
+      <div className="report-layout detail-closed">
         <section className="table-panel report-table-panel cr-table-panel">
           <div className="table-scroll">
             <table className="record-table cr-record-table" style={{ width: crColumns.totalWidth, minWidth: "100%" }}>
@@ -1817,120 +1844,215 @@ function Report({
             <button className="secondary" onClick={() => onPage(pagination.totalPages)} disabled={pagination.page >= pagination.totalPages}><ArrowRight size={14} /> Last</button>
           </div>
         </section>
-        {hasDetail ? (
-        <section className="detail-panel report-detail-panel">
-          <button className="detail-close" type="button" onClick={onCloseDetail} aria-label="Close detail">×</button>
-          <div className="detail-heading">
-            <div>
-              <h2>{displayRequest?.trkorr || "Select CR"}</h2>
-              <p>{displayRequest?.description}</p>
+      </div>
+
+      <UIModal
+        isOpen={hasDetail}
+        onClose={onCloseDetail}
+        title={displayRequest?.trkorr || "CR Detail"}
+        subtitle={displayRequest?.description}
+        type="primary"
+        maxWidth="980px"
+        hideFooter
+      >
+        {loadingDetail ? (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "260px", gap: "14px", color: "var(--color-text-muted)" }}>
+            <Loader2 className="animate-spin" size={34} color="#0f766e" />
+            <span style={{ fontSize: "0.925rem", fontWeight: "600", color: "#0f766e" }}>Loading CR detail & SAP transport objects...</span>
+          </div>
+        ) : (
+        <div className="cr-modal-content-animated" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+          {/* 1. Header Banner & Quick Metadata */}
+          <div style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "0.85rem",
+            background: "var(--color-bg-subtle, #f8fafc)",
+            padding: "1rem 1.25rem",
+            borderRadius: "12px",
+            border: "1px solid var(--color-border, #e2e8f0)"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <span style={{ fontSize: "1.1rem", fontWeight: "700", color: "var(--color-text-heading)" }}>
+                  {displayRequest?.trkorr}
+                </span>
+                {displayRequest && (
+                  <Status value={displayLifecycleStatusFromDetail(detail, displayRequest.lifecycle_status || displayRequest.status_group)} />
+                )}
+              </div>
+              <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: "4px" }}>
+                <span>Last Changed: <strong>{formatDate(displayRequest?.changed_date)}</strong></span>
+              </div>
             </div>
-            <div className="detail-header-actions">
-              {displayRequest ? <Status value={displayLifecycleStatusFromDetail(detail, displayRequest.lifecycle_status || displayRequest.status_group)} /> : null}
-              <button className="detail-icon-close" type="button" onClick={onCloseDetail} aria-label="Close detail">
-                <X size={18} />
-              </button>
+
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+              gap: "0.75rem",
+              paddingTop: "0.5rem",
+              borderTop: "1px dashed var(--color-border, #cbd5e1)"
+            }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                <span style={{ fontSize: "0.725rem", textTransform: "uppercase", fontWeight: "600", color: "var(--color-text-muted)", letterSpacing: "0.03em" }}>Owner</span>
+                <strong style={{ fontSize: "0.875rem", color: "var(--color-text)" }}>{displayRequest?.owner || "-"}</strong>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                <span style={{ fontSize: "0.725rem", textTransform: "uppercase", fontWeight: "600", color: "var(--color-text-muted)", letterSpacing: "0.03em" }}>Target System</span>
+                <strong style={{ fontSize: "0.875rem", color: "#0f766e" }}>{displayRequest?.target_system || "-"}</strong>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                <span style={{ fontSize: "0.725rem", textTransform: "uppercase", fontWeight: "600", color: "var(--color-text-muted)", letterSpacing: "0.03em" }}>CR Type</span>
+                <strong style={{ fontSize: "0.875rem", color: "var(--color-text)" }}>{displayRequest?.function_code || "-"}</strong>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                <span style={{ fontSize: "0.725rem", textTransform: "uppercase", fontWeight: "600", color: "var(--color-text-muted)", letterSpacing: "0.03em" }}>Tasks Count</span>
+                <strong style={{ fontSize: "0.875rem", color: "var(--color-text)" }}>{detail?.tasks.length || 0} Tasks</strong>
+              </div>
             </div>
           </div>
-          <SummaryStrip
-            className="cr-summary-strip"
-            items={[
-              { label: "Owner", value: displayRequest?.owner || "-" },
-              { label: "Target", value: displayRequest?.target_system || "-" },
-              { label: "Type", value: displayRequest?.function_code || "-" },
-              { label: "Changed", value: formatDate(displayRequest?.changed_date) }
-            ]}
-          />
-          <section className="report-detail-section">
-            <h3>Related Issues</h3>
-            <div className="rows compact cr-related-issues">
-              {(detail?.issueLinks || []).map((link) => {
-                const issueKey = link.issue_no ? `${link.issue_no}-${link.sub_issue_no || "01"}` : "Issue removed";
-                const status = formatIssueLinkStatus(link.relation_status, link.current_issue_status || link.issue_status_snapshot);
-                return link.issue_id ? (
-                  <button className="cr-related-issue-link" type="button" key={link.id} onClick={() => onOpenIssue(link)}>
-                    <span className="cr-related-issue-copy">
-                      <span className="cr-related-issue-heading">
-                        <strong>{issueKey}</strong>
-                        <Status value={status} />
-                      </span>
-                      <span className="cr-related-issue-name">{link.issue_name || "-"}</span>
-                    </span>
-                    <ChevronRight className="cr-related-issue-chevron" size={16} aria-hidden="true" />
-                  </button>
-                ) : (
-                  <div className="cr-related-issue-link historical" key={link.id}>
-                    <span className="cr-related-issue-copy">
-                      <span className="cr-related-issue-heading">
-                        <strong>{issueKey}</strong>
-                        <Status value={status} />
-                      </span>
-                      <span className="cr-related-issue-name">{link.issue_name || "Issue removed"}</span>
-                    </span>
-                  </div>
-                );
-              })}
-              {detail && detail.issueLinks.length === 0 ? <div className="empty">No Issue linked to this CR.</div> : null}
-            </div>
-          </section>
-          <section className="report-detail-section">
-            <h3>Lifecycle</h3>
-            <div className="issue-timeline cr-lifecycle-timeline">
-            {[
-              { label: "Created", value: formatIssueTimestamp(detail?.lifecycle.created_at), filled: Boolean(detail?.lifecycle.created_at) },
-              { label: "Released", value: formatIssueTimestamp(detail?.lifecycle.released_at), filled: Boolean(detail?.lifecycle.released_at) },
-              { label: "In QA", value: lifecycleLabel(detail?.lifecycle.qa_status, detail?.lifecycle.qa_imported_at), filled: detail?.lifecycle.qa_status === "imported" },
-              { label: "In PRD", value: lifecycleLabel(detail?.lifecycle.prd_status, detail?.lifecycle.prd_imported_at), filled: detail?.lifecycle.prd_status === "imported" }
-            ].map((event) => (
-              <div className={`timeline-event ${event.filled ? "filled" : "missing"}`} key={event.label}>
-                <span className="timeline-dot" />
-                <div>
-                  <small>{event.value || "-"}</small>
-                  <strong>{event.label}</strong>
+
+          {/* 2. Middle Section: Related Issues & Child Tasks + Lifecycle Timeline */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", gap: "1.25rem", alignItems: "stretch" }}>
+            
+            {/* Box A: Linked Issues & Tasks */}
+            <div style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "1rem",
+              background: "var(--color-bg-elevated, #ffffff)",
+              border: "1px solid var(--color-border, #e2e8f0)",
+              borderRadius: "12px",
+              padding: "1.1rem"
+            }}>
+              {/* Linked Issues */}
+              <div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
+                  <h3 style={{ fontSize: "0.95rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "6px", margin: 0, color: "var(--color-text-heading)" }}>
+                    <FolderKanban size={16} color="#0f766e" /> Linked Issues ({detail?.issueLinks.length || 0})
+                  </h3>
+                </div>
+                <div className="rows compact cr-related-issues">
+                  {(detail?.issueLinks || []).map((link) => {
+                    const issueKey = link.issue_no ? `${link.issue_no}-${link.sub_issue_no || "01"}` : "Issue removed";
+                    const status = formatIssueLinkStatus(link.relation_status, link.current_issue_status || link.issue_status_snapshot);
+                    return link.issue_id ? (
+                      <button className="cr-related-issue-link" type="button" key={link.id} onClick={() => { onCloseDetail(); onOpenIssue(link); }}>
+                        <span className="cr-related-issue-copy">
+                          <span className="cr-related-issue-heading">
+                            <strong>{issueKey}</strong>
+                            <Status value={status} />
+                          </span>
+                          <span className="cr-related-issue-name">{link.issue_name || "-"}</span>
+                        </span>
+                        <ChevronRight className="cr-related-issue-chevron" size={16} aria-hidden="true" />
+                      </button>
+                    ) : (
+                      <div className="cr-related-issue-link historical" key={link.id}>
+                        <span className="cr-related-issue-copy">
+                          <span className="cr-related-issue-heading">
+                            <strong>{issueKey}</strong>
+                            <Status value={status} />
+                          </span>
+                          <span className="cr-related-issue-name">{link.issue_name || "Issue removed"}</span>
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {detail && detail.issueLinks.length === 0 ? <div className="empty" style={{ padding: "12px", textAlign: "center", color: "var(--color-text-muted)", fontSize: "0.85rem" }}>No Issue linked to this CR.</div> : null}
                 </div>
               </div>
-            ))}
-            </div>
-          </section>
-          <section className="report-detail-section">
-            <h3>Tasks</h3>
-            <div className="rows compact">
-              {(detail?.tasks || []).map((task) => (
-                <div className="row task-row" key={task.trkorr}>
-                  <span>{task.trkorr}</span>
-                  <Status value={displayLifecycleStatus(task.lifecycle_status || task.status_group)} />
+
+              {/* Child Tasks */}
+              <div style={{ paddingTop: "0.75rem", borderTop: "1px solid var(--color-border, #f1f5f9)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
+                  <h3 style={{ fontSize: "0.95rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "6px", margin: 0, color: "var(--color-text-heading)" }}>
+                    <ClipboardList size={16} color="#0f766e" /> Child Transport Tasks ({detail?.tasks.length || 0})
+                  </h3>
                 </div>
-              ))}
-              {detail && detail.tasks.length === 0 ? <div className="empty">No child tasks cached.</div> : null}
-            </div>
-          </section>
-          <section className="report-detail-section">
-            <h3>Objects</h3>
-            <div className="object-list se03-object-list">
-              {groupObjectsBySe03Label(detail?.objects || []).map((group) => (
-                <div className="object-group" key={group.key}>
-                  <div className="object-group-title">
-                    <strong>{group.label}</strong>
-                    <code>{group.key}</code>
-                  </div>
-                  {group.objects.map((object) => (
-                    <div className="object-row se03-object-row" key={`${object.trkorr}-${object.position}`}>
-                      <code>{object.pgmid} {object.object_type}</code>
-                      <div>
-                        <strong>{object.object_name}</strong>
-                        <span>{object.trkorr} - {object.position}</span>
-                        <small>{labelDiffReadiness(object.diff_readiness)}</small>
-                      </div>
+                <div className="rows compact">
+                  {(detail?.tasks || []).map((task) => (
+                    <div className="row task-row" key={task.trkorr} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "var(--color-bg-subtle, #f8fafc)", borderRadius: "8px", border: "1px solid var(--color-border, #e2e8f0)", marginBottom: "6px" }}>
+                      <strong style={{ fontSize: "0.85rem" }}>{task.trkorr}</strong>
+                      <Status value={displayLifecycleStatus(task.lifecycle_status || task.status_group)} />
                     </div>
                   ))}
+                  {detail && detail.tasks.length === 0 ? <div className="empty" style={{ padding: "12px", textAlign: "center", color: "var(--color-text-muted)", fontSize: "0.85rem" }}>No child tasks cached.</div> : null}
+                </div>
+              </div>
+            </div>
+
+            {/* Box B: Lifecycle Timeline */}
+            <div style={{
+              display: "flex",
+              flexDirection: "column",
+              background: "var(--color-bg-elevated, #ffffff)",
+              border: "1px solid var(--color-border, #e2e8f0)",
+              borderRadius: "12px",
+              padding: "1.1rem"
+            }}>
+              <h3 style={{ fontSize: "0.95rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "6px", marginBottom: "1rem", color: "var(--color-text-heading)" }}>
+                <ShieldCheck size={16} color="#0f766e" /> Transport Lifecycle Audit Trail
+              </h3>
+              <div className="issue-timeline cr-lifecycle-timeline" style={{ flex: 1 }}>
+                {[
+                  { label: "Created", value: formatIssueTimestamp(detail?.lifecycle.created_at), filled: Boolean(detail?.lifecycle.created_at) },
+                  { label: "Released", value: formatIssueTimestamp(detail?.lifecycle.released_at), filled: Boolean(detail?.lifecycle.released_at) },
+                  { label: "In QA", value: lifecycleLabel(detail?.lifecycle.qa_status, detail?.lifecycle.qa_imported_at), filled: detail?.lifecycle.qa_status === "imported" },
+                  { label: "In PRD", value: lifecycleLabel(detail?.lifecycle.prd_status, detail?.lifecycle.prd_imported_at), filled: detail?.lifecycle.prd_status === "imported" }
+                ].map((event) => (
+                  <div className={`timeline-event ${event.filled ? "filled" : "missing"}`} key={event.label}>
+                    <span className="timeline-dot" />
+                    <div>
+                      <small>{event.value || "-"}</small>
+                      <strong>{event.label}</strong>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          </div>
+
+          {/* 3. Bottom Section: SAP Objects (SE03 Objects) */}
+          <div style={{
+            background: "var(--color-bg-elevated, #ffffff)",
+            border: "1px solid var(--color-border, #e2e8f0)",
+            borderRadius: "12px",
+            padding: "1.1rem"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
+              <h3 style={{ fontSize: "0.95rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "6px", margin: 0, color: "var(--color-text-heading)" }}>
+                <Database size={16} color="#0f766e" /> SAP Objects Catalog / SE03 ({detail?.objects.length || 0} Objects)
+              </h3>
+            </div>
+            <div className="object-list se03-object-list">
+              {groupObjectsBySe03Label(detail?.objects || []).map((group) => (
+                <div className="object-group" key={group.key} style={{ marginBottom: "1rem" }}>
+                  <div className="object-group-title" style={{ background: "var(--color-bg-subtle, #f1f5f9)", padding: "8px 12px", borderRadius: "6px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <strong>{group.label}</strong>
+                    <code style={{ fontSize: "0.75rem", background: "var(--color-bg-elevated, #ffffff)", padding: "2px 6px", borderRadius: "4px", border: "1px solid var(--color-border, #cbd5e1)" }}>{group.key}</code>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "8px", marginTop: "8px" }}>
+                    {group.objects.map((object) => (
+                      <div className="object-row se03-object-row" key={`${object.trkorr}-${object.position}`} style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid var(--color-border, #e2e8f0)", background: "var(--color-bg-elevated, #ffffff)" }}>
+                        <code>{object.pgmid} {object.object_type}</code>
+                        <div>
+                          <strong style={{ fontSize: "0.85rem", wordBreak: "break-word" }}>{object.object_name}</strong>
+                          <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>{object.trkorr} - {object.position}</span>
+                          <small>{labelDiffReadiness(object.diff_readiness)}</small>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
-              {detail && detail.objects.length === 0 ? <div className="empty">No objects cached for this CR.</div> : null}
+              {detail && detail.objects.length === 0 ? <div className="empty" style={{ padding: "20px", textAlign: "center", color: "var(--color-text-muted)" }}>No objects cached for this CR.</div> : null}
             </div>
-          </section>
-        </section>
-        ) : null}
-      </div>
+          </div>
+        </div>
+        )}
+      </UIModal>
       </section>
     </>
   );
@@ -1942,6 +2064,7 @@ function IssueDisplay({
   pagination,
   selectedId,
   detail,
+  loadingDetail,
   onFilters,
   onSelect,
   onCloseDetail,
@@ -1957,6 +2080,7 @@ function IssueDisplay({
   pagination: { page: number; pageSize: number; total: number; totalPages: number };
   selectedId: number | null;
   detail: IssueDetail | null;
+  loadingDetail?: boolean;
   onFilters: (filters: IssueFilters) => void;
   onSelect: (value: number) => void;
   onCloseDetail: () => void;
@@ -2037,7 +2161,7 @@ function IssueDisplay({
         />
       </section>
 
-      <div className={`report-layout issue-layout controlled-dual-pane ${hasDetail ? "" : "detail-closed"}`}>
+      <div className="report-layout issue-layout controlled-dual-pane detail-closed">
         <section className="table-panel report-table-panel issue-table-panel">
           <div className="table-scroll">
             <table className="record-table issue-record-table" style={{ width: issueTableWidth, minWidth: "100%" }}>
@@ -2097,162 +2221,210 @@ function IssueDisplay({
             <button className="secondary" onClick={() => onPage(pagination.totalPages)} disabled={pagination.page >= pagination.totalPages}><ArrowRight size={14} /> Last</button>
           </div>
         </section>
+      </div>
 
-        {hasDetail ? (
-        <section className="detail-panel report-detail-panel issue-detail-panel">
-          <div className="detail-heading issue-summary-heading">
-            <div className="issue-summary-toprow">
-              <div className="issue-summary-topline">
-                <h2>{selectedIssue?.issue_key || "Select Issue"}</h2>
-                {selectedIssue ? <Status value={selectedIssue.issue_status} /> : null}
-              </div>
-              <div className="detail-header-actions">
-                {selectedIssue ? (
-                  <div className="detail-action-menu">
-                    <button className="detail-icon-action" type="button" onClick={() => setDetailMenuOpen((current) => !current)} aria-label="Issue actions">
-                      <MoreVertical size={18} />
+      <UIModal
+        isOpen={hasDetail}
+        onClose={onCloseDetail}
+        title={selectedIssue?.issue_key || "Issue Detail"}
+        subtitle={selectedIssue?.issue_name}
+        type="primary"
+        maxWidth="980px"
+        hideFooter
+      >
+        {loadingDetail ? (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "260px", gap: "14px", color: "var(--color-text-muted)" }}>
+            <Loader2 className="animate-spin" size={34} color="#0f766e" />
+            <span style={{ fontSize: "0.925rem", fontWeight: "600", color: "#0f766e" }}>Loading Issue detail & linked CRs...</span>
+          </div>
+        ) : (
+          <div className="cr-modal-content-animated" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+            {/* Header Actions & Summary Strip Banner */}
+            <div style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.85rem",
+              background: "var(--color-bg-subtle, #f8fafc)",
+              padding: "1rem 1.25rem",
+              borderRadius: "12px",
+              border: "1px solid var(--color-border, #e2e8f0)"
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <span style={{ fontSize: "1.1rem", fontWeight: "700", color: "var(--color-text-heading)" }}>
+                    {selectedIssue?.issue_key}
+                  </span>
+                  {selectedIssue && <Status value={selectedIssue.issue_status} />}
+                </div>
+
+                {/* Actions Dropdown */}
+                {selectedIssue && (
+                  <div className="detail-action-menu" style={{ position: "relative" }}>
+                    <button
+                      className="primary"
+                      type="button"
+                      onClick={() => setDetailMenuOpen((current) => !current)}
+                      style={{ display: "flex", alignItems: "center", gap: "6px", padding: "6px 14px", fontSize: "0.85rem", background: "#0f766e", color: "#ffffff", borderRadius: "8px", border: "none", cursor: "pointer" }}
+                    >
+                      <span>Actions</span>
+                      <ChevronDown size={15} />
                     </button>
-                    {detailMenuOpen ? (
-                      <div className="detail-action-menu-list">
-                        <button type="button" onClick={() => {
-                          setDetailMenuOpen(false);
-                          onChangeIssue(selectedIssue.id);
-                        }}>
-                          <PencilLine size={15} /> Change
+                    {detailMenuOpen && (
+                      <div className="detail-action-menu-list" style={{ right: 0, top: "100%", marginTop: "4px" }}>
+                        <button type="button" onClick={() => { setDetailMenuOpen(false); onCloseDetail(); onChangeIssue(selectedIssue.id); }}>
+                          <PencilLine size={15} /> Change Issue
                         </button>
-                        {canGenerateCrForm ? (
-                          <button type="button" onClick={() => {
-                            setDetailMenuOpen(false);
-                            onGenerateCrForm(selectedIssue.id);
-                          }}>
+                        {canGenerateCrForm && (
+                          <button type="button" onClick={() => { setDetailMenuOpen(false); onGenerateCrForm(selectedIssue.id); }}>
                             <FileSearch size={15} /> Generate CR Form
                           </button>
-                        ) : null}
-                        <button type="button" disabled={selectedIssue.issue_status === "cancelled"} onClick={() => {
-                          setDetailMenuOpen(false);
-                          onIssueAction(selectedIssue.id, "cancel");
-                        }}>
-                          <XCircle size={15} /> Cancel
+                        )}
+                        <button type="button" disabled={selectedIssue.issue_status === "cancelled"} onClick={() => { setDetailMenuOpen(false); onIssueAction(selectedIssue.id, "cancel"); }}>
+                          <XCircle size={15} /> Cancel Issue
                         </button>
-                        <button type="button" className="danger-menu-item" onClick={() => {
-                          setDetailMenuOpen(false);
-                          onIssueAction(selectedIssue.id, "delete");
-                        }}>
-                          <X size={15} /> Delete
+                        <button type="button" className="danger-menu-item" onClick={() => { setDetailMenuOpen(false); onIssueAction(selectedIssue.id, "delete"); }}>
+                          <X size={15} /> Delete Issue
                         </button>
                       </div>
-                    ) : null}
+                    )}
                   </div>
-                ) : null}
-                <button className="detail-icon-close" type="button" onClick={onCloseDetail} aria-label="Close detail">
-                  <X size={18} />
-                </button>
+                )}
               </div>
+
+              <SummaryStrip items={[
+                { label: "Email Subject", value: detail?.issue?.email_subject || "-", wide: true },
+                { label: "Requester", value: <DisplayNameList value={selectedIssue?.requester_name_snapshot} /> },
+                { label: "ABAPer", value: <DisplayNameList value={selectedIssue?.abaper_name_snapshot} /> },
+                { label: "Created", value: formatIssueTimestamp(selectedIssue?.create_issue_date) },
+                {
+                  label: "GLPI",
+                  value: primaryGlpiTicket
+                    ? <a className="summary-strip-link" href={glpiUrl(primaryGlpiTicket)} target="_blank" rel="noreferrer">{primaryGlpiTicket}</a>
+                    : "-"
+                },
+                { label: "CR Helpdesk No.", value: formatCrHelpdeskNumbers(detail) || selectedIssue?.primary_cr_helpdesk_no || "-" }
+              ]} />
             </div>
-            <p className="issue-summary-description">{selectedIssue?.issue_name}</p>
-          </div>
 
-          <SummaryStrip items={[
-            { label: "Email Subject", value: detail?.issue?.email_subject || "-", wide: true },
-            { label: "Requester", value: <DisplayNameList value={selectedIssue?.requester_name_snapshot} /> },
-            { label: "ABAPer", value: <DisplayNameList value={selectedIssue?.abaper_name_snapshot} /> },
-            { label: "Created", value: formatIssueTimestamp(selectedIssue?.create_issue_date) },
-            {
-              label: "GLPI",
-              value: primaryGlpiTicket
-                ? <a className="summary-strip-link" href={glpiUrl(primaryGlpiTicket)} target="_blank" rel="noreferrer">{primaryGlpiTicket}</a>
-                : "-"
-            },
-            { label: "CR Helpdesk No.", value: formatCrHelpdeskNumbers(detail) || selectedIssue?.primary_cr_helpdesk_no || "-" }
-          ]} />
-
-          {detail?.issue?.issue_status === "cancelled" ? (
-            <section className="issue-cancel-box">
-              <strong>Cancel Reason</strong>
-              <span>{detail.issue.cancelled_reason || "cancelled"}</span>
-            </section>
-          ) : null}
-
-          {detailIncompleteItems.length ? (
-            <section className="issue-missing-box">
-              <strong>Incomplete items</strong>
-              <IncompleteGroupCards groups={detailIncompleteGroups} />
-            </section>
-          ) : null}
-
-          <h3>Analysis</h3>
-          <div className="analysis-block">
-            <span>Problem</span>
-            <p>{detail?.issue?.problem_analysis || "-"}</p>
-            <span>Impact</span>
-            <p>{detail?.issue?.impact_analysis || "-"}</p>
-          </div>
-
-          <h3>CR Links</h3>
-          <div className="rows">
-            {(detail?.crLinks || []).map((link) => (
-              <button className="row issue-link-row issue-link-button" type="button" key={link.id} onClick={() => onOpenCr(link)}>
-                <span>{link.trkorr}</span>
-                <small>{link.cr_description_snapshot || "-"}</small>
-              </button>
-            ))}
-            {detail && detail.crLinks.length === 0 ? <div className="empty">No CR linked.</div> : null}
-          </div>
-
-          <h3>Participants</h3>
-          <div className="rows compact-participants">
-            {participantGroups(detail?.participants || []).map((group) => (
-              <section className="participant-phase" key={group.title}>
-                <strong>{group.title}</strong>
-                {group.roles.map((role) => {
-                  const matches = group.participants.filter((participant) => participant.role === role);
-                  return matches.length ? matches.map((participant) => (
-                    <div className="row participant-row" key={participant.id}>
-                      <span>{formatParticipantRole(role)}{participant.is_primary ? " *" : ""}</span>
-                      <small>{participant.full_name || participant.person_name_snapshot}{participant.nickname ? ` (${participant.nickname})` : ""}</small>
-                      <small>{participant.department || "-"}</small>
-                    </div>
-                  )) : (
-                    <div className="row participant-row empty-participant" key={role}>
-                      <span>{formatParticipantRole(role)}</span>
-                      <small>-</small>
-                      <small>-</small>
-                    </div>
-                  );
-                })}
+            {/* Incomplete Warning if any */}
+            {detailIncompleteItems.length ? (
+              <section className="issue-missing-box" style={{ margin: 0, borderRadius: "10px" }}>
+                <strong>Incomplete items</strong>
+                <IncompleteGroupCards groups={detailIncompleteGroups} />
               </section>
-            ))}
-            {detail && detail.participants.length === 0 ? <div className="empty">No participants cached.</div> : null}
-          </div>
+            ) : null}
 
-          <h3>Timeline Issue</h3>
-          <div className="issue-timeline">
-            {issueTimelineEvents(detail).map((event) => (
-              <div className={`timeline-event ${event.date ? "filled" : "missing"}`} key={`${event.source}-${event.label}`}>
-                <span className="timeline-dot" />
-                <div>
-                  <small>{event.date ? formatIssueTimestamp(event.date, event.time) : "-"}</small>
-                  <strong>{event.source} - {event.label}</strong>
+            {detail?.issue?.issue_status === "cancelled" ? (
+              <section className="issue-cancel-box" style={{ margin: 0, borderRadius: "10px" }}>
+                <strong>Cancel Reason</strong>
+                <span>{detail.issue.cancelled_reason || "cancelled"}</span>
+              </section>
+            ) : null}
+
+            {/* 2-Column Grid Layout */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", gap: "1.25rem", alignItems: "start" }}>
+              
+              {/* Left Column: Analysis, Linked CRs, Participants */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+                <div style={{ background: "var(--color-bg-elevated, #ffffff)", border: "1px solid var(--color-border, #e2e8f0)", borderRadius: "12px", padding: "1.1rem" }}>
+                  <h3 style={{ fontSize: "0.95rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "6px", margin: "0 0 0.85rem 0", color: "var(--color-text-heading)" }}>
+                    <Sparkles size={16} color="#0f766e" /> Analysis & Impact
+                  </h3>
+                  <div className="analysis-block">
+                    <span>Problem</span>
+                    <p>{detail?.issue?.problem_analysis || "-"}</p>
+                    <span>Impact</span>
+                    <p>{detail?.issue?.impact_analysis || "-"}</p>
+                  </div>
+                </div>
+
+                <div style={{ background: "var(--color-bg-elevated, #ffffff)", border: "1px solid var(--color-border, #e2e8f0)", borderRadius: "12px", padding: "1.1rem" }}>
+                  <h3 style={{ fontSize: "0.95rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "6px", margin: "0 0 0.85rem 0", color: "var(--color-text-heading)" }}>
+                    <Database size={16} color="#0f766e" /> Linked CR Transports ({detail?.crLinks.length || 0})
+                  </h3>
+                  <div className="rows">
+                    {(detail?.crLinks || []).map((link) => (
+                      <button className="row issue-link-row issue-link-button" type="button" key={link.id} onClick={() => { onCloseDetail(); onOpenCr(link); }}>
+                        <span>{link.trkorr}</span>
+                        <small>{link.cr_description_snapshot || "-"}</small>
+                      </button>
+                    ))}
+                    {detail && detail.crLinks.length === 0 ? <div className="empty" style={{ padding: "12px", textAlign: "center", color: "var(--color-text-muted)", fontSize: "0.85rem" }}>No CR linked.</div> : null}
+                  </div>
+                </div>
+
+                <div style={{ background: "var(--color-bg-elevated, #ffffff)", border: "1px solid var(--color-border, #e2e8f0)", borderRadius: "12px", padding: "1.1rem" }}>
+                  <h3 style={{ fontSize: "0.95rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "6px", margin: "0 0 0.85rem 0", color: "var(--color-text-heading)" }}>
+                    <Users size={16} color="#0f766e" /> Issue Participants ({detail?.participants.length || 0})
+                  </h3>
+                  <div className="rows compact-participants">
+                    {participantGroups(detail?.participants || []).map((group) => (
+                      <section className="participant-phase" key={group.title}>
+                        <strong>{group.title}</strong>
+                        {group.roles.map((role) => {
+                          const matches = group.participants.filter((participant) => participant.role === role);
+                          return matches.length ? matches.map((participant) => (
+                            <div className="row participant-row" key={participant.id}>
+                              <span>{formatParticipantRole(role)}{participant.is_primary ? " *" : ""}</span>
+                              <small>{participant.full_name || participant.person_name_snapshot}{participant.nickname ? ` (${participant.nickname})` : ""}</small>
+                              <small>{participant.department || "-"}</small>
+                            </div>
+                          )) : (
+                            <div className="row participant-row empty-participant" key={role}>
+                              <span>{formatParticipantRole(role)}</span>
+                              <small>-</small>
+                              <small>-</small>
+                            </div>
+                          );
+                        })}
+                      </section>
+                    ))}
+                    {detail && detail.participants.length === 0 ? <div className="empty" style={{ padding: "12px", textAlign: "center", color: "var(--color-text-muted)", fontSize: "0.85rem" }}>No participants cached.</div> : null}
+                  </div>
                 </div>
               </div>
-            ))}
-          </div>
 
-          <h3>Lifecycle CR</h3>
-          <div className="issue-timeline cr-lifecycle-timeline">
-            {issueCrLifecycleEvents(detail).map((event) => (
-              <div className={`timeline-event ${event.date ? "filled" : "missing"}`} key={`${event.source}-${event.label}`}>
-                <span className="timeline-dot" />
-                <div>
-                  <small>{event.date ? formatIssueTimestamp(event.date, event.time) : "-"}</small>
-                  <strong>{event.label}</strong>
+              {/* Right Column: Timelines */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+                <div style={{ background: "var(--color-bg-elevated, #ffffff)", border: "1px solid var(--color-border, #e2e8f0)", borderRadius: "12px", padding: "1.1rem" }}>
+                  <h3 style={{ fontSize: "0.95rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "6px", margin: "0 0 0.85rem 0", color: "var(--color-text-heading)" }}>
+                    <ShieldCheck size={16} color="#0f766e" /> Timeline Issue
+                  </h3>
+                  <div className="issue-timeline">
+                    {issueTimelineEvents(detail).map((event) => (
+                      <div className={`timeline-event ${event.date ? "filled" : "missing"}`} key={`${event.source}-${event.label}`}>
+                        <span className="timeline-dot" />
+                        <div>
+                          <small>{event.date ? formatIssueTimestamp(event.date, event.time) : "-"}</small>
+                          <strong>{event.source} - {event.label}</strong>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ background: "var(--color-bg-elevated, #ffffff)", border: "1px solid var(--color-border, #e2e8f0)", borderRadius: "12px", padding: "1.1rem" }}>
+                  <h3 style={{ fontSize: "0.95rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "6px", margin: "0 0 0.85rem 0", color: "var(--color-text-heading)" }}>
+                    <ShieldCheck size={16} color="#0f766e" /> Lifecycle CR Transport
+                  </h3>
+                  <div className="issue-timeline cr-lifecycle-timeline">
+                    {issueCrLifecycleEvents(detail).map((event) => (
+                      <div className={`timeline-event ${event.date ? "filled" : "missing"}`} key={`${event.source}-${event.label}`}>
+                        <span className="timeline-dot" />
+                        <div>
+                          <small>{event.date ? formatIssueTimestamp(event.date, event.time) : "-"}</small>
+                          <strong>{event.label}</strong>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
-            ))}
+
+            </div>
           </div>
-        </section>
-        ) : null}
-      </div>
+        )}
+      </UIModal>
     </section>
   );
 }

@@ -3909,6 +3909,7 @@ tr.selected td:first-child {
 
 .ui-modal-card {
   width: 100%;
+  max-height: 90vh;
   background: #ffffff;
   border: 1px solid var(--color-border-soft, #e2e8f0);
   border-radius: 14px;
@@ -3985,7 +3986,12 @@ tr.selected td:first-child {
 .ui-modal-body {
   padding: 20px 24px;
   overflow-y: auto;
-  max-height: calc(85vh - 140px);
+  flex: 1;
+  max-height: calc(90vh - 120px);
+}
+
+.ui-modal-card.hide-footer .ui-modal-body {
+  max-height: calc(90vh - 75px);
 }
 
 .ui-modal-footer {
@@ -4838,3 +4844,28 @@ body.dark-theme .incomplete-item-list button:hover {
   padding-bottom: 24px !important;
   box-sizing: border-box !important;
 }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes crModalFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.cr-modal-content-animated {
+  animation: crModalFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+

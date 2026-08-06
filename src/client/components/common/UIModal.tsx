@@ -98,7 +98,7 @@ export function UIModal({
       role="presentation"
     >
       <div
-        className="ui-modal-card"
+        className={`ui-modal-card ${hideFooter ? "hide-footer" : ""}`}
         role="dialog"
         aria-modal="true"
         style={{ maxWidth }}
