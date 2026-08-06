@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
-import { requireAdmin } from "../auth/middleware.js";
+import { requireAdmin, resolveAuthUser } from "../auth/middleware.js";
+import { recordActivityLog } from "../db/auditRepository.js";
 
 export const adminRoutes = Router();
 
@@ -25,6 +26,15 @@ adminRoutes.post("/people", async (req, res, next) => {
       VALUES ($1, $2, $3, 'IT', true, false, false, true, false, false, false)
       RETURNING id, full_name, nickname, email, department, is_active, is_approver, is_abaper, is_requester, is_tester, is_evaluator, is_transporter
     `, [full_name || `New Person ${Date.now()}`, nickname || '', email || null]);
+    const user = await resolveAuthUser(req);
+    await recordActivityLog({
+      activityType: "admin",
+      action: "create_person",
+      username: user?.username || "system",
+      userId: user?.id || null,
+      description: `Added new person "${rows[0].full_name || rows[0].nickname}" (ID: ${rows[0].id})`,
+      ipAddress: req.ip
+    });
     res.json(rows[0]);
   } catch (error) {
     next(error);
@@ -64,6 +74,16 @@ adminRoutes.put("/people/:id", async (req, res, next) => {
       is_transporter ?? null
     ]);
     
+    const user = await resolveAuthUser(req);
+    await recordActivityLog({
+      activityType: "admin",
+      action: "update_person",
+      username: user?.username || "system",
+      userId: user?.id || null,
+      description: `Updated master data person ID ${id}`,
+      ipAddress: req.ip
+    });
+
     res.json({ ok: true });
   } catch (error) {
     next(error);
@@ -74,6 +94,15 @@ adminRoutes.delete("/people/:id", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     await pool.query(`DELETE FROM issue_people WHERE id = $1`, [id]);
+    const user = await resolveAuthUser(req);
+    await recordActivityLog({
+      activityType: "admin",
+      action: "delete_person",
+      username: user?.username || "system",
+      userId: user?.id || null,
+      description: `Deleted master data person ID ${id}`,
+      ipAddress: req.ip
+    });
     res.json({ ok: true });
   } catch (error) {
     next(error);
@@ -101,6 +130,15 @@ adminRoutes.post("/group-emails", async (req, res, next) => {
       VALUES ($1, $2, true)
       RETURNING id, email_address, name, is_active, created_at
     `, [email_address, name || ""]);
+    const user = await resolveAuthUser(req);
+    await recordActivityLog({
+      activityType: "admin",
+      action: "create_group_email",
+      username: user?.username || "system",
+      userId: user?.id || null,
+      description: `Added group email "${email_address}"`,
+      ipAddress: req.ip
+    });
     res.json(rows[0]);
   } catch (error) {
     next(error);
@@ -119,6 +157,15 @@ adminRoutes.put("/group-emails/:id", async (req, res, next) => {
           updated_at = now()
       WHERE id = $1
     `, [id, email_address ?? null, name ?? null, is_active ?? null]);
+    const user = await resolveAuthUser(req);
+    await recordActivityLog({
+      activityType: "admin",
+      action: "update_group_email",
+      username: user?.username || "system",
+      userId: user?.id || null,
+      description: `Updated group email ID ${id}`,
+      ipAddress: req.ip
+    });
     res.json({ ok: true });
   } catch (error) {
     next(error);
@@ -129,6 +176,15 @@ adminRoutes.delete("/group-emails/:id", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     await pool.query(`DELETE FROM issue_group_emails WHERE id = $1`, [id]);
+    const user = await resolveAuthUser(req);
+    await recordActivityLog({
+      activityType: "admin",
+      action: "delete_group_email",
+      username: user?.username || "system",
+      userId: user?.id || null,
+      description: `Deleted group email ID ${id}`,
+      ipAddress: req.ip
+    });
     res.json({ ok: true });
   } catch (error) {
     next(error);
@@ -161,6 +217,16 @@ adminRoutes.put("/settings", async (req, res, next) => {
       `, [key, settings[key]]);
     }
     
+    const user = await resolveAuthUser(req);
+    await recordActivityLog({
+      activityType: "admin",
+      action: "update_settings",
+      username: user?.username || "system",
+      userId: user?.id || null,
+      description: `Updated system settings (${keys.length} keys)`,
+      ipAddress: req.ip
+    });
+
     res.json({ ok: true });
   } catch (error) {
     next(error);

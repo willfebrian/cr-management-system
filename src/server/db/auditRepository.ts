@@ -1,6 +1,6 @@
 import { pool } from "./pool.js";
 
-export type ActivityType = "sync" | "issue" | "project" | "master_data" | "setting" | "auth";
+export type ActivityType = "sync" | "issue" | "project" | "master_data" | "setting" | "auth" | "admin";
 
 export type ActivityLogInput = {
   activityType: ActivityType;

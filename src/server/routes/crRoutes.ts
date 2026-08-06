@@ -225,6 +225,7 @@ crRoutes.get("/issues/:id/templates/:kind", async (req, res, next) => {
 });
 
 import { recordActivityLog } from "../db/auditRepository.js";
+import { resolveAuthUser } from "../auth/middleware.js";
 
 crRoutes.post("/issues", async (req, res, next) => {
   try {
@@ -232,12 +233,13 @@ crRoutes.post("/issues", async (req, res, next) => {
     const isNew = !req.body?.id;
     const result = await saveIssue(req.body || {});
     const issueKey = result.issue ? `${result.issue.issue_no}-${result.issue.sub_issue_no}` : (req.body?.issueName || "");
-    const username = (req as any).user?.username || "system";
+    const user = await resolveAuthUser(req);
+    const username = user?.username || "system";
     await recordActivityLog({
       activityType: "issue",
       action: isNew ? "create_issue" : "update_issue",
       username,
-      userId: (req as any).user?.id || null,
+      userId: user?.id || null,
       description: isNew ? `Created issue ${issueKey} ("${req.body?.issueName || ''}")` : `Updated issue ${issueKey}`,
       ipAddress: req.ip
     });
@@ -253,12 +255,13 @@ crRoutes.put("/issues/:id", async (req, res, next) => {
     const id = numberQuery(req.params.id, 0);
     const result = await saveIssue({ ...(req.body || {}), id });
     const issueKey = result.issue ? `${result.issue.issue_no}-${result.issue.sub_issue_no}` : `ID ${id}`;
-    const username = (req as any).user?.username || "system";
+    const user = await resolveAuthUser(req);
+    const username = user?.username || "system";
     await recordActivityLog({
       activityType: "issue",
       action: "update_issue",
       username,
-      userId: (req as any).user?.id || null,
+      userId: user?.id || null,
       description: `Updated issue ${issueKey}`,
       ipAddress: req.ip
     });
@@ -274,12 +277,13 @@ crRoutes.post("/issues/:id/cancel", async (req, res, next) => {
     const id = numberQuery(req.params.id, 0);
     const reason = stringQuery(req.body?.reason) || "";
     const result = await cancelIssue(id, reason);
-    const username = (req as any).user?.username || "system";
+    const user = await resolveAuthUser(req);
+    const username = user?.username || "system";
     await recordActivityLog({
       activityType: "issue",
       action: "cancel_issue",
       username,
-      userId: (req as any).user?.id || null,
+      userId: user?.id || null,
       description: `Cancelled issue ID ${id}${reason ? ` (Reason: ${reason})` : ""}`,
       ipAddress: req.ip
     });
@@ -294,12 +298,13 @@ crRoutes.delete("/issues/:id", async (req, res, next) => {
     await assertDatabaseConfigured();
     const id = numberQuery(req.params.id, 0);
     const result = await deleteIssue(id);
-    const username = (req as any).user?.username || "system";
+    const user = await resolveAuthUser(req);
+    const username = user?.username || "system";
     await recordActivityLog({
       activityType: "issue",
       action: "delete_issue",
       username,
-      userId: (req as any).user?.id || null,
+      userId: user?.id || null,
       description: `Deleted issue ID ${id}`,
       ipAddress: req.ip
     });
@@ -321,12 +326,13 @@ crRoutes.post("/sync/cr", async (req, res, next) => {
       fromDate: req.body?.fromDate,
       toDate: req.body?.toDate
     });
-    const username = (req as any).user?.username || "system";
+    const user = await resolveAuthUser(req);
+    const username = user?.username || "system";
     await recordActivityLog({
       activityType: "sync",
       action: "sync_cr",
       username,
-      userId: (req as any).user?.id || null,
+      userId: user?.id || null,
       description: `Executed SAP CR sync for systems [${systemCodes.join(", ")}] (Result: ${result.ok ? "Success" : "Failed"}, Requests: ${result.requestCount || 0})`,
       metadata: { ok: result.ok, requestCount: result.requestCount, systems: systemCodes },
       ipAddress: req.ip
