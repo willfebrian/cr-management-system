@@ -3,7 +3,7 @@ import { applyCustomFontSize } from "../utils/fontSize";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Ban, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Database, FileOutput, FileSearch, FolderKanban, KeyRound, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Trash2, Users, X, XCircle } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchAdminSettings, fetchCrDetail, fetchCrList, fetchDashboard, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind } from "../api";
+import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchAdminSettings, fetchCrDetail, fetchCrList, fetchDashboard, fetchGlpiTicketDetail, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind, type GlpiTicketDetail } from "../api";
 import { IncompleteGroupCards } from "../components/IncompleteGroupCards";
 import { DisplayNameList } from "../components/DisplayNameList";
 import { DEFAULT_ISSUE_COLUMNS, IssueColumnMenu, type IssueColumnKey } from "../components/IssueColumnMenu";
@@ -2481,6 +2481,9 @@ function IssueEditor({
   const [expandedPhases, setExpandedPhases] = useState<ExpandedIssueSections>({ initiation: true, dev: true, qa: true, prd: true });
   const [fetchingEmail, setFetchingEmail] = useState(false);
   const [fetchedEmailContext, setFetchedEmailContext] = useState<string | null>(null);
+  const [fetchingGlpi, setFetchingGlpi] = useState(false);
+  const [fetchedGlpiContext, setFetchedGlpiContext] = useState<GlpiTicketDetail | null>(null);
+  const fetchedGlpiTicketRef = useRef<number | null>(null);
   const [generatingAi, setGeneratingAi] = useState(false);
   const [showAiOverwriteModal, setShowAiOverwriteModal] = useState(false);
   const [aiOverwriteSelections, setAiOverwriteSelections] = useState<{
@@ -2488,6 +2491,52 @@ function IssueEditor({
     problemAnalysis: boolean;
     impactAnalysis: boolean;
   }>({ issueName: true, problemAnalysis: true, impactAnalysis: true });
+
+  async function handleFetchGlpiContent(ticketNoOverride?: number | string) {
+    const firstTicket = (form.glpiTickets || "").split(/[,;\s]+/)[0] || "";
+    const rawNo = ticketNoOverride ?? firstTicket;
+    const ticketNo = Number(String(rawNo || "").replace(/[^\d]/g, ""));
+    if (!ticketNo) {
+      onNotify?.("error", "Please enter a valid GLPI Ticket Number first.");
+      setFetchedGlpiContext(null);
+      return;
+    }
+    setFetchingGlpi(true);
+    try {
+      const res = await fetchGlpiTicketDetail(ticketNo);
+      if (!res.ok || !res.ticket) {
+        setFetchedGlpiContext(null);
+        onNotify?.("error", `GLPI Ticket #${ticketNo} not found in GLPI database.`);
+        return;
+      }
+      setFetchedGlpiContext(res.ticket);
+
+      // Auto fill issue name if empty
+      if (!form.issueName?.trim() && res.ticket.title) {
+        update("issueName", res.ticket.title);
+      }
+
+      onNotify?.("success", `Fetched GLPI Ticket #${ticketNo} details & context successfully! AI Analysis is enabled.`);
+    } catch (err) {
+      setFetchedGlpiContext(null);
+      const msg = err instanceof Error ? err.message : String(err);
+      onNotify?.("error", `Failed to fetch GLPI Ticket #${ticketNo}: ${msg}`);
+    } finally {
+      setFetchingGlpi(false);
+    }
+  }
+
+  // Auto-fetch GLPI ticket detail when GLPI number is present or changed
+  const primaryGlpiNo = (form.glpiTickets || "").split(/[,;\s]+/)[0] || "";
+  useEffect(() => {
+    if (primaryGlpiNo) {
+      const num = Number(String(primaryGlpiNo).replace(/[^\d]/g, ""));
+      if (num && fetchedGlpiTicketRef.current !== num) {
+        fetchedGlpiTicketRef.current = num;
+        handleFetchGlpiContent(num);
+      }
+    }
+  }, [primaryGlpiNo]);
 
   async function handleFetchEmailContent() {
     if (!form.emailSubject?.trim()) {
@@ -2521,10 +2570,35 @@ function IssueEditor({
   }
 
   async function executeAiGeneration(selections: { issueName: boolean; problemAnalysis: boolean; impactAnalysis: boolean }) {
-    if (!fetchedEmailContext) return;
+    let combinedContext = "";
+    if (fetchedEmailContext) {
+      combinedContext += `=== OUTLOOK EMAIL CONTEXT ===\n${fetchedEmailContext}\n\n`;
+    }
+    if (fetchedGlpiContext) {
+      combinedContext += `=== GLPI TICKET #${fetchedGlpiContext.ticketNumber} CONTEXT ===\n`;
+      combinedContext += `Title: ${fetchedGlpiContext.title}\nOpened Date: ${fetchedGlpiContext.date}\nDescription:\n${fetchedGlpiContext.content}\n\n`;
+      if (fetchedGlpiContext.technicians?.length) {
+        combinedContext += `Technicians: ${fetchedGlpiContext.technicians.map((t) => t.fullName).join(", ")}\n`;
+      }
+      if (fetchedGlpiContext.requesters?.length) {
+        combinedContext += `Requesters: ${fetchedGlpiContext.requesters.map((r) => r.fullName).join(", ")}\n`;
+      }
+      if (fetchedGlpiContext.followups?.length) {
+        combinedContext += `\nFollowup / Discussion History:\n${fetchedGlpiContext.followups.map((f) => `[${f.date}] ${f.author}: ${f.content}`).join("\n")}\n`;
+      }
+      if (fetchedGlpiContext.solutions?.length) {
+        combinedContext += `\nSolution:\n${fetchedGlpiContext.solutions.map((s) => `[${s.date}] ${s.solver}: ${s.content}`).join("\n")}\n`;
+      }
+    }
+
+    if (!combinedContext.trim()) {
+      onNotify?.("error", "No context available. Please fetch Email or GLPI content first.");
+      return;
+    }
+
     setGeneratingAi(true);
     try {
-      const result = await generateAnalysis(fetchedEmailContext, form.emailSubject, form.issueName);
+      const result = await generateAnalysis(combinedContext, form.emailSubject, form.issueName);
       
       let updatedCount = 0;
       if (selections.issueName && result.issueName) {
@@ -2554,8 +2628,8 @@ function IssueEditor({
   }
 
   async function handleGenerateAiAnalysis() {
-    if (!fetchedEmailContext) {
-      onNotify?.("error", "No email context available. Please fetch email content first.");
+    if (!fetchedEmailContext && !fetchedGlpiContext) {
+      onNotify?.("error", "No email or GLPI context available. Please fetch Email or GLPI content first.");
       return;
     }
     
@@ -2935,6 +3009,20 @@ function IssueEditor({
           <span className="phase-title-actions" style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginLeft: "auto" }}>
             {expandedPhases.initiation && (
               <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+                {/* Context Status Pills (Checkmarks) */}
+                <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginRight: "0.25rem" }}>
+                  <span className={`context-status-pill ${fetchedEmailContext ? "active" : "inactive"}`} title={fetchedEmailContext ? "Email context fetched & ready" : "No email context fetched"}>
+                    {fetchedEmailContext ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
+                    {fetchedEmailContext ? "Email Context" : "No Email"}
+                  </span>
+
+                  <span className={`context-status-pill ${fetchedGlpiContext ? "active" : "inactive"}`} title={fetchedGlpiContext ? `GLPI #${fetchedGlpiContext.ticketNumber} context fetched` : "No GLPI context fetched"}>
+                    {fetchedGlpiContext ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
+                    {fetchedGlpiContext ? `GLPI #${fetchedGlpiContext.ticketNumber}` : "No GLPI"}
+                  </span>
+                </div>
+
+                {/* Fetch Email Button */}
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); handleFetchEmailContent(); }}
@@ -2945,25 +3033,39 @@ function IssueEditor({
                   {fetchingEmail ? <Loader2 className="spinner" size={14} /> : <Mail size={14} />}
                   {fetchingEmail ? "Fetching..." : "Fetch Email"}
                 </button>
+
+                {/* Fetch GLPI Button */}
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); handleFetchGlpiContent(); }}
+                  disabled={formDisabled || fetchingGlpi || !form.glpiTickets?.trim()}
+                  style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.5rem 0.75rem", borderRadius: "6px", background: "#0f766e", color: "white", border: "none", cursor: (formDisabled || fetchingGlpi || !form.glpiTickets?.trim()) ? "not-allowed" : "pointer", fontSize: "0.8125rem", fontWeight: "600", whiteSpace: "nowrap", transition: "all 0.2s", opacity: (formDisabled || fetchingGlpi || !form.glpiTickets?.trim()) ? 0.6 : 1 }}
+                  title="Fetch GLPI ticket details & discussion context"
+                >
+                  {fetchingGlpi ? <Loader2 className="spinner" size={14} /> : <Search size={14} />}
+                  {fetchingGlpi ? "Fetching..." : "Fetch GLPI"}
+                </button>
+
+                {/* Generate AI Button */}
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); handleGenerateAiAnalysis(); }}
-                  disabled={formDisabled || !fetchedEmailContext || generatingAi}
+                  disabled={formDisabled || (!fetchedEmailContext && !fetchedGlpiContext) || generatingAi}
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
                     gap: "0.375rem",
                     padding: "0.5rem 0.75rem",
                     borderRadius: "6px",
-                    background: (!fetchedEmailContext || formDisabled || generatingAi) ? "var(--color-bg-subtle, #e5e7eb)" : "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
-                    color: (!fetchedEmailContext || formDisabled || generatingAi) ? "var(--color-text-muted, #9ca3af)" : "#ffffff",
+                    background: (!fetchedEmailContext && !fetchedGlpiContext || formDisabled || generatingAi) ? "var(--color-bg-subtle, #e5e7eb)" : "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
+                    color: (!fetchedEmailContext && !fetchedGlpiContext || formDisabled || generatingAi) ? "var(--color-text-muted, #9ca3af)" : "#ffffff",
                     border: "none",
-                    cursor: (!fetchedEmailContext || formDisabled || generatingAi) ? "not-allowed" : "pointer",
+                    cursor: (!fetchedEmailContext && !fetchedGlpiContext || formDisabled || generatingAi) ? "not-allowed" : "pointer",
                     fontSize: "0.8125rem",
                     fontWeight: "600",
                     transition: "all 0.2s"
                   }}
-                  title={!fetchedEmailContext ? "Fetch email content first to enable AI generation" : "Generate Problem & Impact Analysis using OpenRouter AI"}
+                  title={(!fetchedEmailContext && !fetchedGlpiContext) ? "Fetch Email or GLPI content first to enable AI generation" : "Generate Problem & Impact Analysis using OpenRouter AI"}
                 >
                   {generatingAi ? <Loader2 className="spinner" size={14} /> : <Sparkles size={14} />}
                   {generatingAi ? "Generating..." : "Generate AI"}

@@ -5035,4 +5035,41 @@ body.dark-theme .issue-column-menu-list label:hover {
   background: #1e293b !important;
 }
 
+/* Context Status Pills (Email & GLPI badges) */
+.context-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.context-status-pill.active {
+  background: #eefaf6;
+  color: #0f766e;
+  border: 1px solid #99f6e4;
+}
+
+.context-status-pill.inactive {
+  background: #f8fafc;
+  color: #94a3b8;
+  border: 1px solid #e2e8f0;
+}
+
+body.dark-theme .context-status-pill.active {
+  background: #064e3b !important;
+  color: #a7f3d0 !important;
+  border-color: #047857 !important;
+}
+
+body.dark-theme .context-status-pill.inactive {
+  background: #1e293b !important;
+  color: #64748b !important;
+  border-color: #334155 !important;
+}
+
 
