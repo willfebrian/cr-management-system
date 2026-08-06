@@ -1,7 +1,7 @@
 import { applyCustomStatusColors } from "../utils/tagColors";
 import { applyCustomFontSize } from "../utils/fontSize";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
-import { AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Ban, Calendar, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Database, FileOutput, FileSearch, FolderKanban, KeyRound, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Trash2, Users, X, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Ban, Calendar, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Database, FileOutput, FileSearch, FolderKanban, GitPullRequest, KeyRound, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Tag, Trash2, Users, X, XCircle } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchAdminSettings, fetchAdminPeople, fetchCrDetail, fetchCrList, fetchDashboard, fetchGlpiTicketDetail, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind, type GlpiTicketDetail, type AdminPersonRow } from "../api";
 import { IncompleteGroupCards } from "../components/IncompleteGroupCards";
@@ -170,6 +170,14 @@ export function App() {
   const [columnMenuOpen, setColumnMenuOpen] = useState(false);
   const [visibleIssueColumns, setVisibleIssueColumns] = useState<IssueColumnKey[]>([...DEFAULT_ISSUE_COLUMNS]);
   const [issueFormDirty, setIssueFormDirty] = useState(false);
+  const [issueCreateMode, setIssueCreateMode] = useState<"new" | "sub">("new");
+  const [nextIssueNo, setNextIssueNo] = useState<number | null>(null);
+  const [baseIssueSearch, setBaseIssueSearch] = useState("");
+  const [baseIssueCandidates, setBaseIssueCandidates] = useState<IssueRow[]>([]);
+  const [showBaseIssueModal, setShowBaseIssueModal] = useState(false);
+  const [loadingBaseIssueCandidates, setLoadingBaseIssueCandidates] = useState(false);
+  const [selectedBaseIssue, setSelectedBaseIssue] = useState<IssueRow | null>(null);
+  const [nextSubIssueNo, setNextSubIssueNo] = useState<string>("01");
   const reportRequestId = useRef(0);
   const issueRequestId = useRef(0);
 
@@ -514,6 +522,40 @@ export function App() {
     }, REPORT_DB_REFRESH_MS);
     return () => window.clearInterval(interval);
   }, [view, issueFilters, selectedIssueId]);
+
+  useEffect(() => {
+    if (view === "issue-create") {
+      fetchNextIssueNumber().then((res) => setNextIssueNo(res.issueNo)).catch(() => setNextIssueNo(null));
+    }
+  }, [view]);
+
+  useEffect(() => {
+    if (!showBaseIssueModal) return;
+    setLoadingBaseIssueCandidates(true);
+    const timer = setTimeout(() => {
+      fetchIssueList({ q: baseIssueSearch.trim() || undefined, pageSize: 15 })
+        .then((res) => {
+          setBaseIssueCandidates(res.rows);
+          setLoadingBaseIssueCandidates(false);
+        })
+        .catch(() => {
+          setBaseIssueCandidates([]);
+          setLoadingBaseIssueCandidates(false);
+        });
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [baseIssueSearch, showBaseIssueModal]);
+
+  async function selectTopBaseIssue(issue: IssueRow) {
+    setSelectedBaseIssue(issue);
+    setShowBaseIssueModal(false);
+    try {
+      const res = await fetchNextSubIssueNumber(issue.issue_no);
+      setNextSubIssueNo(res.subIssueNo);
+    } catch {
+      setNextSubIssueNo("01");
+    }
+  }
 
   useEffect(() => {
     const enabledCodes = systems.filter((system) => system.enabled).map((system) => system.code);
@@ -1381,6 +1423,308 @@ export function App() {
                 ) : null}
               </div>
             </div>
+          ) : view === "issue-create" ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              {/* Next Issue / Sub-Issue Preview Tag (Clickable when in sub mode) */}
+              {issueCreateMode === "sub" ? (
+                <button
+                  type="button"
+                  onClick={() => setShowBaseIssueModal(true)}
+                  title="Click to select or change Base Issue"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "6px 14px",
+                    borderRadius: "8px",
+                    background: selectedBaseIssue ? "#f0fdf4" : "#fffbeb",
+                    border: selectedBaseIssue ? "1px solid #bbf7d0" : "1px solid #fde68a",
+                    color: selectedBaseIssue ? "#0f766e" : "#b45309",
+                    fontSize: "0.825rem",
+                    fontWeight: "600",
+                    height: "36px",
+                    boxSizing: "border-box",
+                    cursor: "pointer",
+                    transition: "all 0.15s ease"
+                  }}
+                >
+                  <Tag size={14} color={selectedBaseIssue ? "#0f766e" : "#b45309"} />
+                  <span>
+                    {selectedBaseIssue ? (
+                      <>Next sub-issue: <strong>{selectedBaseIssue.issue_no}-{nextSubIssueNo}</strong></>
+                    ) : (
+                      "Select Base Issue"
+                    )}
+                  </span>
+                  <ChevronDown size={14} style={{ opacity: 0.7 }} />
+                </button>
+              ) : (
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "6px 14px",
+                    borderRadius: "8px",
+                    background: "#f0fdf4",
+                    border: "1px solid #bbf7d0",
+                    color: "#0f766e",
+                    fontSize: "0.825rem",
+                    fontWeight: "600",
+                    height: "36px",
+                    boxSizing: "border-box"
+                  }}
+                >
+                  <Tag size={14} color="#0f766e" />
+                  <span>Next issue preview: <strong>{nextIssueNo || "..."}-01</strong></span>
+                </div>
+              )}
+
+              {/* Create Mode Toggle Buttons */}
+              <div style={{ display: "inline-flex", gap: "4px", background: "var(--color-bg-subtle, #f1f5f9)", padding: "3px", borderRadius: "9px", border: "1px solid var(--color-border, #cbd5e1)" }}>
+                <button
+                  type="button"
+                  onClick={() => setIssueCreateMode("new")}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "5px 12px",
+                    borderRadius: "6px",
+                    border: "none",
+                    background: issueCreateMode === "new" ? "#0f766e" : "transparent",
+                    color: issueCreateMode === "new" ? "#ffffff" : "var(--color-text-muted, #64748b)",
+                    fontSize: "0.825rem",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    transition: "all 0.15s ease"
+                  }}
+                >
+                  <Plus size={14} /> + New Issue
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIssueCreateMode("sub");
+                    if (!selectedBaseIssue) {
+                      setShowBaseIssueModal(true);
+                    }
+                  }}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "5px 12px",
+                    borderRadius: "6px",
+                    border: "none",
+                    background: issueCreateMode === "sub" ? "#0f766e" : "transparent",
+                    color: issueCreateMode === "sub" ? "#ffffff" : "var(--color-text-muted, #64748b)",
+                    fontSize: "0.825rem",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    transition: "all 0.15s ease"
+                  }}
+                >
+                  <Plus size={14} /> + Add Sub Issue
+                </button>
+              </div>
+
+              {/* Sync CR Popover Button */}
+              <div
+                className="sync-cr-popover-wrapper"
+                style={{ position: "relative", display: "inline-block" }}
+                onMouseEnter={() => setSyncPopoverOpen(true)}
+                onMouseLeave={() => setSyncPopoverOpen(false)}
+              >
+                <button
+                  type="button"
+                  className="primary sync-button"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    background: "#0f766e",
+                    border: "none",
+                    color: "#ffffff",
+                    padding: "8px 18px",
+                    borderRadius: "8px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    fontSize: "0.875rem",
+                    height: "36px"
+                  }}
+                  onClick={() => setSyncPopoverOpen((prev) => !prev)}
+                >
+                  <RefreshCw size={16} className={loading ? "spinner" : ""} />
+                  <span>{loading ? "Syncing CR..." : "Sync CR"}</span>
+                  <ChevronDown size={14} style={{ opacity: 0.8, transform: syncPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                </button>
+
+                {syncPopoverOpen ? (
+                  <div
+                    className="sync-cr-popover-menu"
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      zIndex: 1000,
+                      width: "280px",
+                      background: "var(--color-bg-elevated, #ffffff)",
+                      border: "1px solid var(--color-border, #cbd5e1)",
+                      borderRadius: "14px",
+                      boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.2)",
+                      padding: "16px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "12px",
+                      textAlign: "left"
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--color-border-soft, #e2e8f0)", paddingBottom: "8px" }}>
+                      <span style={{ fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)" }}>
+                        Sync SAP CR Options
+                      </span>
+                    </div>
+
+                    {/* Source Systems */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                        Source Systems
+                      </label>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        {systems.map((system) => (
+                          <label
+                            key={system.code}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "5px",
+                              padding: "4px 10px",
+                              borderRadius: "6px",
+                              border: "1px solid var(--color-border, #cbd5e1)",
+                              background: syncSystems.includes(system.code) ? "#f0fdf4" : "var(--color-bg, #ffffff)",
+                              fontSize: "0.78rem",
+                              fontWeight: "600",
+                              color: syncSystems.includes(system.code) ? "#0f766e" : "var(--color-text, #334155)",
+                              cursor: system.enabled ? "pointer" : "not-allowed",
+                              opacity: system.enabled ? 1 : 0.5
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={syncSystems.includes(system.code)}
+                              disabled={!system.enabled}
+                              onChange={() => setSyncSystems(toggleSystem(syncSystems, system.code))}
+                              style={{ accentColor: "#0f766e", margin: 0 }}
+                            />
+                            {system.code}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Sync Mode */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                        Sync Mode
+                      </label>
+                      <select
+                        value={syncMode}
+                        onChange={(e) => setSyncMode(e.target.value as "incremental" | "full_period")}
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: "6px",
+                          border: "1px solid var(--color-border, #cbd5e1)",
+                          background: "var(--color-bg, #ffffff)",
+                          color: "var(--color-text, #111827)",
+                          fontSize: "0.825rem",
+                          width: "100%"
+                        }}
+                      >
+                        <option value="incremental">Incremental</option>
+                        <option value="full_period">Full by Period</option>
+                      </select>
+                    </div>
+
+                    {/* Lookback Days or Period Inputs */}
+                    {syncMode === "incremental" ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                          Lookback Days
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="30"
+                          value={lookbackDays}
+                          onChange={(e) => setLookbackDays(Number(e.target.value || 0))}
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: "6px",
+                            border: "1px solid var(--color-border, #cbd5e1)",
+                            background: "var(--color-bg, #ffffff)",
+                            color: "var(--color-text, #111827)",
+                            fontSize: "0.825rem",
+                            width: "100%"
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>From</label>
+                          <input
+                            type="month"
+                            value={syncFromPeriod}
+                            onChange={(e) => setSyncFromPeriod(e.target.value)}
+                            style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.78rem" }}
+                          />
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>To</label>
+                          <input
+                            type="month"
+                            value={syncToPeriod}
+                            onChange={(e) => setSyncToPeriod(e.target.value)}
+                            style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.78rem" }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Sync Action Button */}
+                    <button
+                      type="button"
+                      className="primary"
+                      disabled={loading || syncSystems.length === 0}
+                      onClick={() => {
+                        setSyncPopoverOpen(false);
+                        runSync();
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "8px",
+                        background: "#0f766e",
+                        color: "#ffffff",
+                        border: "none",
+                        padding: "8px 14px",
+                        borderRadius: "8px",
+                        fontWeight: "600",
+                        fontSize: "0.85rem",
+                        cursor: "pointer",
+                        marginTop: "4px"
+                      }}
+                    >
+                      <RefreshCw size={15} className={loading ? "spinner" : ""} />
+                      <span>{loading ? "Syncing..." : "Sync CR Now"}</span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
           ) : view.startsWith("issue-") ? (
             <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
               {/* Issue Custom Status Filter Dropdown */}
@@ -1901,7 +2245,7 @@ export function App() {
                 </>
               )}
               <button className="primary sync-button" onClick={runSync} disabled={loading || syncSystems.length === 0}>
-                <RefreshCw size={18} /> <span>{loading ? "Syncing" : "Sync CR"}</span>
+                <RefreshCw size={16} className={loading ? "spinner" : ""} /> <span>{loading ? "Syncing..." : "Sync CR"}</span>
               </button>
             </div>
           )}
@@ -2017,6 +2361,10 @@ export function App() {
           <IssueEditor
             mode="create"
             detail={null}
+            externalCreateMode={issueCreateMode}
+            onExternalCreateModeChange={setIssueCreateMode}
+            selectedBaseIssue={selectedBaseIssue}
+            nextSubIssueNo={nextSubIssueNo}
             onNotify={showToast}
             onDirtyChange={setIssueFormDirty}
             onSave={async (payload) => {
@@ -2258,6 +2606,72 @@ export function App() {
                 </table>
               </div>
             )}
+          </div>
+        </UIModal>
+      )}
+      {showBaseIssueModal && (
+        <UIModal
+          isOpen={showBaseIssueModal}
+          onClose={() => setShowBaseIssueModal(false)}
+          title="Select Base Issue to Attach Sub-Issue To"
+          subtitle="Search and select an existing issue to create a sub-issue under it"
+          type="primary"
+          cancelText="Cancel"
+          maxWidth="620px"
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: "14px", width: "100%", padding: "4px 0" }}>
+            <div style={{ position: "relative", width: "100%" }}>
+              <Search size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#64748b" }} />
+              <input
+                type="text"
+                autoFocus
+                placeholder="Search by issue number (e.g. 26032), key, or title..."
+                value={baseIssueSearch}
+                onChange={(e) => setBaseIssueSearch(e.target.value)}
+                style={{ padding: "10px 12px 10px 38px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%", boxSizing: "border-box", fontSize: "0.875rem" }}
+              />
+            </div>
+
+            <div style={{ maxHeight: "340px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "6px" }}>
+              {baseIssueCandidates.map((issue) => {
+                const isSelected = selectedBaseIssue?.id === issue.id;
+                return (
+                  <button
+                    key={issue.id}
+                    type="button"
+                    onClick={() => selectTopBaseIssue(issue)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "12px 14px",
+                      borderRadius: "8px",
+                      border: isSelected ? "2px solid #0f766e" : "1px solid var(--color-border, #e2e8f0)",
+                      background: isSelected ? "#f0fdf4" : "var(--color-bg, #ffffff)",
+                      cursor: "pointer",
+                      textAlign: "left",
+                      transition: "all 0.15s ease"
+                    }}
+                  >
+                    <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <strong style={{ color: "#0f766e", fontSize: "0.95rem" }}>{issue.issue_key}</strong>
+                        <span style={{ fontSize: "0.75rem", padding: "2px 8px", borderRadius: "12px", background: "var(--color-bg-subtle, #e2e8f0)", color: "#475569" }}>
+                          {formatStatusLabel(issue.issue_status)}
+                        </span>
+                      </div>
+                      <span style={{ color: "var(--color-text, #334155)", fontSize: "0.85rem" }}>{issue.issue_name}</span>
+                    </div>
+                    {isSelected ? <CheckCircle2 size={18} color="#0f766e" /> : null}
+                  </button>
+                );
+              })}
+              {baseIssueCandidates.length === 0 ? (
+                <div style={{ padding: "24px", textAlign: "center", color: "#64748b", fontSize: "0.875rem" }}>
+                  {loadingBaseIssueCandidates ? "Searching issues..." : "No issues found."}
+                </div>
+              ) : null}
+            </div>
           </div>
         </UIModal>
       )}
@@ -3563,6 +3977,10 @@ function IssueEditor({
   detail,
   initialAction = "",
   navigationRequest,
+  externalCreateMode,
+  onExternalCreateModeChange,
+  selectedBaseIssue,
+  nextSubIssueNo = "01",
   onNotify,
   onSave,
   onCancel,
@@ -3573,6 +3991,10 @@ function IssueEditor({
   detail: IssueDetail | null;
   initialAction?: "" | "cancel" | "delete";
   navigationRequest?: { sequence: number; item: IncompleteItem } | null;
+  externalCreateMode?: "new" | "sub";
+  onExternalCreateModeChange?: (mode: "new" | "sub") => void;
+  selectedBaseIssue?: IssueRow | null;
+  nextSubIssueNo?: string;
   onNotify?: (type: "success" | "error", message: string) => void;
   onSave: (payload: IssueSavePayload) => Promise<void>;
   onCancel?: (id: number, reason: string) => Promise<void>;
@@ -3587,7 +4009,12 @@ function IssueEditor({
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [actionDialog, setActionDialog] = useState<"" | "cancel" | "delete">("");
   const [nextIssueNo, setNextIssueNo] = useState<number | null>(null);
-  const [createMode, setCreateMode] = useState<"new" | "sub">("new");
+  const [internalCreateMode, setInternalCreateMode] = useState<"new" | "sub">("new");
+  const createMode = externalCreateMode ?? internalCreateMode;
+  const setCreateMode = (m: "new" | "sub") => {
+    setInternalCreateMode(m);
+    onExternalCreateModeChange?.(m);
+  };
   const [baseIssueSearch, setBaseIssueSearch] = useState("");
   const [baseIssueCandidates, setBaseIssueCandidates] = useState<IssueRow[]>([]);
   const [showBaseIssueCandidates, setShowBaseIssueCandidates] = useState(false);
@@ -3606,6 +4033,17 @@ function IssueEditor({
     problemAnalysis: boolean;
     impactAnalysis: boolean;
   }>({ issueName: true, problemAnalysis: true, impactAnalysis: true });
+
+  useEffect(() => {
+    if (mode === "create" && createMode === "sub" && selectedBaseIssue) {
+      setForm((prev) => ({
+        ...prev,
+        createMode: "sub",
+        issueNo: selectedBaseIssue.issue_no,
+        subIssueNo: nextSubIssueNo
+      }));
+    }
+  }, [mode, createMode, selectedBaseIssue, nextSubIssueNo]);
 
   async function handleFetchGlpiContent(ticketNoOverride?: number | string) {
     const firstTicket = (form.glpiTickets || "").split(/[,;\s]+/)[0] || "";
@@ -4141,60 +4579,6 @@ function IssueEditor({
 
   return (
     <form className="issue-editor-panel" onSubmit={submit}>
-      {mode === "create" ? (
-        <section className="panel editor-section issue-editor-title">
-          <div className="panel-heading">
-            <h2>Create Issue</h2>
-          </div>
-          <div className="issue-mode-panel">
-            <div className="issue-mode-options">
-              <button type="button" className={createMode === "new" ? "active" : ""} onClick={() => {
-                setCreateMode("new");
-                setForm((current) => ({ ...current, createMode: "new", issueNo: undefined, subIssueNo: "01" }));
-              }}>
-                <Plus size={15} /> New Issue
-              </button>
-              <button type="button" className={createMode === "sub" ? "active" : ""} onClick={() => {
-                setCreateMode("sub");
-                setForm((current) => ({ ...current, createMode: "sub" }));
-                setShowBaseIssueCandidates(true);
-              }}>
-                <Plus size={15} /> Add Sub Issue
-              </button>
-            </div>
-            {createMode === "new" ? (
-              <p>Next issue preview: <strong>{nextIssueNo || "-"}</strong>-01</p>
-            ) : (
-              <div className="base-issue-picker">
-                <label>Existing Issue
-                  <input
-                    value={baseIssueSearch}
-                    onFocus={() => setShowBaseIssueCandidates(true)}
-                    onChange={(event) => {
-                      setBaseIssueSearch(event.target.value);
-                      setShowBaseIssueCandidates(true);
-                    }}
-                    placeholder="Search issue no, description, requester"
-                  />
-                </label>
-                {showBaseIssueCandidates ? (
-                  <div className="base-issue-results">
-                    {baseIssueCandidates.map((issue) => (
-                      <button type="button" key={issue.id} onMouseDown={(event) => event.preventDefault()} onClick={() => selectBaseIssue(issue)}>
-                        <strong>{issue.issue_key}</strong>
-                        <span>{issue.issue_name}</span>
-                        <small>{[issue.primary_cr, formatGlpi(issue.primary_glpi_ticket), formatStatusLabel(issue.issue_status)].filter(Boolean).join(" - ")}</small>
-                      </button>
-                    ))}
-                    {baseIssueSearch.trim() && baseIssueCandidates.length === 0 ? <span>No issue found</span> : null}
-                  </div>
-                ) : null}
-              </div>
-            )}
-          </div>
-        </section>
-      ) : null}
-
       <section className="panel editor-section issue-phase-card">
         <div className="phase-title phase-toggle" style={{ cursor: "default", display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
           <button type="button" onClick={() => togglePhase("initiation")} style={{ display: "flex", alignItems: "flex-start", background: "none", border: "none", padding: 0, margin: 0, textAlign: "left", cursor: "pointer", color: "inherit", font: "inherit" }}>

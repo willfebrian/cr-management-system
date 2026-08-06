@@ -806,26 +806,26 @@ body.dark-theme .popup-table-row:hover {
 }
 
 .report-sync-controls .sync-button {
-  width: 130px;
-  height: 40px;
+  height: 36px;
+  padding: 0 18px;
   justify-content: center;
   line-height: 1.2;
   align-self: end;
-  border-radius: var(--radius-control);
-  background: #059669;
+  border-radius: 8px;
+  background: #0f766e;
   color: #ffffff;
   font-weight: 600;
-  font-size: 14px;
-  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.25);
+  font-size: 0.875rem;
+  box-shadow: 0 4px 12px rgba(15, 118, 110, 0.25);
   border: none;
   transition: all 0.15s ease;
   cursor: pointer;
 }
 
 .report-sync-controls .sync-button:hover:not(:disabled) {
-  background: #047857;
+  background: #0d9488;
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(5, 150, 105, 0.35);
+  box-shadow: 0 6px 16px rgba(15, 118, 110, 0.35);
 }
 
 .system-checks {
