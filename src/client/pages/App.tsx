@@ -2535,21 +2535,27 @@ function IssueEditor({
         fetchedGlpiTicketRef.current = num;
         handleFetchGlpiContent(num);
       }
+    } else {
+      fetchedGlpiTicketRef.current = null;
+      setFetchedGlpiContext(null);
     }
   }, [primaryGlpiNo]);
 
-  async function handleFetchEmailContent() {
-    if (!form.emailSubject?.trim()) {
+  const fetchedEmailSubjectRef = useRef<string | null>(null);
+
+  async function handleFetchEmailContent(subjectOverride?: string) {
+    const targetSubject = subjectOverride ?? form.emailSubject;
+    if (!targetSubject?.trim()) {
       onNotify?.("error", "Please enter an Email Subject first.");
       setFetchedEmailContext(null);
       return;
     }
     setFetchingEmail(true);
     try {
-      const res = await searchOutlookEmail(form.emailSubject);
+      const res = await searchOutlookEmail(targetSubject);
       if (!res.rows || res.rows.length === 0) {
         setFetchedEmailContext(null);
-        onNotify?.("error", `No Outlook email found matching subject "${form.emailSubject}"`);
+        onNotify?.("error", `No Outlook email found matching subject "${targetSubject}"`);
         return;
       }
       
@@ -2568,6 +2574,17 @@ function IssueEditor({
       setFetchingEmail(false);
     }
   }
+
+  // Auto-fetch Outlook email context when editing an existing issue (mode !== "create")
+  useEffect(() => {
+    if (mode !== "create" && form.emailSubject?.trim()) {
+      const subject = form.emailSubject.trim();
+      if (fetchedEmailSubjectRef.current !== subject) {
+        fetchedEmailSubjectRef.current = subject;
+        handleFetchEmailContent(subject);
+      }
+    }
+  }, [mode, form.emailSubject]);
 
   async function executeAiGeneration(selections: { issueName: boolean; problemAnalysis: boolean; impactAnalysis: boolean }) {
     let combinedContext = "";
@@ -2643,7 +2660,15 @@ function IssueEditor({
 
       // Auto-fill empty participant fields (never overwrite existing non-empty fields)
       if (result.participants) {
-        for (const [role, nameVal] of Object.entries(result.participants)) {
+        const roleAliases: Record<string, string> = {
+          prd_approver: "approval",
+          approver: "approval",
+          prd_transporter: "executor",
+          prd_executor: "executor",
+          transporter: "executor"
+        };
+        for (const [rawRole, nameVal] of Object.entries(result.participants)) {
+          const role = roleAliases[rawRole.toLowerCase()] || rawRole;
           if (nameVal && nameVal.trim() && nameVal.trim().toUpperCase() !== "N/A") {
             const existingVal = form.participants?.[role]?.trim();
             if (!existingVal) {
@@ -2660,7 +2685,8 @@ function IssueEditor({
           if (dateVal && dateVal.trim() && dateVal.trim().toUpperCase() !== "N/A") {
             const existingVal = form.timeline?.[tKey]?.trim();
             if (!existingVal) {
-              updateTimeline(tKey, dateVal.trim());
+              const formattedDate = toDatetimeInput(dateVal.trim()) || dateVal.trim();
+              updateTimeline(tKey, formattedDate);
               updatedCount++;
             }
           }
@@ -2681,19 +2707,8 @@ function IssueEditor({
   }
 
   async function handleGenerateAiAnalysis() {
-    if (!fetchedEmailContext && !fetchedGlpiContext) {
-      onNotify?.("error", "No email or GLPI context available. Please fetch Email or GLPI content first.");
-      return;
-    }
-    
-    // When no email context is fetched (GLPI context only), do not prompt to replace text fields.
-    // Directly fill empty People & Timeline date fields.
-    if (!fetchedEmailContext) {
-      await executeAiGeneration({
-        issueName: false,
-        problemAnalysis: false,
-        impactAnalysis: false
-      });
+    if (!fetchedEmailContext || !fetchedGlpiContext) {
+      onNotify?.("error", "Both Email context and GLPI context are required. Please fetch Email and GLPI content first.");
       return;
     }
     
@@ -2738,6 +2753,10 @@ function IssueEditor({
     setTemplatePreview(null);
     setGenerateMenuOpen(false);
     setMoreMenuOpen(false);
+    setFetchedGlpiContext(null);
+    setFetchedEmailContext(null);
+    fetchedGlpiTicketRef.current = null;
+    fetchedEmailSubjectRef.current = null;
     onDirtyChange?.(false);
   }, [detail?.issue?.id, mode]);
 
@@ -3086,50 +3105,26 @@ function IssueEditor({
                   </span>
                 </div>
 
-                {/* Fetch Email Button */}
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); handleFetchEmailContent(); }}
-                  disabled={formDisabled || fetchingEmail || !form.emailSubject?.trim()}
-                  style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.5rem 0.75rem", borderRadius: "6px", background: "var(--color-primary, #2563eb)", color: "white", border: "none", cursor: (formDisabled || fetchingEmail || !form.emailSubject?.trim()) ? "not-allowed" : "pointer", fontSize: "0.8125rem", fontWeight: "600", whiteSpace: "nowrap", transition: "all 0.2s", opacity: (formDisabled || fetchingEmail || !form.emailSubject?.trim()) ? 0.6 : 1 }}
-                  title="Fetch email content from Outlook Desktop"
-                >
-                  {fetchingEmail ? <Loader2 className="spinner" size={14} /> : <Mail size={14} />}
-                  {fetchingEmail ? "Fetching..." : "Fetch Email"}
-                </button>
-
-                {/* Fetch GLPI Button */}
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); handleFetchGlpiContent(); }}
-                  disabled={formDisabled || fetchingGlpi || !form.glpiTickets?.trim()}
-                  style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.5rem 0.75rem", borderRadius: "6px", background: "#0f766e", color: "white", border: "none", cursor: (formDisabled || fetchingGlpi || !form.glpiTickets?.trim()) ? "not-allowed" : "pointer", fontSize: "0.8125rem", fontWeight: "600", whiteSpace: "nowrap", transition: "all 0.2s", opacity: (formDisabled || fetchingGlpi || !form.glpiTickets?.trim()) ? 0.6 : 1 }}
-                  title="Fetch GLPI ticket details & discussion context"
-                >
-                  {fetchingGlpi ? <Loader2 className="spinner" size={14} /> : <Search size={14} />}
-                  {fetchingGlpi ? "Fetching..." : "Fetch GLPI"}
-                </button>
-
                 {/* Generate AI Button */}
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); handleGenerateAiAnalysis(); }}
-                  disabled={formDisabled || (!fetchedEmailContext && !fetchedGlpiContext) || generatingAi}
+                  disabled={formDisabled || !fetchedEmailContext || !fetchedGlpiContext || generatingAi}
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
                     gap: "0.375rem",
                     padding: "0.5rem 0.75rem",
                     borderRadius: "6px",
-                    background: (!fetchedEmailContext && !fetchedGlpiContext || formDisabled || generatingAi) ? "var(--color-bg-subtle, #e5e7eb)" : "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
-                    color: (!fetchedEmailContext && !fetchedGlpiContext || formDisabled || generatingAi) ? "var(--color-text-muted, #9ca3af)" : "#ffffff",
+                    background: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "var(--color-bg-subtle, #e5e7eb)" : "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
+                    color: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "var(--color-text-muted, #9ca3af)" : "#ffffff",
                     border: "none",
-                    cursor: (!fetchedEmailContext && !fetchedGlpiContext || formDisabled || generatingAi) ? "not-allowed" : "pointer",
+                    cursor: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "not-allowed" : "pointer",
                     fontSize: "0.8125rem",
                     fontWeight: "600",
                     transition: "all 0.2s"
                   }}
-                  title={(!fetchedEmailContext && !fetchedGlpiContext) ? "Fetch Email or GLPI content first to enable AI generation" : "Generate Problem & Impact Analysis using OpenRouter AI"}
+                  title={(!fetchedEmailContext || !fetchedGlpiContext) ? "Both Email context and GLPI context must be active & checked to enable AI generation" : "Generate Problem & Impact Analysis using OpenRouter AI"}
                 >
                   {generatingAi ? <Loader2 className="spinner" size={14} /> : <Sparkles size={14} />}
                   {generatingAi ? "Generating..." : "Generate AI"}
@@ -3163,7 +3158,41 @@ function IssueEditor({
               </div>
               <label>
                 Email Subject
-                <input value={form.emailSubject || ""} onChange={(event) => update("emailSubject", event.target.value)} placeholder="Email subject" disabled={formDisabled} style={{ width: "100%", marginTop: "0.25rem" }} />
+                <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem", alignItems: "center" }}>
+                  <input
+                    value={form.emailSubject || ""}
+                    onChange={(event) => update("emailSubject", event.target.value)}
+                    placeholder="Email subject"
+                    disabled={formDisabled}
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleFetchEmailContent()}
+                    disabled={formDisabled || fetchingEmail || !form.emailSubject?.trim()}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.375rem",
+                      padding: "0.5rem 0.875rem",
+                      borderRadius: "6px",
+                      background: "var(--color-primary, #2563eb)",
+                      color: "white",
+                      border: "none",
+                      cursor: (formDisabled || fetchingEmail || !form.emailSubject?.trim()) ? "not-allowed" : "pointer",
+                      fontSize: "0.8125rem",
+                      fontWeight: "600",
+                      whiteSpace: "nowrap",
+                      transition: "all 0.2s",
+                      opacity: (formDisabled || fetchingEmail || !form.emailSubject?.trim()) ? 0.6 : 1,
+                      height: "38px"
+                    }}
+                    title="Fetch email content from Outlook Desktop"
+                  >
+                    {fetchingEmail ? <Loader2 className="spinner" size={14} /> : <Mail size={14} />}
+                    {fetchingEmail ? "Fetching..." : "Fetch Email"}
+                  </button>
+                </div>
               </label>
               <a href="/api/outlook/download-agent" style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #6b7280)", marginTop: "0.25rem", display: "inline-block" }}>
                 "Fetch Email" tidak jalan? Download &amp; jalankan Outlook Agent di laptop Anda
@@ -3508,7 +3537,7 @@ function IssueEditor({
         type="purple"
         confirmText="Generate AI"
         cancelText="Cancel"
-        confirmDisabled={!aiOverwriteSelections.issueName && !aiOverwriteSelections.problemAnalysis && !aiOverwriteSelections.impactAnalysis}
+        confirmDisabled={generatingAi}
         onConfirm={async () => {
           setShowAiOverwriteModal(false);
           await executeAiGeneration(aiOverwriteSelections);
