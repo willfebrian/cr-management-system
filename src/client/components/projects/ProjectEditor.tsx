@@ -184,11 +184,11 @@ export function ProjectEditor({ mode, detail, onSaved, onCancel, onDirtyChange }
       <UIModal
         isOpen={showDiscardModal}
         onClose={() => setShowDiscardModal(false)}
-        title="Perubahan Belum Disimpan"
-        subtitle="Perubahan Project yang belum disimpan akan hilang. Lanjut keluar?"
+        title="Unsaved Changes"
+        subtitle="Unsaved Project changes will be lost. Do you want to proceed?"
         type="warning"
-        confirmText="Keluar"
-        cancelText="Kembali Edit"
+        confirmText="Discard Changes"
+        cancelText="Keep Editing"
         onConfirm={() => {
           setShowDiscardModal(false);
           onCancel();

@@ -171,16 +171,16 @@ export function App() {
     const period = resolveMonthPeriod(syncFromPeriod, syncToPeriod);
     const options = { ...syncOptions, systemCodes: syncSystems, syncMode, lookbackDays, ...period };
     const periodText = syncMode === "incremental"
-      ? `incremental dengan lookback ${lookbackDays} hari`
-      : `periode ${options.fromDate} s/d ${options.toDate}`;
+      ? `incremental with ${lookbackDays} day lookback`
+      : `period ${options.fromDate} to ${options.toDate}`;
 
     setConfirmModal({
       isOpen: true,
-      title: "Sync CR Data SAP",
-      subtitle: `Sync CR ${syncSystems.join(", ")} (${periodText})? Data akan ditarik dari SAP dan diperbarui di database PostgreSQL.`,
+      title: "Sync SAP CR Data",
+      subtitle: `Sync CR ${syncSystems.join(", ")} (${periodText})? Data will be retrieved from SAP and updated in PostgreSQL cache.`,
       type: "primary",
-      confirmText: "Sync Sekarang",
-      cancelText: "Batal",
+      confirmText: "Sync Now",
+      cancelText: "Cancel",
       onConfirm: async () => {
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
         setLoading(true);
@@ -310,11 +310,11 @@ export function App() {
     if ((view === "issue-create" || view === "issue-change") && issueFormDirty) {
       setConfirmModal({
         isOpen: true,
-        title: "Perubahan Belum Disimpan",
-        subtitle: "Perubahan Issue yang belum disimpan akan hilang. Lanjut pindah menu?",
+        title: "Unsaved Changes",
+        subtitle: "Unsaved Issue changes will be lost. Do you want to proceed?",
         type: "warning",
-        confirmText: "Lanjut Pindah",
-        cancelText: "Kembali Edit",
+        confirmText: "Proceed",
+        cancelText: "Keep Editing",
         onConfirm: () => {
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
           setIssueFormDirty(false);
@@ -327,11 +327,11 @@ export function App() {
     if ((view === "project-create" || view === "project-change") && projectFormDirty) {
       setConfirmModal({
         isOpen: true,
-        title: "Perubahan Belum Disimpan",
-        subtitle: "Perubahan Project yang belum disimpan akan hilang. Lanjut pindah menu?",
+        title: "Unsaved Changes",
+        subtitle: "Unsaved Project changes will be lost. Do you want to proceed?",
         type: "warning",
-        confirmText: "Lanjut Pindah",
-        cancelText: "Kembali Edit",
+        confirmText: "Proceed",
+        cancelText: "Keep Editing",
         onConfirm: () => {
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
           setIssueFormDirty(false);
@@ -2540,7 +2540,7 @@ function IssueEditor({
         <div className="modal-backdrop" role="presentation">
           <section className="modal-card people-registration-modal" role="dialog" aria-modal="true" aria-labelledby="people-registration-title">
             <h2 id="people-registration-title">Complete People Master Data</h2>
-            <p>Nama berikut belum ada lengkap di database. Isi master person terlebih dahulu sebelum Save.</p>
+            <p>The following names are not fully registered in the database. Please complete person details before saving.</p>
             <div className="people-registration-list">
               {missingPeople.map((person, index) => (
                 <div className="people-registration-row" key={`${person.mode}-${person.name}-${index}`}>

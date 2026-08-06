@@ -28,8 +28,8 @@ export function UIModal({
   type = "primary",
   icon,
   children,
-  confirmText = "Ya, Lanjutkan",
-  cancelText = "Batal",
+  confirmText = "Confirm",
+  cancelText = "Cancel",
   onConfirm,
   confirmDisabled = false,
   confirmLoading = false,
@@ -143,7 +143,7 @@ export function UIModal({
                   void onConfirm();
                 }}
               >
-                {confirmLoading ? "Memproses..." : confirmText}
+                {confirmLoading ? "Processing..." : confirmText}
               </button>
             )}
           </div>
