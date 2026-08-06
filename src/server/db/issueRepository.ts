@@ -207,7 +207,7 @@ export async function listIssues(filters: IssueFilters = {}) {
       LEFT JOIN LATERAL (
         SELECT
           CASE
-            WHEN lifecycle_req.status_group <> 'released' THEN lifecycle_req.status_group
+            WHEN lifecycle_req.status_group <> 'released' THEN 'created'
             WHEN EXISTS (
               SELECT 1 FROM cr_transport_lifecycle prd_life
               WHERE prd_life.source_system_code = 'DEV'
@@ -221,8 +221,8 @@ export async function listIssues(filters: IssueFilters = {}) {
                 AND qa_life.target_system_code = 'QA'
                 AND qa_life.trkorr = lifecycle_req.trkorr
                 AND qa_life.transport_status = 'imported'
-            ) THEN 'pending_prd'
-            WHEN lifecycle_req.sap_system_code = 'DEV' AND lifecycle_req.status_group = 'released' THEN 'pending_qa'
+            ) THEN 'in_qa'
+            WHEN lifecycle_req.sap_system_code = 'DEV' AND lifecycle_req.status_group = 'released' THEN 'released'
             ELSE 'unknown'
           END AS lifecycle_status
         FROM cr_requests req

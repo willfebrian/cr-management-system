@@ -1158,11 +1158,11 @@ function Dashboard({
   return (
     <div className="dashboard-grid">
       <div className="summary-metrics-bar">
-        <Metric label="Outstanding" value={outstanding} onClick={() => onMetricClick?.("Outstanding CR Transports", "cr", { status: "outstanding" })} />
-        <Metric label="Released" value={released} onClick={() => onMetricClick?.("Released CR Transports", "cr", { status: "released" })} />
-        <Metric label="Aging > 14 Days" value={dashboard?.aging?.older_than_14_days || 0} onClick={() => onMetricClick?.("Aging > 14 Days CR Transports", "cr", { status: "outstanding", agingDays: 14 })} />
-        <Metric label="Pending to QA" value={dashboard?.landscape?.pending_qa || 0} onClick={() => onMetricClick?.("Pending to QA CR Transports", "cr", { status: "all", lifecycleStatus: "pending_qa" })} />
-        <Metric label="Pending to PRD" value={dashboard?.landscape?.pending_prd || 0} onClick={() => onMetricClick?.("Pending to PRD CR Transports", "cr", { status: "all", lifecycleStatus: "pending_prd" })} />
+        <Metric label="Outstanding" value={outstanding} onClick={() => onMetricClick?.("Outstanding CR Transports", "cr", { sapSystemCode: "DEV", status: "outstanding" })} />
+        <Metric label="Released" value={released} onClick={() => onMetricClick?.("Released CR Transports", "cr", { sapSystemCode: "DEV", status: "released" })} />
+        <Metric label="Aging > 14 Days" value={dashboard?.aging?.older_than_14_days || 0} onClick={() => onMetricClick?.("Aging > 14 Days CR Transports", "cr", { sapSystemCode: "DEV", status: "outstanding", agingDays: 14 })} />
+        <Metric label="Pending to QA" value={dashboard?.landscape?.pending_qa || 0} onClick={() => onMetricClick?.("Pending to QA CR Transports", "cr", { sapSystemCode: "DEV", status: "all", lifecycleStatus: "pending_qa" })} />
+        <Metric label="Pending to PRD" value={dashboard?.landscape?.pending_prd || 0} onClick={() => onMetricClick?.("Pending to PRD CR Transports", "cr", { sapSystemCode: "DEV", status: "all", lifecycleStatus: "pending_prd" })} />
       </div>
       <section className="panel chart-panel">
         <div className="panel-heading">
