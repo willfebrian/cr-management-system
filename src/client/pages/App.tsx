@@ -165,6 +165,10 @@ export function App() {
   const [syncPopoverOpen, setSyncPopoverOpen] = useState(false);
   const [periodPopoverOpen, setPeriodPopoverOpen] = useState(false);
   const [statusPopoverOpen, setStatusPopoverOpen] = useState(false);
+  const [issuePeriodPopoverOpen, setIssuePeriodPopoverOpen] = useState(false);
+  const [issueStatusPopoverOpen, setIssueStatusPopoverOpen] = useState(false);
+  const [columnMenuOpen, setColumnMenuOpen] = useState(false);
+  const [visibleIssueColumns, setVisibleIssueColumns] = useState<IssueColumnKey[]>([...DEFAULT_ISSUE_COLUMNS]);
   const [issueFormDirty, setIssueFormDirty] = useState(false);
   const reportRequestId = useRef(0);
   const issueRequestId = useRef(0);
@@ -1377,6 +1381,483 @@ export function App() {
                 ) : null}
               </div>
             </div>
+          ) : view.startsWith("issue-") ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              {/* Issue Custom Status Filter Dropdown */}
+              {(() => {
+                const issueStatusOptions = [
+                  { value: "all", label: "All Status", color: "#64748b" },
+                  { value: "open", label: "Open Issues", color: "#2563eb" },
+                  { value: "in_progress", label: "In Progress", color: "#d97706" },
+                  { value: "ok", label: "OK Issues", color: "#059669" },
+                  { value: "cancelled", label: "Cancelled", color: "#dc2626" }
+                ];
+                const currentStatusVal = draftIssueFilters.status || "all";
+                const currentStatusObj = issueStatusOptions.find(o => o.value === currentStatusVal) || issueStatusOptions[0];
+
+                return (
+                  <div style={{ position: "relative", display: "inline-block" }}>
+                    <button
+                      type="button"
+                      onClick={() => setIssueStatusPopoverOpen((prev) => !prev)}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        padding: "6px 12px",
+                        borderRadius: "8px",
+                        border: "1px solid var(--color-border, #cbd5e1)",
+                        background: "var(--color-bg, #ffffff)",
+                        color: "var(--color-text, #1e293b)",
+                        fontSize: "0.85rem",
+                        fontWeight: "500",
+                        height: "36px",
+                        cursor: "pointer"
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: "8px",
+                          height: "8px",
+                          borderRadius: "50%",
+                          backgroundColor: currentStatusObj.color,
+                          display: "inline-block"
+                        }}
+                      />
+                      <span>{currentStatusObj.label}</span>
+                      <ChevronDown size={14} style={{ opacity: 0.7, transform: issueStatusPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                    </button>
+
+                    {issueStatusPopoverOpen ? (
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: "calc(100% + 6px)",
+                          left: 0,
+                          zIndex: 1000,
+                          width: "180px",
+                          background: "var(--color-bg-elevated, #ffffff)",
+                          border: "1px solid var(--color-border, #cbd5e1)",
+                          borderRadius: "12px",
+                          boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.18)",
+                          padding: "6px",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "2px"
+                        }}
+                      >
+                        {issueStatusOptions.map((opt) => {
+                          const isSelected = opt.value === currentStatusVal;
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => {
+                                setIssueStatusPopoverOpen(false);
+                                setDraftIssueFilters((prev) => ({ ...prev, status: opt.value, page: 1 }));
+                              }}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                padding: "8px 10px",
+                                borderRadius: "7px",
+                                border: "none",
+                                background: isSelected ? "var(--color-bg-subtle, #f1f5f9)" : "transparent",
+                                cursor: "pointer",
+                                fontSize: "0.825rem",
+                                fontWeight: isSelected ? "700" : "500",
+                                color: isSelected ? "var(--color-primary, #0f766e)" : "var(--color-text, #334155)",
+                                textAlign: "left",
+                                transition: "background 0.15s ease"
+                              }}
+                            >
+                              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                <span
+                                  style={{
+                                    width: "8px",
+                                    height: "8px",
+                                    borderRadius: "50%",
+                                    backgroundColor: opt.color,
+                                    display: "inline-block"
+                                  }}
+                                />
+                                <span>{opt.label}</span>
+                              </div>
+                              {isSelected && <CheckCircle2 size={14} color="#0f766e" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })()}
+
+              {/* Search Bar */}
+              <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+                <Search size={15} style={{ position: "absolute", left: "10px", color: "#64748b", pointerEvents: "none" }} />
+                <input
+                  type="text"
+                  value={draftIssueFilters.q || ""}
+                  onChange={(e) => setDraftIssueFilters((prev) => ({ ...prev, q: e.target.value, page: 1 }))}
+                  placeholder="Search issue, requester, CR..."
+                  style={{
+                    padding: "6px 12px 6px 32px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--color-border, #cbd5e1)",
+                    background: "var(--color-bg, #ffffff)",
+                    fontSize: "0.85rem",
+                    width: "210px",
+                    height: "36px",
+                    boxSizing: "border-box"
+                  }}
+                />
+              </div>
+
+              {/* 1 Single Period Picker Field Button + Popover */}
+              <div style={{ position: "relative", display: "inline-block" }}>
+                <button
+                  type="button"
+                  onClick={() => setIssuePeriodPopoverOpen((prev) => !prev)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    padding: "6px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--color-border, #cbd5e1)",
+                    background: (draftIssueFilters.fromDate || draftIssueFilters.toDate) ? "#f0fdf4" : "var(--color-bg, #ffffff)",
+                    color: (draftIssueFilters.fromDate || draftIssueFilters.toDate) ? "#0f766e" : "var(--color-text, #334155)",
+                    fontSize: "0.85rem",
+                    fontWeight: "500",
+                    height: "36px",
+                    cursor: "pointer"
+                  }}
+                >
+                  <Calendar size={15} color={draftIssueFilters.fromDate || draftIssueFilters.toDate ? "#0f766e" : "#64748b"} />
+                  <span>
+                    {draftIssueFilters.fromDate || draftIssueFilters.toDate
+                      ? `${draftIssueFilters.fromDate || "..."} - ${draftIssueFilters.toDate || "..."}`
+                      : "Select Period"}
+                  </span>
+                  <ChevronDown size={14} style={{ opacity: 0.7, transform: issuePeriodPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                </button>
+
+                {issuePeriodPopoverOpen ? (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      zIndex: 1000,
+                      width: "290px",
+                      background: "var(--color-bg-elevated, #ffffff)",
+                      border: "1px solid var(--color-border, #cbd5e1)",
+                      borderRadius: "12px",
+                      boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.2)",
+                      padding: "16px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "12px",
+                      textAlign: "left"
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--color-border-soft, #e2e8f0)", paddingBottom: "8px" }}>
+                      <span style={{ fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)" }}>
+                        Filter by Period
+                      </span>
+                      {(draftIssueFilters.fromDate || draftIssueFilters.toDate) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDraftIssueFilters((prev) => ({ ...prev, fromDate: undefined, toDate: undefined, page: 1 }));
+                            setIssuePeriodPopoverOpen(false);
+                          }}
+                          style={{ border: "none", background: "none", color: "#dc2626", fontSize: "0.75rem", fontWeight: "600", cursor: "pointer", padding: 0 }}
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>From Date</label>
+                        <input
+                          type="date"
+                          value={draftIssueFilters.fromDate || ""}
+                          onChange={(e) => setDraftIssueFilters((prev) => ({ ...prev, fromDate: e.target.value }))}
+                          style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.8rem", width: "100%", boxSizing: "border-box" }}
+                        />
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>To Date</label>
+                        <input
+                          type="date"
+                          value={draftIssueFilters.toDate || ""}
+                          onChange={(e) => setDraftIssueFilters((prev) => ({ ...prev, toDate: e.target.value }))}
+                          style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.8rem", width: "100%", boxSizing: "border-box" }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const today = todayYmd();
+                          const firstOfMonth = `${today.slice(0, 7)}-01`;
+                          setDraftIssueFilters((prev) => ({ ...prev, fromDate: firstOfMonth, toDate: today }));
+                        }}
+                        style={{ flex: 1, padding: "4px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", background: "var(--color-bg, #ffffff)", fontSize: "0.75rem", cursor: "pointer" }}
+                      >
+                        This Month
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const today = todayYmd();
+                          const d = new Date();
+                          d.setDate(d.getDate() - 30);
+                          const thirtyDaysAgo = d.toISOString().slice(0, 10);
+                          setDraftIssueFilters((prev) => ({ ...prev, fromDate: thirtyDaysAgo, toDate: today }));
+                        }}
+                        style={{ flex: 1, padding: "4px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", background: "var(--color-bg, #ffffff)", fontSize: "0.75rem", cursor: "pointer" }}
+                      >
+                        Last 30 Days
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIssuePeriodPopoverOpen(false);
+                        setDraftIssueFilters((prev) => ({ ...prev, page: 1 }));
+                      }}
+                      style={{
+                        background: "#0f766e",
+                        color: "#ffffff",
+                        border: "none",
+                        padding: "8px 14px",
+                        borderRadius: "8px",
+                        fontWeight: "600",
+                        fontSize: "0.85rem",
+                        cursor: "pointer",
+                        marginTop: "4px"
+                      }}
+                    >
+                      Apply Filter
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+
+              {/* Column Menu Button for Issue */}
+              {view === "issue-display" && (
+                <IssueColumnMenu
+                  open={columnMenuOpen}
+                  visibleColumns={visibleIssueColumns}
+                  onOpenChange={setColumnMenuOpen}
+                  onToggle={(col) => setVisibleIssueColumns((curr) => curr.includes(col) ? curr.filter(c => c !== col) : [...curr, col])}
+                />
+              )}
+
+              {/* Sync CR Popover Button */}
+              <div
+                className="sync-cr-popover-wrapper"
+                style={{ position: "relative", display: "inline-block" }}
+                onMouseEnter={() => setSyncPopoverOpen(true)}
+                onMouseLeave={() => setSyncPopoverOpen(false)}
+              >
+                <button
+                  type="button"
+                  className="primary sync-button"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    background: "#0f766e",
+                    border: "none",
+                    color: "#ffffff",
+                    padding: "8px 18px",
+                    borderRadius: "8px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    fontSize: "0.875rem",
+                    height: "36px"
+                  }}
+                  onClick={() => setSyncPopoverOpen((prev) => !prev)}
+                >
+                  <RefreshCw size={16} className={loading ? "spinner" : ""} />
+                  <span>{loading ? "Syncing CR..." : "Sync CR"}</span>
+                  <ChevronDown size={14} style={{ opacity: 0.8, transform: syncPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                </button>
+
+                {syncPopoverOpen ? (
+                  <div
+                    className="sync-cr-popover-menu"
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      zIndex: 1000,
+                      width: "280px",
+                      background: "var(--color-bg-elevated, #ffffff)",
+                      border: "1px solid var(--color-border, #cbd5e1)",
+                      borderRadius: "14px",
+                      boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.2)",
+                      padding: "16px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "12px",
+                      textAlign: "left"
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--color-border-soft, #e2e8f0)", paddingBottom: "8px" }}>
+                      <span style={{ fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)" }}>
+                        Sync SAP CR Options
+                      </span>
+                    </div>
+
+                    {/* Source Systems */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                        Source Systems
+                      </label>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        {systems.map((system) => (
+                          <label
+                            key={system.code}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "5px",
+                              padding: "4px 10px",
+                              borderRadius: "6px",
+                              border: "1px solid var(--color-border, #cbd5e1)",
+                              background: syncSystems.includes(system.code) ? "#f0fdf4" : "var(--color-bg, #ffffff)",
+                              fontSize: "0.78rem",
+                              fontWeight: "600",
+                              color: syncSystems.includes(system.code) ? "#0f766e" : "var(--color-text, #334155)",
+                              cursor: system.enabled ? "pointer" : "not-allowed",
+                              opacity: system.enabled ? 1 : 0.5
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={syncSystems.includes(system.code)}
+                              disabled={!system.enabled}
+                              onChange={() => setSyncSystems(toggleSystem(syncSystems, system.code))}
+                              style={{ accentColor: "#0f766e", margin: 0 }}
+                            />
+                            {system.code}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Sync Mode */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                        Sync Mode
+                      </label>
+                      <select
+                        value={syncMode}
+                        onChange={(e) => setSyncMode(e.target.value as "incremental" | "full_period")}
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: "6px",
+                          border: "1px solid var(--color-border, #cbd5e1)",
+                          background: "var(--color-bg, #ffffff)",
+                          color: "var(--color-text, #111827)",
+                          fontSize: "0.825rem",
+                          width: "100%"
+                        }}
+                      >
+                        <option value="incremental">Incremental</option>
+                        <option value="full_period">Full by Period</option>
+                      </select>
+                    </div>
+
+                    {/* Lookback Days or Period Inputs */}
+                    {syncMode === "incremental" ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                          Lookback Days
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="30"
+                          value={lookbackDays}
+                          onChange={(e) => setLookbackDays(Number(e.target.value || 0))}
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: "6px",
+                            border: "1px solid var(--color-border, #cbd5e1)",
+                            background: "var(--color-bg, #ffffff)",
+                            color: "var(--color-text, #111827)",
+                            fontSize: "0.825rem",
+                            width: "100%"
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>From</label>
+                          <input
+                            type="month"
+                            value={syncFromPeriod}
+                            onChange={(e) => setSyncFromPeriod(e.target.value)}
+                            style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.78rem" }}
+                          />
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>To</label>
+                          <input
+                            type="month"
+                            value={syncToPeriod}
+                            onChange={(e) => setSyncToPeriod(e.target.value)}
+                            style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.78rem" }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Sync Action Button */}
+                    <button
+                      type="button"
+                      className="primary"
+                      disabled={loading || syncSystems.length === 0}
+                      onClick={() => {
+                        setSyncPopoverOpen(false);
+                        runSync();
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "8px",
+                        background: "#0f766e",
+                        color: "#ffffff",
+                        border: "none",
+                        padding: "8px 14px",
+                        borderRadius: "8px",
+                        fontWeight: "600",
+                        fontSize: "0.85rem",
+                        cursor: "pointer",
+                        marginTop: "4px"
+                      }}
+                    >
+                      <RefreshCw size={15} className={loading ? "spinner" : ""} />
+                      <span>{loading ? "Syncing..." : "Sync CR Now"}</span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
           ) : (
             <div className={`sync-controls report-sync-controls page-sync-toolbar ${syncMode === "full_period" ? "full-mode" : "incremental-mode"}`}>
               <label>
@@ -1491,6 +1972,7 @@ export function App() {
           <IssueDisplay
             issues={issues}
             filters={draftIssueFilters}
+            visibleIssueColumns={visibleIssueColumns}
             pagination={issuePagination}
             selectedId={selectedIssueId}
             detail={issueDetail}
@@ -2742,7 +3224,8 @@ function IssueDisplay({
   onGenerateCrForm,
   onPage,
   onPageSize,
-  onOpenCr
+  onOpenCr,
+  visibleIssueColumns = [...DEFAULT_ISSUE_COLUMNS]
 }: {
   issues: IssueRow[];
   filters: IssueFilters;
@@ -2759,10 +3242,9 @@ function IssueDisplay({
   onPage: (page: number) => void;
   onPageSize: (pageSize: number) => void;
   onOpenCr: (link: { sap_system_code?: string; trkorr: string }) => void;
+  visibleIssueColumns?: IssueColumnKey[];
 }) {
   const [detailMenuOpen, setDetailMenuOpen] = useState(false);
-  const [columnMenuOpen, setColumnMenuOpen] = useState(false);
-  const [visibleIssueColumns, setVisibleIssueColumns] = useState<IssueColumnKey[]>([...DEFAULT_ISSUE_COLUMNS]);
   const selectedIssue = issues.find((issue) => issue.id === selectedId) || detail?.issue || null;
   const hasDetail = Boolean(selectedId && selectedIssue);
   const canGenerateCrForm = Boolean(detail?.crLinks?.length);
@@ -2792,44 +3274,12 @@ function IssueDisplay({
   });
   const issueTableWidth = visibleIssueColumns.reduce((total, column) => total + issueColumns.widths[column], 0);
 
-  function updateFilter(key: keyof IssueFilters, value: string) {
-    onFilters({ ...filters, [key]: value });
-  }
-
-  function toggleIssueColumn(column: IssueColumnKey) {
-    setVisibleIssueColumns((current) => current.includes(column)
-      ? current.filter((item) => item !== column)
-      : [...current, column]);
-  }
-
   function hasIssueColumn(column: IssueColumnKey) {
     return visibleIssueColumns.includes(column);
   }
 
   return (
     <section className="issue-report-workspace">
-      <section className="filterbar issue-filterbar">
-        <select value={filters.status || "all"} onChange={(event) => updateFilter("status", event.target.value)}>
-          <option value="all">All Status</option>
-          <option value="ok">OK</option>
-          <option value="in_progress">In Progress</option>
-          <option value="open">Open</option>
-          <option value="cancelled">Cancelled</option>
-        </select>
-        <input value={filters.q || ""} onChange={(event) => updateFilter("q", event.target.value)} placeholder="Search issue, requester, CR" />
-        <input value={filters.glpi || ""} onChange={(event) => updateFilter("glpi", event.target.value)} placeholder="GLPI" />
-        <input value={filters.crHelpdesk || ""} onChange={(event) => updateFilter("crHelpdesk", event.target.value)} placeholder="CR Helpdesk" />
-        <input value={filters.cr || ""} onChange={(event) => updateFilter("cr", event.target.value)} placeholder="CR" />
-        <input type="date" value={filters.fromDate || ""} onChange={(event) => updateFilter("fromDate", event.target.value)} />
-        <input type="date" value={filters.toDate || ""} onChange={(event) => updateFilter("toDate", event.target.value)} />
-        <IssueColumnMenu
-          open={columnMenuOpen}
-          visibleColumns={visibleIssueColumns}
-          onOpenChange={setColumnMenuOpen}
-          onToggle={toggleIssueColumn}
-        />
-      </section>
-
       <div className="report-layout issue-layout controlled-dual-pane detail-closed">
         <section className="table-panel report-table-panel issue-table-panel">
           <div className="table-scroll">
