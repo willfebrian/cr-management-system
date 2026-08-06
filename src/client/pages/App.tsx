@@ -1,7 +1,7 @@
 import { applyCustomStatusColors } from "../utils/tagColors";
-import { applyCustomFontSize } from "../utils/fontSize";
+import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
-import { AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Ban, Calendar, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Database, FileOutput, FileSearch, FolderKanban, GitPullRequest, KeyRound, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Tag, Trash2, Users, X, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Ban, Calendar, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Database, FileOutput, FileSearch, FolderKanban, GitPullRequest, KeyRound, LayoutGrid, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Tag, Trash2, Users, X, XCircle } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchAdminSettings, fetchAdminPeople, fetchCrDetail, fetchCrList, fetchDashboard, fetchGlpiTicketDetail, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind, type GlpiTicketDetail, type AdminPersonRow } from "../api";
 import { IncompleteGroupCards } from "../components/IncompleteGroupCards";
@@ -4990,6 +4990,30 @@ function IssueEditor({
   const [generatingAi, setGeneratingAi] = useState(false);
   const [showAiOverwriteModal, setShowAiOverwriteModal] = useState(false);
   const [aiOverwriteSelections, setAiOverwriteSelections] = useState<Record<string, boolean>>({});
+  const [layoutStyle, setLayoutStyle] = useState<"tabs" | "quick_toggle" | "classic">(() => {
+    try {
+      const storageKey = getActiveAppearanceKey();
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.issue_form_layout) return parsed.issue_form_layout;
+      }
+    } catch {}
+    return "tabs";
+  });
+  const [editorTab, setEditorTab] = useState<"basic" | "team" | "transport" | "timeline">("basic");
+  const [isQuickMode, setIsQuickMode] = useState<boolean>(() => mode === "create");
+
+  function saveLayoutPref(pref: "tabs" | "quick_toggle" | "classic") {
+    try {
+      const storageKey = getActiveAppearanceKey();
+      const saved = localStorage.getItem(storageKey) || "{}";
+      const parsed = JSON.parse(saved);
+      parsed.issue_form_layout = pref;
+      localStorage.setItem(storageKey, JSON.stringify(parsed));
+      onNotify?.("success", `Issue form layout updated & saved to Appearance Settings!`);
+    } catch {}
+  }
 
   useEffect(() => {
     if (mode === "create" && createMode === "sub" && selectedBaseIssue) {
@@ -5601,6 +5625,147 @@ function IssueEditor({
 
   return (
     <form className="issue-editor-panel" onSubmit={submit}>
+      {/* Form Layout Header Switcher Bar */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", background: "var(--color-bg-elevated, #ffffff)", border: "1px solid var(--color-border, #cbd5e1)", borderRadius: "12px", padding: "10px 16px", marginBottom: "16px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <LayoutGrid size={16} color="#0f766e" />
+          <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "var(--color-text-heading, #0f172a)" }}>
+            Form Layout:
+          </span>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "4px", background: "var(--color-bg-subtle, #f1f5f9)", padding: "3px", borderRadius: "8px", border: "1px solid var(--color-border, #e2e8f0)" }}>
+          <button
+            type="button"
+            onClick={() => { setLayoutStyle("tabs"); saveLayoutPref("tabs"); }}
+            style={{
+              padding: "4px 12px",
+              borderRadius: "6px",
+              border: "none",
+              background: layoutStyle === "tabs" ? "#0f766e" : "transparent",
+              color: layoutStyle === "tabs" ? "#ffffff" : "var(--color-text-muted, #64748b)",
+              fontSize: "0.75rem",
+              fontWeight: "700",
+              cursor: "pointer"
+            }}
+          >
+            📑 Tab Stepper (Ide A)
+          </button>
+          <button
+            type="button"
+            onClick={() => { setLayoutStyle("quick_toggle"); saveLayoutPref("quick_toggle"); }}
+            style={{
+              padding: "4px 12px",
+              borderRadius: "6px",
+              border: "none",
+              background: layoutStyle === "quick_toggle" ? "#0f766e" : "transparent",
+              color: layoutStyle === "quick_toggle" ? "#ffffff" : "var(--color-text-muted, #64748b)",
+              fontSize: "0.75rem",
+              fontWeight: "700",
+              cursor: "pointer"
+            }}
+          >
+            ⚡ Quick Toggle (Ide B)
+          </button>
+          <button
+            type="button"
+            onClick={() => { setLayoutStyle("classic"); saveLayoutPref("classic"); }}
+            style={{
+              padding: "4px 12px",
+              borderRadius: "6px",
+              border: "none",
+              background: layoutStyle === "classic" ? "#0f766e" : "transparent",
+              color: layoutStyle === "classic" ? "#ffffff" : "var(--color-text-muted, #64748b)",
+              fontSize: "0.75rem",
+              fontWeight: "700",
+              cursor: "pointer"
+            }}
+          >
+            📄 Classic
+          </button>
+        </div>
+      </div>
+
+      {/* Ide B: Quick Create Mode Toggle Switch */}
+      {layoutStyle === "quick_toggle" && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", background: "var(--color-bg-subtle, #f8fafc)", border: "1px solid var(--color-border, #cbd5e1)", borderRadius: "12px", padding: "6px", marginBottom: "16px" }}>
+          <button
+            type="button"
+            onClick={() => setIsQuickMode(true)}
+            style={{
+              flex: 1,
+              padding: "8px 14px",
+              borderRadius: "8px",
+              border: "none",
+              background: isQuickMode ? "#0f766e" : "transparent",
+              color: isQuickMode ? "#ffffff" : "var(--color-text, #475569)",
+              fontWeight: "700",
+              fontSize: "0.85rem",
+              cursor: "pointer",
+              transition: "all 0.15s ease"
+            }}
+          >
+            ⚡ Quick Draft (4 Key Fields)
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsQuickMode(false)}
+            style={{
+              flex: 1,
+              padding: "8px 14px",
+              borderRadius: "8px",
+              border: "none",
+              background: !isQuickMode ? "#0f766e" : "transparent",
+              color: !isQuickMode ? "#ffffff" : "var(--color-text, #475569)",
+              fontWeight: "700",
+              fontSize: "0.85rem",
+              cursor: "pointer",
+              transition: "all 0.15s ease"
+            }}
+          >
+            📄 Full Detailed Form
+          </button>
+        </div>
+      )}
+
+      {/* Ide A: Tab Stepper Navigation Bar */}
+      {layoutStyle === "tabs" && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "8px", marginBottom: "16px" }}>
+          {[
+            { id: "basic", label: "1. Basic & Problem", icon: "📝" },
+            { id: "team", label: "2. Team & Stakeholders", icon: "👥" },
+            { id: "transport", label: "3. SAP Transport & CR", icon: "🔄" },
+            { id: "timeline", label: "4. Timeline & Sign-off", icon: "📅" }
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setEditorTab(tab.id as any)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px",
+                padding: "9px 12px",
+                borderRadius: "10px",
+                border: editorTab === tab.id ? "2px solid #0f766e" : "1px solid var(--color-border, #cbd5e1)",
+                background: editorTab === tab.id ? "#f0fdf4" : "var(--color-bg, #ffffff)",
+                color: editorTab === tab.id ? "#0f766e" : "var(--color-text-muted, #64748b)",
+                fontWeight: editorTab === tab.id ? "700" : "600",
+                fontSize: "0.825rem",
+                cursor: "pointer",
+                transition: "all 0.15s ease"
+              }}
+            >
+              <span>{tab.icon}</span>
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Initiation Section (Shown in Classic, Quick Mode, or Tab 1/Tab 2) */}
+      {(layoutStyle === "classic" || (layoutStyle === "quick_toggle" && !isQuickMode) || (layoutStyle === "tabs" && (editorTab === "basic" || editorTab === "team")) || (layoutStyle === "quick_toggle" && isQuickMode)) && (
       <section className="panel editor-section issue-phase-card">
         <div className="phase-title phase-toggle" style={{ cursor: "default", display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
           <button type="button" onClick={() => togglePhase("initiation")} style={{ display: "flex", alignItems: "flex-start", background: "none", border: "none", padding: 0, margin: 0, textAlign: "left", cursor: "pointer", color: "inherit", font: "inherit" }}>
@@ -5831,7 +5996,10 @@ function IssueEditor({
           </div>
         ) : null}
       </section>
+      )}
 
+      {/* DEV Processing Section */}
+      {(layoutStyle === "classic" || (layoutStyle === "quick_toggle" && !isQuickMode) || (layoutStyle === "tabs" && editorTab === "transport")) && (
       <section className={`panel editor-section issue-phase-card ${hasCrAssigned ? "" : "phase-muted"}`}>
         <button className="phase-title phase-toggle" type="button" onClick={() => togglePhase("dev")}>
           <ChevronDown size={18} />
@@ -5853,7 +6021,10 @@ function IssueEditor({
           </div>
         ) : null}
       </section>
+      )}
 
+      {/* QA Processing Section */}
+      {(layoutStyle === "classic" || (layoutStyle === "quick_toggle" && !isQuickMode) || (layoutStyle === "tabs" && editorTab === "timeline")) && (
       <section className={`panel editor-section issue-phase-card ${qaReady ? "" : "phase-muted"}`}>
         <button className="phase-title phase-toggle" type="button" onClick={() => togglePhase("qa")}>
           <ChevronDown size={18} />
@@ -5877,7 +6048,10 @@ function IssueEditor({
           </div>
         ) : null}
       </section>
+      )}
 
+      {/* PRD Processing Section */}
+      {(layoutStyle === "classic" || (layoutStyle === "quick_toggle" && !isQuickMode) || (layoutStyle === "tabs" && editorTab === "timeline")) && (
       <section className={`panel editor-section issue-phase-card ${prdReady ? "" : "phase-muted"}`}>
         <button className="phase-title phase-toggle" type="button" onClick={() => togglePhase("prd")}>
           <ChevronDown size={18} />
@@ -5903,6 +6077,52 @@ function IssueEditor({
           </div>
         ) : null}
       </section>
+      )}
+
+      {/* Tab Stepper Footer Controls */}
+      {layoutStyle === "tabs" && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "16px 0 24px 0", padding: "14px 18px", background: "var(--color-bg-elevated, #ffffff)", border: "1px solid var(--color-border, #cbd5e1)", borderRadius: "12px" }}>
+          <button
+            type="button"
+            className="secondary"
+            disabled={editorTab === "basic"}
+            onClick={() => {
+              const tabs: ("basic" | "team" | "transport" | "timeline")[] = ["basic", "team", "transport", "timeline"];
+              const idx = tabs.indexOf(editorTab);
+              if (idx > 0) setEditorTab(tabs[idx - 1]);
+            }}
+            style={{ display: "flex", alignItems: "center", gap: "6px" }}
+          >
+            <ArrowLeft size={16} /> Previous Step
+          </button>
+
+          <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "#0f766e" }}>
+            Step {["basic", "team", "transport", "timeline"].indexOf(editorTab) + 1} of 4: {[
+              "Basic Info & Problem",
+              "Team & Stakeholders",
+              "SAP Transport & CR Links",
+              "Timeline & Sign-off Dates"
+            ][["basic", "team", "transport", "timeline"].indexOf(editorTab)]}
+          </span>
+
+          {editorTab !== "timeline" ? (
+            <button
+              type="button"
+              className="primary"
+              onClick={() => {
+                const tabs: ("basic" | "team" | "transport" | "timeline")[] = ["basic", "team", "transport", "timeline"];
+                const idx = tabs.indexOf(editorTab);
+                if (idx < tabs.length - 1) setEditorTab(tabs[idx + 1]);
+              }}
+              style={{ display: "flex", alignItems: "center", gap: "6px" }}
+            >
+              Next Step <ArrowRight size={16} />
+            </button>
+          ) : (
+            <span style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", fontWeight: "600" }}>Final Step</span>
+          )}
+        </div>
+      )}
       <div className="editor-safe-space" aria-hidden="true" />
       <div className="issue-save-bar">
         <div className="sticky-actions">

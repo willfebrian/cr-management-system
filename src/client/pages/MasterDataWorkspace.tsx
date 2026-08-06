@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchAdminPeople, fetchAdminSettings, updateAdminPerson, updateAdminSettings, createAdminPerson, deleteAdminPerson, fetchGroupEmails, createGroupEmail, updateGroupEmail, deleteGroupEmail, type AdminPersonRow, type GroupEmailRow } from "../api";
-import { Check, Loader2, Save, X, Trash2, CheckCircle2, XCircle, AlertTriangle, Mail, Palette, Type, Sliders, User, Database } from "lucide-react";
+import { Check, Loader2, Save, X, Trash2, CheckCircle2, XCircle, AlertTriangle, Mail, Palette, Type, Sliders, User, Database, LayoutGrid } from "lucide-react";
 import { STATUS_COLOR_CONFIGS, applyCustomStatusColors } from "../utils/tagColors";
 import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
 import { TableDataLoader } from "../components/InteractiveLoaders";
@@ -221,7 +221,7 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
   }
 
   function getAppearancePayload() {
-    const appearanceKeys = ["app_font_size"];
+    const appearanceKeys = ["app_font_size", "issue_form_layout"];
     for (const cfg of STATUS_COLOR_CONFIGS) {
       appearanceKeys.push(`status_color_${cfg.key}_bg`);
       appearanceKeys.push(`status_color_${cfg.key}_text`);
@@ -922,13 +922,100 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
                 );
               })}
             </div>
+          </div>
+
+          {/* Section 3: Issue Form Layout Preference */}
+          <div className="settings-card">
+            <div style={{ marginBottom: "1.5rem" }}>
+              <h3 style={{ marginTop: 0, marginBottom: "0.5rem", fontSize: "1.25rem", display: "flex", alignItems: "center", gap: "8px" }}>
+                <LayoutGrid size={20} color="#0f766e" /> Issue Form Layout Style
+              </h3>
+              <p style={{ margin: 0, fontSize: "0.875rem" }}>
+                Choose your preferred UI layout structure when Creating or Editing Issues to reduce cognitive load and speed up data entry.
+              </p>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1rem" }}>
+              {[
+                {
+                  id: "tabs",
+                  title: "Tab Lifecycle Stepper (Ide A)",
+                  badge: "Recommended",
+                  desc: "Organizes form fields into 4 clean sequential tabs (Basic, Stakeholders, SAP Transport, Timeline).",
+                  icon: "📑"
+                },
+                {
+                  id: "quick_toggle",
+                  title: "Quick Create Mode Toggle (Ide B)",
+                  badge: "Fast Draft",
+                  desc: "Provides a 4-field quick draft mode for instant issue creation, with a toggle switch to full form.",
+                  icon: "⚡"
+                },
+                {
+                  id: "classic",
+                  title: "Classic Continuous Page",
+                  badge: "Legacy",
+                  desc: "Renders all form sections in a single long continuous scroll page.",
+                  icon: "📄"
+                }
+              ].map((layoutOpt) => {
+                const currentLayout = settings.issue_form_layout || "tabs";
+                const isSelected = currentLayout === layoutOpt.id;
+
+                return (
+                  <button
+                    key={layoutOpt.id}
+                    type="button"
+                    onClick={() => {
+                      const newSet = { ...settings, issue_form_layout: layoutOpt.id };
+                      setSettings(newSet);
+                    }}
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-start",
+                      textAlign: "left",
+                      padding: "1.25rem",
+                      borderRadius: "12px",
+                      border: isSelected ? "2px solid #0f766e" : "1px solid var(--color-border, #cbd5e1)",
+                      background: isSelected ? "#f0fdf4" : "var(--color-bg, #ffffff)",
+                      cursor: "pointer",
+                      transition: "all 0.15s ease",
+                      position: "relative"
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", marginBottom: "8px" }}>
+                      <span style={{ fontSize: "1.5rem" }}>{layoutOpt.icon}</span>
+                      <span
+                        style={{
+                          fontSize: "0.7rem",
+                          fontWeight: "700",
+                          padding: "2px 8px",
+                          borderRadius: "999px",
+                          background: isSelected ? "#0f766e" : "#e2e8f0",
+                          color: isSelected ? "#ffffff" : "#475569"
+                        }}
+                      >
+                        {layoutOpt.badge}
+                      </span>
+                    </div>
+                    <strong style={{ fontSize: "0.95rem", color: isSelected ? "#0f766e" : "var(--color-text, #1e293b)", marginBottom: "4px" }}>
+                      {layoutOpt.title}
+                    </strong>
+                    <span style={{ fontSize: "0.8rem", color: "var(--color-text-muted, #64748b)", lineHeight: 1.4 }}>
+                      {layoutOpt.desc}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
 
             <div style={{ marginTop: "2rem", paddingTop: "1.5rem", borderTop: "1px solid var(--color-border, #e5e7eb)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <button
                 type="button"
                 onClick={() => {
                   localStorage.removeItem(storageKey);
-                  const resetSet: Record<string, string> = { ...settings, app_font_size: "14" };
+                  const resetSet: Record<string, string> = { ...settings, app_font_size: "14", issue_form_layout: "tabs" };
                   for (const cfg of STATUS_COLOR_CONFIGS) {
                     resetSet[`status_color_${cfg.key}_bg`] = cfg.defaultBg;
                     resetSet[`status_color_${cfg.key}_text`] = cfg.defaultText;
