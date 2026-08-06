@@ -947,7 +947,7 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
               <button
                 onClick={handleSaveAppearanceClick}
                 disabled={saving}
-                style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.625rem 1.25rem", borderRadius: "6px", background: "var(--color-primary, #059669)", color: "white", border: "none", cursor: "pointer", fontWeight: "600", fontSize: "0.875rem", transition: "all 0.2s" }}
+                style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.625rem 1.25rem", borderRadius: "6px", background: "var(--color-primary, #0f766e)", color: "white", border: "none", cursor: "pointer", fontWeight: "600", fontSize: "0.875rem", transition: "all 0.2s" }}
               >
                 {saving ? <Loader2 className="spinner" size={16} /> : <Save size={16} />}
                 {saving ? "Saving Changes..." : "Save Appearance Settings"}

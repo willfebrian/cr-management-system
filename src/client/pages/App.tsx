@@ -3206,12 +3206,8 @@ function Dashboard({
   return (
     <div className="dashboard-grid">
       {/* ABAP Leader Top Metrics */}
-      <h2 className="dashboard-section-title" style={{ gridColumn: "1 / -1", margin: "16px 0 4px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <h2 className="dashboard-section-title" style={{ gridColumn: "1 / -1", margin: "16px 0 4px" }}>
         <span>SAP Transport & CR Overview</span>
-        <div style={{ fontSize: "0.85rem", fontWeight: "normal", background: "var(--color-bg-elevated, #f8fafc)", padding: "4px 12px", borderRadius: "16px", border: "1px solid var(--color-border, #e2e8f0)", display: "flex", alignItems: "center", gap: "6px" }}>
-          <span>Avg. Transport Lead Time:</span>
-          <strong style={{ color: "#0284c7" }}>{leaderInsights?.avgLeadTimeDays || 2.5} Days</strong>
-        </div>
       </h2>
 
       <div className="summary-metrics-bar">

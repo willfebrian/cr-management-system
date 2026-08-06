@@ -11,9 +11,9 @@
   --font-size-control: 14px;
   --font-size-label: 12px;
   --font-size-caption: 11px;
-  --color-primary: #059669;
-  --color-primary-hover: #047857;
-  --color-focus-ring: rgba(5, 150, 105, 0.22);
+  --color-primary: #0f766e;
+  --color-primary-hover: #0d655e;
+  --color-focus-ring: rgba(15, 118, 110, 0.22);
   --color-border: #e2e8f0;
   --color-border-soft: #f1f5f9;
   --color-text: #0f172a;
@@ -617,27 +617,36 @@ body.dark-theme .popup-table-row:hover {
 }
 
 .chart-filters {
-  display: grid;
-  grid-template-columns: 150px 150px auto;
-  gap: 8px;
-  align-items: end;
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
 }
 
 .chart-filters label {
-  display: grid;
-  gap: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   color: #64748b;
   font-size: 12px;
+  font-weight: 500;
 }
 
 .chart-filters input,
 .chart-filters select {
-  height: 34px;
-  border: 1px solid #cfd7e2;
-  border-radius: 6px;
+  height: 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
   background: #fff;
-  padding: 6px 8px;
+  padding: 6px 12px;
   color: #17202a;
+  font-size: 13px;
+  min-width: 165px;
+  box-sizing: border-box;
+}
+
+.chart-filters button {
+  height: 36px;
+  border-radius: 8px;
 }
 
 .chart-wrap {
