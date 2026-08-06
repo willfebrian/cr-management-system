@@ -19,7 +19,7 @@ import { fetchProjectDetail } from "../api/projectApi";
 import { afterIncompleteSectionRender, expandSection, getIncompleteItems, getIssueRowMissingItems, groupIncompleteItems, markIncompleteTarget, type ExpandedIssueSections, type IncompleteItem, type IssueSection } from "../issueIncomplete";
 import { nextExpandedSidebarGroup, type SidebarGroup } from "../navigation";
 import type { CrDetail, CrRequest, DashboardData, IssueDetail, IssueRow, SapSystemConfig, StatusTrendData } from "../../shared/types";
-import { AppLoadingScreen, SkeletonDetailLoader } from "../components/InteractiveLoaders";
+import { AppLoadingScreen, SkeletonDetailLoader, TableDataLoader } from "../components/InteractiveLoaders";
 import type { ProjectDetail as ProjectDetailModel, ProjectStatus } from "../../shared/projectTypes";
 
 type View = "dashboard" | "report" | "issue-display" | "issue-create" | "issue-change" | "user-management" | "project-report" | "project-create" | "project-change" | "master-data" | "settings" | "audit-log";
@@ -198,20 +198,34 @@ export function App() {
 
   async function loadReport(nextFilters = filters) {
     const requestId = ++reportRequestId.current;
-    const crData = await fetchCrList(nextFilters);
-    if (requestId !== reportRequestId.current) return;
-    setRequests(crData.rows);
-    setPagination({ page: crData.page, pageSize: crData.pageSize, total: crData.total, totalPages: crData.totalPages });
-    if (!crData.rows.some((request) => requestKey(request) === selected)) setSelected("");
+    setLoading(true);
+    try {
+      const crData = await fetchCrList(nextFilters);
+      if (requestId !== reportRequestId.current) return;
+      setRequests(crData.rows);
+      setPagination({ page: crData.page, pageSize: crData.pageSize, total: crData.total, totalPages: crData.totalPages });
+      if (!crData.rows.some((request) => requestKey(request) === selected)) setSelected("");
+    } finally {
+      if (requestId === reportRequestId.current) {
+        setLoading(false);
+      }
+    }
   }
 
   async function loadIssues(nextFilters = issueFilters, options?: { preserveSelection?: boolean }) {
     const requestId = ++issueRequestId.current;
-    const issueData = await fetchIssueList(nextFilters);
-    if (requestId !== issueRequestId.current) return;
-    setIssues(issueData.rows);
-    setIssuePagination({ page: issueData.page, pageSize: issueData.pageSize, total: issueData.total, totalPages: issueData.totalPages });
-    if (!options?.preserveSelection && !issueData.rows.some((issue) => issue.id === selectedIssueId)) setSelectedIssueId(null);
+    setLoading(true);
+    try {
+      const issueData = await fetchIssueList(nextFilters);
+      if (requestId !== issueRequestId.current) return;
+      setIssues(issueData.rows);
+      setIssuePagination({ page: issueData.page, pageSize: issueData.pageSize, total: issueData.total, totalPages: issueData.totalPages });
+      if (!options?.preserveSelection && !issueData.rows.some((issue) => issue.id === selectedIssueId)) setSelectedIssueId(null);
+    } finally {
+      if (requestId === issueRequestId.current) {
+        setLoading(false);
+      }
+    }
   }
 
   const [masterDataTab, setMasterDataTab] = useState<string>("people");
@@ -2614,8 +2628,8 @@ export function App() {
             <span>{toast.message}</span>
           </div>
         ) : null}
-        {loading || syncResult ? (
-          <SyncRunSummary loading={loading} systems={runningSyncSystems} result={syncResult} />
+        {runningSyncSystems.length > 0 || syncResult ? (
+          <SyncRunSummary loading={runningSyncSystems.length > 0} systems={runningSyncSystems} result={syncResult} />
         ) : null}
 
         {view === "user-management" ? <UserManagementWorkspace
@@ -2648,6 +2662,7 @@ export function App() {
             requests={requests}
             filters={draftFilters}
             pagination={pagination}
+            loadingData={loading}
             onFilters={setDraftFilters}
             onPage={(page) => {
               const nextFilters = { ...filters, page };
@@ -2674,6 +2689,7 @@ export function App() {
             filters={draftIssueFilters}
             visibleIssueColumns={visibleIssueColumns}
             pagination={issuePagination}
+            loadingData={loading}
             selectedId={selectedIssueId}
             detail={issueDetail}
             loadingDetail={loadingIssueDetail}
@@ -2873,10 +2889,7 @@ export function App() {
             </div>
 
             {metricModalData.loading ? (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "50px 0", gap: "10px", color: "#0f766e" }}>
-                <Loader2 className="animate-spin" size={22} />
-                <span style={{ fontWeight: "600" }}>Loading data list...</span>
-              </div>
+              <TableDataLoader text="Loading data list..." />
             ) : metricModal.kind === "cr" ? (
               <div style={{ overflowY: "auto", maxHeight: "420px", border: "1px solid #e2e8f0", borderRadius: "8px" }}>
                 <table className="report-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
@@ -3684,6 +3697,7 @@ function Report({
   requests,
   filters,
   pagination,
+  loadingData,
   onFilters,
   onPage,
   onPageSize,
@@ -3698,6 +3712,7 @@ function Report({
   requests: CrRequest[];
   filters: CrFilters;
   pagination: { page: number; pageSize: number; total: number; totalPages: number };
+  loadingData?: boolean;
   onFilters: (filters: CrFilters) => void;
   onPage: (page: number) => void;
   onPageSize: (pageSize: number) => void;
@@ -3752,16 +3767,29 @@ function Report({
                 </tr>
               </thead>
               <tbody>
-                {requests.map((request) => (
-                  <tr key={requestKey(request)} className={selected === requestKey(request) ? "selected" : ""} onClick={() => onSelect(requestKey(request))}>
-                    <td>{request.trkorr}</td>
-                    <td>{request.description}</td>
-                    <td><Status value={displayLifecycleStatus(request.lifecycle_status || request.status_group)} /></td>
+                {loadingData ? (
+                  <tr>
+                    <td colSpan={3} style={{ padding: 0 }}>
+                      <TableDataLoader text="Loading CR Transport records..." />
+                    </td>
                   </tr>
-                ))}
+                ) : requests.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} style={{ padding: "40px 0", textAlign: "center", color: "#64748b" }}>
+                      No parent CR found for the current filter.
+                    </td>
+                  </tr>
+                ) : (
+                  requests.map((request) => (
+                    <tr key={requestKey(request)} className={selected === requestKey(request) ? "selected" : ""} onClick={() => onSelect(requestKey(request))}>
+                      <td>{request.trkorr}</td>
+                      <td>{request.description}</td>
+                      <td><Status value={displayLifecycleStatus(request.lifecycle_status || request.status_group)} /></td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
-            {requests.length === 0 ? <div className="table-empty">No parent CR found for the current filter.</div> : null}
           </div>
           <PaginationControls
             pagination={pagination}
@@ -3984,6 +4012,7 @@ function IssueDisplay({
   issues,
   filters,
   pagination,
+  loadingData,
   selectedId,
   detail,
   loadingDetail,
@@ -4001,6 +4030,7 @@ function IssueDisplay({
   issues: IssueRow[];
   filters: IssueFilters;
   pagination: { page: number; pageSize: number; total: number; totalPages: number };
+  loadingData?: boolean;
   selectedId: number | null;
   detail: IssueDetail | null;
   loadingDetail?: boolean;
@@ -4098,146 +4128,123 @@ function IssueDisplay({
                 </tr>
               </thead>
               <tbody>
-                {issues.map((issue) => {
-                  const isMenuOpen = rowMenuOpenId === issue.id;
-                  const rowMissingItems = getIssueRowMissingItems(issue);
+                {loadingData ? (
+                  <tr>
+                    <td colSpan={9} style={{ padding: 0 }}>
+                      <TableDataLoader text="Loading issue records..." />
+                    </td>
+                  </tr>
+                ) : issues.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} style={{ padding: "40px 0", textAlign: "center", color: "#64748b" }}>
+                      No issue found for the current filter.
+                    </td>
+                  </tr>
+                ) : (
+                  issues.map((issue) => {
+                    const isMenuOpen = rowMenuOpenId === issue.id;
+                    const rowMissingItems = getIssueRowMissingItems(issue);
 
-                  return (
-                    <tr
-                      key={issue.id}
-                      className={selectedId === issue.id ? "selected" : ""}
-                      onClick={() => onSelect(issue.id)}
-                    >
-                      <td>{issue.issue_key}</td>
-                      <td>{issue.issue_name}</td>
-                      <td>{issue.abaper_name_snapshot || "-"}</td>
-                      {hasIssueColumn("glpi") ? <td>{formatGlpi(issue.primary_glpi_ticket)}</td> : null}
-                      {hasIssueColumn("crHelpdesk") ? <td>{issue.primary_cr_helpdesk_no || "-"}</td> : null}
-                      <td>{issue.primary_cr || "-"}</td>
-                      <td style={{ textAlign: "center" }}><Status value={issue.issue_status} /></td>
-                      <td className="completeness-cell" style={{ textAlign: "center" }}>
-                        {issue.issue_status === "cancelled" ? (
-                          <span aria-label="Not applicable">-</span>
-                        ) : (
-                          <div
-                            className="completion-tooltip-target"
-                            onMouseEnter={(e) => {
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              setHoveredCompletionId(issue.id);
-                              setHoveredCompletionPos({
-                                top: rect.top + rect.height / 2,
-                                right: window.innerWidth - rect.left + 10
-                              });
-                            }}
-                            onMouseLeave={() => {
-                              setHoveredCompletionId(null);
-                              setHoveredCompletionPos(null);
-                            }}
-                            style={{ display: "inline-flex", cursor: "pointer" }}
-                          >
-                            {(issue.missing_data_count || 0) === 0 ? (
-                              <CheckCircle2 size={18} className="complete-icon" aria-label="Complete" />
-                            ) : (
-                              <AlertTriangle size={18} className="warning-icon" aria-label={`${issue.missing_data_count} missing item(s)`} />
-                            )}
+                    return (
+                      <tr
+                        key={issue.id}
+                        className={selectedId === issue.id ? "selected" : ""}
+                        onClick={() => onSelect(issue.id)}
+                      >
+                        <td>{issue.issue_key}</td>
+                        <td>{issue.issue_name}</td>
+                        <td>{issue.abaper_name_snapshot || "-"}</td>
+                        {hasIssueColumn("glpi") ? <td>{formatGlpi(issue.primary_glpi_ticket)}</td> : null}
+                        {hasIssueColumn("crHelpdesk") ? <td>{issue.primary_cr_helpdesk_no || "-"}</td> : null}
+                        <td>{issue.primary_cr || "-"}</td>
+                        <td style={{ textAlign: "center" }}><Status value={issue.issue_status} /></td>
+                        <td className="completeness-cell" style={{ textAlign: "center" }}>
+                          {issue.issue_status === "cancelled" ? (
+                            <span aria-label="Not applicable">-</span>
+                          ) : (
+                            <div
+                              className="completion-tooltip-target"
+                              onMouseEnter={(e) => {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                setHoveredCompletionId(issue.id);
+                                setHoveredCompletionPos({
+                                  top: rect.top + rect.height / 2,
+                                  right: window.innerWidth - rect.left + 10
+                                });
+                              }}
+                              onMouseLeave={() => {
+                                setHoveredCompletionId(null);
+                                setHoveredCompletionPos(null);
+                              }}
+                              style={{ display: "inline-flex", cursor: "pointer" }}
+                            >
+                              {(issue.missing_data_count || 0) === 0 ? (
+                                <CheckCircle2 size={18} className="complete-icon" aria-label="Complete" />
+                              ) : (
+                                <AlertTriangle size={18} className="warning-icon" aria-label={`${issue.missing_data_count} missing item(s)`} />
+                              )}
 
-                            {hoveredCompletionId === issue.id && hoveredCompletionPos && (
-                              <div
-                                style={{
-                                  position: "fixed",
-                                  top: hoveredCompletionPos.top,
-                                  right: hoveredCompletionPos.right,
-                                  transform: "translateY(-50%)",
-                                  zIndex: 999999,
-                                  minWidth: "220px",
-                                  maxWidth: "280px",
-                                  padding: "10px 14px",
-                                  borderRadius: "10px",
-                                  background: "#ffffff",
-                                  border: "1px solid var(--color-border, #cbd5e1)",
-                                  boxShadow: "0 12px 28px -6px rgba(15, 23, 42, 0.25)",
-                                  fontSize: "0.8rem",
-                                  textAlign: "left",
-                                  pointerEvents: "none",
-                                  lineHeight: 1.4,
-                                  color: "#1e293b"
-                                }}
-                              >
+                              {hoveredCompletionId === issue.id && hoveredCompletionPos && (
                                 <div
                                   style={{
-                                    position: "absolute",
-                                    left: "100%",
-                                    top: "50%",
+                                    position: "fixed",
+                                    top: hoveredCompletionPos.top,
+                                    right: hoveredCompletionPos.right,
                                     transform: "translateY(-50%)",
-                                    borderWidth: "6px",
-                                    borderStyle: "solid",
-                                    borderColor: "transparent transparent transparent #ffffff"
+                                    zIndex: 999999,
+                                    minWidth: "220px",
+                                    maxWidth: "280px",
+                                    padding: "10px 14px",
+                                    borderRadius: "10px",
+                                    background: "#ffffff",
+                                    border: "1px solid var(--color-border, #cbd5e1)",
+                                    boxShadow: "0 12px 28px -6px rgba(15, 23, 42, 0.25)",
+                                    fontSize: "0.8rem",
+                                    textAlign: "left",
+                                    pointerEvents: "none",
+                                    lineHeight: 1.4,
+                                    color: "#1e293b"
                                   }}
-                                />
-                                {(issue.missing_data_count || 0) === 0 ? (
-                                  <div style={{ color: "#15803d", fontWeight: "600", display: "flex", alignItems: "center", gap: "6px" }}>
-                                    <CheckCircle2 size={14} /> All required fields complete
-                                  </div>
-                                ) : (
-                                  <div>
-                                    <div style={{ fontWeight: "700", color: "#b45309", marginBottom: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
-                                      <AlertTriangle size={14} /> Incomplete Items ({issue.missing_data_count}):
+                                >
+                                  <div
+                                    style={{
+                                      position: "absolute",
+                                      left: "100%",
+                                      top: "50%",
+                                      transform: "translateY(-50%)",
+                                      borderWidth: "6px",
+                                      borderStyle: "solid",
+                                      borderColor: "transparent transparent transparent #ffffff"
+                                    }}
+                                  />
+                                  {(issue.missing_data_count || 0) === 0 ? (
+                                    <div style={{ color: "#15803d", fontWeight: "600", display: "flex", alignItems: "center", gap: "6px" }}>
+                                      <CheckCircle2 size={14} /> All required fields complete
                                     </div>
-                                    <ul style={{ margin: 0, paddingLeft: "16px", display: "flex", flexDirection: "column", gap: "3px", color: "#334155" }}>
-                                      {rowMissingItems.map((itemText, i) => (
-                                        <li key={i}>{itemText}</li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                      {hasIssueColumn("actions") ? (
-                        <td onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap", textAlign: "center" }}>
-                          <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                            <button
-                              type="button"
-                              onClick={() => onChangeIssue(issue.id)}
-                              title="Edit Issue"
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                width: "30px",
-                                height: "30px",
-                                borderRadius: "8px",
-                                border: "1px solid var(--color-border, #cbd5e1)",
-                                background: "#ffffff",
-                                color: "#0f766e",
-                                cursor: "pointer",
-                                transition: "all 0.15s ease",
-                                boxShadow: "0 1px 2px rgba(0,0,0,0.04)"
-                              }}
-                            >
-                              <PencilLine size={15} />
-                            </button>
-
-                            <div style={{ position: "relative" }}>
+                                  ) : (
+                                    <div>
+                                      <div style={{ fontWeight: "700", color: "#b45309", marginBottom: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
+                                        <AlertTriangle size={14} /> Incomplete Items ({issue.missing_data_count}):
+                                      </div>
+                                      <ul style={{ margin: 0, paddingLeft: "16px", display: "flex", flexDirection: "column", gap: "3px", color: "#334155" }}>
+                                        {rowMissingItems.map((itemText, i) => (
+                                          <li key={i}>{itemText}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                        {hasIssueColumn("actions") ? (
+                          <td onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap", textAlign: "center" }}>
+                            <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
                               <button
                                 type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (isMenuOpen) {
-                                    setRowMenuOpenId(null);
-                                    setRowMenuPos(null);
-                                  } else {
-                                    const rect = e.currentTarget.getBoundingClientRect();
-                                    setRowMenuOpenId(issue.id);
-                                    setRowMenuPos({
-                                      top: rect.bottom + 4,
-                                      right: window.innerWidth - rect.right
-                                    });
-                                  }
-                                }}
-                                title="More Actions"
+                                onClick={() => onChangeIssue(issue.id)}
+                                title="Edit Issue"
                                 style={{
                                   display: "inline-flex",
                                   alignItems: "center",
@@ -4245,85 +4252,121 @@ function IssueDisplay({
                                   width: "30px",
                                   height: "30px",
                                   borderRadius: "8px",
-                                  border: "none",
-                                  background: "#0f766e",
-                                  color: "#ffffff",
+                                  border: "1px solid var(--color-border, #cbd5e1)",
+                                  background: "#ffffff",
+                                  color: "#0f766e",
                                   cursor: "pointer",
                                   transition: "all 0.15s ease",
-                                  boxShadow: "0 1px 3px rgba(15,118,110,0.2)"
+                                  boxShadow: "0 1px 2px rgba(0,0,0,0.04)"
                                 }}
                               >
-                                <MoreVertical size={16} />
+                                <PencilLine size={15} />
                               </button>
 
-                              {isMenuOpen && rowMenuPos && (
-                                <div
-                                  className="detail-action-menu-list"
+                              <div style={{ position: "relative" }}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (isMenuOpen) {
+                                      setRowMenuOpenId(null);
+                                      setRowMenuPos(null);
+                                    } else {
+                                      const rect = e.currentTarget.getBoundingClientRect();
+                                      setRowMenuOpenId(issue.id);
+                                      setRowMenuPos({
+                                        top: rect.bottom + 4,
+                                        right: window.innerWidth - rect.right
+                                      });
+                                    }
+                                  }}
+                                  title="More Actions"
                                   style={{
-                                    position: "fixed",
-                                    top: rowMenuPos.top,
-                                    right: rowMenuPos.right,
-                                    zIndex: 999999,
-                                    textAlign: "left",
-                                    boxShadow: "0 12px 28px -6px rgba(15, 23, 42, 0.25)",
-                                    border: "1px solid var(--color-border, #cbd5e1)",
-                                    background: "var(--color-bg-elevated, #ffffff)"
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    width: "30px",
+                                    height: "30px",
+                                    borderRadius: "8px",
+                                    border: "none",
+                                    background: "#0f766e",
+                                    color: "#ffffff",
+                                    cursor: "pointer",
+                                    transition: "all 0.15s ease",
+                                    boxShadow: "0 1px 3px rgba(15,118,110,0.2)"
                                   }}
                                 >
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setRowMenuOpenId(null);
-                                      setRowMenuPos(null);
-                                      onChangeIssue(issue.id);
+                                  <MoreVertical size={16} />
+                                </button>
+
+                                {isMenuOpen && rowMenuPos && (
+                                  <div
+                                    className="detail-action-menu-list"
+                                    style={{
+                                      position: "fixed",
+                                      top: rowMenuPos.top,
+                                      right: rowMenuPos.right,
+                                      zIndex: 999999,
+                                      textAlign: "left",
+                                      boxShadow: "0 12px 28px -6px rgba(15, 23, 42, 0.25)",
+                                      border: "1px solid var(--color-border, #cbd5e1)",
+                                      background: "var(--color-bg-elevated, #ffffff)"
                                     }}
                                   >
-                                    <PencilLine size={14} /> Change Issue
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setRowMenuOpenId(null);
-                                      setRowMenuPos(null);
-                                      onGenerateCrForm(issue.id);
-                                    }}
-                                  >
-                                    <FileSearch size={14} /> Generate CR Form
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={issue.issue_status === "cancelled"}
-                                    onClick={() => {
-                                      setRowMenuOpenId(null);
-                                      setRowMenuPos(null);
-                                      onIssueAction(issue.id, "cancel");
-                                    }}
-                                  >
-                                    <XCircle size={14} /> Cancel Issue
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="danger-menu-item"
-                                    onClick={() => {
-                                      setRowMenuOpenId(null);
-                                      setRowMenuPos(null);
-                                      onIssueAction(issue.id, "delete");
-                                    }}
-                                  >
-                                    <X size={14} /> Delete Issue
-                                  </button>
-                                </div>
-                              )}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setRowMenuOpenId(null);
+                                        setRowMenuPos(null);
+                                        onChangeIssue(issue.id);
+                                      }}
+                                    >
+                                      <PencilLine size={14} /> Change Issue
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setRowMenuOpenId(null);
+                                        setRowMenuPos(null);
+                                        onGenerateCrForm(issue.id);
+                                      }}
+                                    >
+                                      <FileSearch size={14} /> Generate CR Form
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={issue.issue_status === "cancelled"}
+                                      onClick={() => {
+                                        setRowMenuOpenId(null);
+                                        setRowMenuPos(null);
+                                        onIssueAction(issue.id, "cancel");
+                                      }}
+                                    >
+                                      <XCircle size={14} /> Cancel Issue
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="danger-menu-item"
+                                      onClick={() => {
+                                        setRowMenuOpenId(null);
+                                        setRowMenuPos(null);
+                                        onIssueAction(issue.id, "delete");
+                                      }}
+                                    >
+                                      <X size={14} /> Delete Issue
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        </td>
-                      ) : null}
-                    </tr>
-                  );
-                })}
+                          </td>
+                        ) : null}
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
-            {issues.length === 0 ? <div className="table-empty">No issue found for the current filter.</div> : null}
           </div>
           <PaginationControls
             pagination={pagination}

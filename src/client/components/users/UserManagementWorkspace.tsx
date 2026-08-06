@@ -13,6 +13,7 @@ import type {
 } from "../../../shared/userManagementTypes";
 import * as defaultApi from "../../api/userManagementApi";
 import { ManagedUserApiError } from "../../api/userManagementApi";
+import { TableDataLoader } from "../InteractiveLoaders";
 import { UserDetailPanel } from "./UserDetailPanel";
 import {
   UserEditorDialog,
@@ -78,7 +79,7 @@ export function UserManagementWorkspaceView({
         <option value="inactive">Inactive</option>
       </select>
     </div>
-    {loading && <p role="status" className="user-management__state">Loading users…</p>}
+    {loading && <TableDataLoader text="Loading user accounts..." />}
     {error && <p role="alert" className="user-management__state user-management__state--error">{error}</p>}
     {!loading && !error && users.length === 0 &&
       <p className="user-management__empty">No users found in this scope.</p>}

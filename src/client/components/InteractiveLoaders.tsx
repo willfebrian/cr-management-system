@@ -1,5 +1,42 @@
 import React, { useState, useEffect } from "react";
-import { Database, Loader2 } from "lucide-react";
+import { Database, Loader2, RefreshCw } from "lucide-react";
+
+export function TableDataLoader({ text = "Loading data..." }: { text?: string }) {
+  return (
+    <div
+      className="table-data-loader-container"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "3.5rem 1.5rem",
+        gap: "12px",
+        color: "var(--color-primary, #0f766e)",
+        width: "100%",
+        minHeight: "240px"
+      }}
+    >
+      <RefreshCw
+        size={24}
+        style={{
+          animation: "spin 1s linear infinite",
+          color: "#0f766e"
+        }}
+      />
+      <span
+        style={{
+          fontSize: "0.875rem",
+          fontWeight: "600",
+          color: "#0f766e",
+          letterSpacing: "-0.01em"
+        }}
+      >
+        {text}
+      </span>
+    </div>
+  );
+}
 
 export function AppLoadingScreen() {
   const [statusIdx, setStatusIdx] = useState(0);

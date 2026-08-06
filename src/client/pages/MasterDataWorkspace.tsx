@@ -3,6 +3,7 @@ import { fetchAdminPeople, fetchAdminSettings, updateAdminPerson, updateAdminSet
 import { Check, Loader2, Save, X, Trash2, CheckCircle2, XCircle, AlertTriangle, Mail, Palette, Type, Sliders, User, Database } from "lucide-react";
 import { STATUS_COLOR_CONFIGS, applyCustomStatusColors } from "../utils/tagColors";
 import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
+import { TableDataLoader } from "../components/InteractiveLoaders";
 
 interface MasterDataWorkspaceProps {
   mode?: "master-data" | "settings";
@@ -325,11 +326,7 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
     });
 
   if (loading) {
-    return (
-      <div className="workspace-loading">
-        <Loader2 className="spinner" size={24} />
-      </div>
-    );
+    return <TableDataLoader text="Loading master data..." />;
   }
 
   return (

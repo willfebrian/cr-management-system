@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Search, RefreshCw, Filter, ShieldCheck, User, Cpu, FileCode2, FolderGit2, Database, Settings, KeyRound } from "lucide-react";
 import { fetchAuditLogs, ActivityLogItem, ActivityLogSummary, ActivityLogFilters } from "../api";
+import { TableDataLoader } from "../components/InteractiveLoaders";
 
 export function AuditLogReport() {
   const [logs, setLogs] = useState<ActivityLogItem[]>([]);
@@ -230,9 +231,8 @@ export function AuditLogReport() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} style={{ padding: "40px 0", textAlign: "center", color: "#0f766e" }}>
-                    <RefreshCw className="animate-spin" size={22} style={{ margin: "0 auto 8px" }} />
-                    <div>Loading activity logs...</div>
+                  <td colSpan={6} style={{ padding: 0 }}>
+                    <TableDataLoader text="Loading activity logs..." />
                   </td>
                 </tr>
               ) : logs.length === 0 ? (

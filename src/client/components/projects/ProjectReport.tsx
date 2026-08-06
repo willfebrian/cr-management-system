@@ -5,6 +5,7 @@ import { fetchProjectDetail, fetchProjects } from "../../api/projectApi.js";
 import { ProjectDetail } from "./ProjectDetail.js";
 import { ProjectActions } from "./ProjectActions.js";
 import type { IncompleteItem } from "../../issueIncomplete.js";
+import { TableDataLoader } from "../InteractiveLoaders.js";
 
 export type ProjectReportState =
   | { kind: "loading" }
@@ -104,7 +105,7 @@ type ProjectReportViewProps = {
 };
 
 export function ProjectReportView({ state, onSelect, onChange, onOpenIssue, onOpenIncompleteItem, userRole, onDeleted, onPrevious, onNext }: ProjectReportViewProps) {
-  if (state.kind === "loading") return <p className="project-state">Loading Projects…</p>;
+  if (state.kind === "loading") return <TableDataLoader text="Loading project records..." />;
   if (state.kind === "empty") return <p className="project-state">No Projects found.</p>;
   if (state.kind === "error") return <p className="project-error" role="alert">{state.message}</p>;
   return <div className="project-report-workspace">
