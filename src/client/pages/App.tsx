@@ -167,6 +167,46 @@ export function App() {
   const [syncRefreshToken, setSyncRefreshToken] = useState(0);
   const [loading, setLoading] = useState(false);
   const [syncPopoverOpen, setSyncPopoverOpen] = useState(false);
+  const [formLayoutPopoverOpen, setFormLayoutPopoverOpen] = useState(false);
+  const [createFormLayoutStyle, setCreateFormLayoutStyle] = useState<"tabs" | "quick_toggle" | "classic">(() => {
+    try {
+      const storageKey = getActiveAppearanceKey();
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.create_issue_form_layout) return parsed.create_issue_form_layout;
+        if (parsed.issue_form_layout) return parsed.issue_form_layout;
+      }
+    } catch {}
+    return "quick_toggle";
+  });
+
+  const [changeFormLayoutStyle, setChangeFormLayoutStyle] = useState<"tabs" | "quick_toggle" | "classic">(() => {
+    try {
+      const storageKey = getActiveAppearanceKey();
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.change_issue_form_layout) return parsed.change_issue_form_layout;
+        if (parsed.issue_form_layout) return parsed.issue_form_layout;
+      }
+    } catch {}
+    return "tabs";
+  });
+
+  function updateFormLayoutPref(mode: "create" | "change", pref: "tabs" | "quick_toggle" | "classic") {
+    if (mode === "create") setCreateFormLayoutStyle(pref);
+    else setChangeFormLayoutStyle(pref);
+
+    try {
+      const storageKey = getActiveAppearanceKey();
+      const saved = localStorage.getItem(storageKey) || "{}";
+      const parsed = JSON.parse(saved);
+      if (mode === "create") parsed.create_issue_form_layout = pref;
+      else parsed.change_issue_form_layout = pref;
+      localStorage.setItem(storageKey, JSON.stringify(parsed));
+    } catch {}
+  }
   const [periodPopoverOpen, setPeriodPopoverOpen] = useState(false);
   const [statusPopoverOpen, setStatusPopoverOpen] = useState(false);
   const [issuePeriodPopoverOpen, setIssuePeriodPopoverOpen] = useState(false);
@@ -1499,15 +1539,15 @@ export function App() {
               )}
 
               {/* Create Mode Toggle Buttons */}
-              <div style={{ display: "inline-flex", gap: "4px", background: "var(--color-bg-subtle, #f1f5f9)", padding: "3px", borderRadius: "9px", border: "1px solid var(--color-border, #cbd5e1)" }}>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: "3px", background: "var(--color-bg-subtle, #f1f5f9)", padding: "2px", borderRadius: "8px", border: "1px solid var(--color-border, #cbd5e1)", height: "34px", boxSizing: "border-box" }}>
                 <button
                   type="button"
                   onClick={() => setIssueCreateMode("new")}
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
-                    gap: "6px",
-                    padding: "5px 12px",
+                    gap: "5px",
+                    padding: "4px 10px",
                     borderRadius: "6px",
                     border: "none",
                     background: issueCreateMode === "new" ? "#0f766e" : "transparent",
@@ -1515,10 +1555,11 @@ export function App() {
                     fontSize: "0.825rem",
                     fontWeight: "600",
                     cursor: "pointer",
+                    height: "28px",
                     transition: "all 0.15s ease"
                   }}
                 >
-                  <Plus size={14} /> + New Issue
+                  <Plus size={14} /> New Issue
                 </button>
 
                 <button
@@ -1532,8 +1573,8 @@ export function App() {
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
-                    gap: "6px",
-                    padding: "5px 12px",
+                    gap: "5px",
+                    padding: "4px 10px",
                     borderRadius: "6px",
                     border: "none",
                     background: issueCreateMode === "sub" ? "#0f766e" : "transparent",
@@ -1541,11 +1582,104 @@ export function App() {
                     fontSize: "0.825rem",
                     fontWeight: "600",
                     cursor: "pointer",
+                    height: "28px",
                     transition: "all 0.15s ease"
                   }}
                 >
-                  <Plus size={14} /> + Add Sub Issue
+                  <Plus size={14} /> Add Sub Issue
                 </button>
+              </div>
+
+              {/* Form Layout Popover Button */}
+              <div
+                className="form-layout-popover-wrapper"
+                style={{ position: "relative", display: "inline-block" }}
+                onMouseEnter={() => setFormLayoutPopoverOpen(true)}
+                onMouseLeave={() => setFormLayoutPopoverOpen(false)}
+              >
+                <button
+                  type="button"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    background: "var(--color-bg-elevated, #ffffff)",
+                    border: "1px solid var(--color-border, #cbd5e1)",
+                    color: "var(--color-text, #1e293b)",
+                    padding: "4px 10px",
+                    borderRadius: "8px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    fontSize: "0.825rem",
+                    height: "34px",
+                    boxSizing: "border-box"
+                  }}
+                  onClick={() => setFormLayoutPopoverOpen((prev) => !prev)}
+                >
+                  <LayoutGrid size={15} color="#0f766e" />
+                  <span>Layout</span>
+                  <span style={{ fontSize: "0.725rem", color: "#0f766e", background: "#f0fdf4", padding: "1px 6px", borderRadius: "4px", fontWeight: "700" }}>
+                    {createFormLayoutStyle === "tabs" ? "Tabs" : createFormLayoutStyle === "quick_toggle" ? "Quick" : "Classic"}
+                  </span>
+                  <ChevronDown size={13} style={{ opacity: 0.7, transform: formLayoutPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                </button>
+
+                {formLayoutPopoverOpen ? (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      zIndex: 1000,
+                      width: "250px",
+                      background: "var(--color-bg-elevated, #ffffff)",
+                      border: "1px solid var(--color-border, #cbd5e1)",
+                      borderRadius: "12px",
+                      boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.2)",
+                      padding: "8px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "4px",
+                      textAlign: "left"
+                    }}
+                  >
+                    <div style={{ padding: "6px 8px 4px 8px", fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)", borderBottom: "1px solid var(--color-border-soft, #e2e8f0)", marginBottom: "4px" }}>
+                      Create Layout Preference
+                    </div>
+
+                    {[
+                      { id: "quick_toggle", name: "⚡ Quick Draft Toggle", badge: "Fast Draft" },
+                      { id: "tabs", name: "📑 Tab Stepper", badge: "Structured" },
+                      { id: "classic", name: "📄 Classic Continuous", badge: "Legacy" }
+                    ].map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          updateFormLayoutPref("create", opt.id as any);
+                          setFormLayoutPopoverOpen(false);
+                        }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          padding: "8px 10px",
+                          borderRadius: "8px",
+                          border: "none",
+                          background: createFormLayoutStyle === opt.id ? "#f0fdf4" : "transparent",
+                          color: createFormLayoutStyle === opt.id ? "#0f766e" : "var(--color-text, #334155)",
+                          fontWeight: createFormLayoutStyle === opt.id ? "700" : "500",
+                          fontSize: "0.825rem",
+                          cursor: "pointer",
+                          textAlign: "left"
+                        }}
+                      >
+                        <span>{opt.name}</span>
+                        {createFormLayoutStyle === opt.id ? <CheckCircle2 size={14} color="#0f766e" /> : null}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
 
               {/* Sync CR Popover Button */}
@@ -1561,16 +1695,17 @@ export function App() {
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
-                    gap: "8px",
+                    gap: "6px",
                     background: "#0f766e",
                     border: "none",
                     color: "#ffffff",
-                    padding: "8px 18px",
+                    padding: "6px 14px",
                     borderRadius: "8px",
                     fontWeight: "600",
                     cursor: "pointer",
-                    fontSize: "0.875rem",
-                    height: "36px"
+                    fontSize: "0.825rem",
+                    height: "34px",
+                    boxSizing: "border-box"
                   }}
                   onClick={() => setSyncPopoverOpen((prev) => !prev)}
                 >
@@ -1755,6 +1890,98 @@ export function App() {
                 }}
               />
 
+              {/* Form Layout Popover Button */}
+              <div
+                className="form-layout-popover-wrapper"
+                style={{ position: "relative", display: "inline-block" }}
+                onMouseEnter={() => setFormLayoutPopoverOpen(true)}
+                onMouseLeave={() => setFormLayoutPopoverOpen(false)}
+              >
+                <button
+                  type="button"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    background: "var(--color-bg-elevated, #ffffff)",
+                    border: "1px solid var(--color-border, #cbd5e1)",
+                    color: "var(--color-text, #1e293b)",
+                    padding: "4px 10px",
+                    borderRadius: "8px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    fontSize: "0.825rem",
+                    height: "34px",
+                    boxSizing: "border-box"
+                  }}
+                  onClick={() => setFormLayoutPopoverOpen((prev) => !prev)}
+                >
+                  <LayoutGrid size={15} color="#0f766e" />
+                  <span>Layout</span>
+                  <span style={{ fontSize: "0.725rem", color: "#0f766e", background: "#f0fdf4", padding: "1px 6px", borderRadius: "4px", fontWeight: "700" }}>
+                    {changeFormLayoutStyle === "tabs" ? "Tabs" : changeFormLayoutStyle === "quick_toggle" ? "Quick" : "Classic"}
+                  </span>
+                  <ChevronDown size={13} style={{ opacity: 0.7, transform: formLayoutPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                </button>
+
+                {formLayoutPopoverOpen ? (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      zIndex: 1000,
+                      width: "250px",
+                      background: "var(--color-bg-elevated, #ffffff)",
+                      border: "1px solid var(--color-border, #cbd5e1)",
+                      borderRadius: "12px",
+                      boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.2)",
+                      padding: "8px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "4px",
+                      textAlign: "left"
+                    }}
+                  >
+                    <div style={{ padding: "6px 8px 4px 8px", fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)", borderBottom: "1px solid var(--color-border-soft, #e2e8f0)", marginBottom: "4px" }}>
+                      Edit Layout Preference
+                    </div>
+
+                    {[
+                      { id: "quick_toggle", name: "⚡ Quick Draft Toggle", badge: "Fast Draft" },
+                      { id: "tabs", name: "📑 Tab Stepper", badge: "Recommended" },
+                      { id: "classic", name: "📄 Classic Continuous", badge: "Legacy" }
+                    ].map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          updateFormLayoutPref("change", opt.id as any);
+                          setFormLayoutPopoverOpen(false);
+                        }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          padding: "8px 10px",
+                          borderRadius: "8px",
+                          border: "none",
+                          background: changeFormLayoutStyle === opt.id ? "#f0fdf4" : "transparent",
+                          color: changeFormLayoutStyle === opt.id ? "#0f766e" : "var(--color-text, #334155)",
+                          fontWeight: changeFormLayoutStyle === opt.id ? "700" : "500",
+                          fontSize: "0.825rem",
+                          cursor: "pointer",
+                          textAlign: "left"
+                        }}
+                      >
+                        <span>{opt.name}</span>
+                        {changeFormLayoutStyle === opt.id ? <CheckCircle2 size={14} color="#0f766e" /> : null}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
               {/* Sync CR Popover Button */}
               <div
                 className="sync-cr-popover-wrapper"
@@ -1768,16 +1995,17 @@ export function App() {
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
-                    gap: "8px",
+                    gap: "6px",
                     background: "#0f766e",
                     border: "none",
                     color: "#ffffff",
-                    padding: "8px 18px",
+                    padding: "6px 14px",
                     borderRadius: "8px",
                     fontWeight: "600",
                     cursor: "pointer",
-                    fontSize: "0.875rem",
-                    height: "36px"
+                    fontSize: "0.825rem",
+                    height: "34px",
+                    boxSizing: "border-box"
                   }}
                   onClick={() => setSyncPopoverOpen((prev) => !prev)}
                 >
@@ -2893,6 +3121,7 @@ export function App() {
           <IssueEditor
             mode="create"
             detail={null}
+            layoutStyleOverride={createFormLayoutStyle}
             externalCreateMode={issueCreateMode}
             onExternalCreateModeChange={setIssueCreateMode}
             selectedBaseIssue={selectedBaseIssue}
@@ -2973,6 +3202,7 @@ export function App() {
         ) : (
           <ChangeIssue
             initialIssueId={changeIssueInitialId}
+            layoutStyleOverride={changeFormLayoutStyle}
             initialAction={changeIssueInitialAction}
             initialIncompleteItem={changeIssueInitialItem}
             refreshToken={syncRefreshToken}
@@ -4942,6 +5172,7 @@ function IssueEditor({
   onExternalCreateModeChange,
   selectedBaseIssue,
   nextSubIssueNo = "01",
+  layoutStyleOverride,
   onNotify,
   onSave,
   onCancel,
@@ -4956,6 +5187,7 @@ function IssueEditor({
   onExternalCreateModeChange?: (mode: "new" | "sub") => void;
   selectedBaseIssue?: IssueRow | null;
   nextSubIssueNo?: string;
+  layoutStyleOverride?: "tabs" | "quick_toggle" | "classic";
   onNotify?: (type: "success" | "error", message: string) => void;
   onSave: (payload: IssueSavePayload) => Promise<void>;
   onCancel?: (id: number, reason: string) => Promise<void>;
@@ -4990,7 +5222,7 @@ function IssueEditor({
   const [generatingAi, setGeneratingAi] = useState(false);
   const [showAiOverwriteModal, setShowAiOverwriteModal] = useState(false);
   const [aiOverwriteSelections, setAiOverwriteSelections] = useState<Record<string, boolean>>({});
-  const [layoutStyle, setLayoutStyle] = useState<"tabs" | "quick_toggle" | "classic">(() => {
+  const [internalLayoutStyle, setInternalLayoutStyle] = useState<"tabs" | "quick_toggle" | "classic">(() => {
     try {
       const storageKey = getActiveAppearanceKey();
       const saved = localStorage.getItem(storageKey);
@@ -5001,6 +5233,7 @@ function IssueEditor({
     } catch {}
     return "tabs";
   });
+  const layoutStyle = layoutStyleOverride ?? internalLayoutStyle;
   const [editorTab, setEditorTab] = useState<"basic" | "team" | "transport" | "timeline">("basic");
   const [isQuickMode, setIsQuickMode] = useState<boolean>(() => mode === "create");
 
@@ -5011,7 +5244,6 @@ function IssueEditor({
       const parsed = JSON.parse(saved);
       parsed.issue_form_layout = pref;
       localStorage.setItem(storageKey, JSON.stringify(parsed));
-      onNotify?.("success", `Issue form layout updated & saved to Appearance Settings!`);
     } catch {}
   }
 
@@ -5625,66 +5857,6 @@ function IssueEditor({
 
   return (
     <form className="issue-editor-panel" onSubmit={submit}>
-      {/* Form Layout Header Switcher Bar */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", background: "var(--color-bg-elevated, #ffffff)", border: "1px solid var(--color-border, #cbd5e1)", borderRadius: "12px", padding: "10px 16px", marginBottom: "16px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <LayoutGrid size={16} color="#0f766e" />
-          <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "var(--color-text-heading, #0f172a)" }}>
-            Form Layout:
-          </span>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: "4px", background: "var(--color-bg-subtle, #f1f5f9)", padding: "3px", borderRadius: "8px", border: "1px solid var(--color-border, #e2e8f0)" }}>
-          <button
-            type="button"
-            onClick={() => { setLayoutStyle("tabs"); saveLayoutPref("tabs"); }}
-            style={{
-              padding: "4px 12px",
-              borderRadius: "6px",
-              border: "none",
-              background: layoutStyle === "tabs" ? "#0f766e" : "transparent",
-              color: layoutStyle === "tabs" ? "#ffffff" : "var(--color-text-muted, #64748b)",
-              fontSize: "0.75rem",
-              fontWeight: "700",
-              cursor: "pointer"
-            }}
-          >
-            📑 Tab Stepper (Ide A)
-          </button>
-          <button
-            type="button"
-            onClick={() => { setLayoutStyle("quick_toggle"); saveLayoutPref("quick_toggle"); }}
-            style={{
-              padding: "4px 12px",
-              borderRadius: "6px",
-              border: "none",
-              background: layoutStyle === "quick_toggle" ? "#0f766e" : "transparent",
-              color: layoutStyle === "quick_toggle" ? "#ffffff" : "var(--color-text-muted, #64748b)",
-              fontSize: "0.75rem",
-              fontWeight: "700",
-              cursor: "pointer"
-            }}
-          >
-            ⚡ Quick Toggle (Ide B)
-          </button>
-          <button
-            type="button"
-            onClick={() => { setLayoutStyle("classic"); saveLayoutPref("classic"); }}
-            style={{
-              padding: "4px 12px",
-              borderRadius: "6px",
-              border: "none",
-              background: layoutStyle === "classic" ? "#0f766e" : "transparent",
-              color: layoutStyle === "classic" ? "#ffffff" : "var(--color-text-muted, #64748b)",
-              fontSize: "0.75rem",
-              fontWeight: "700",
-              cursor: "pointer"
-            }}
-          >
-            📄 Classic
-          </button>
-        </div>
-      </div>
 
       {/* Ide B: Quick Create Mode Toggle Switch */}
       {layoutStyle === "quick_toggle" && (
@@ -6430,6 +6602,7 @@ function ChangeIssue({
   initialAction = "",
   initialIncompleteItem = null,
   refreshToken = 0,
+  layoutStyleOverride,
   onSave,
   onCancel,
   onDelete,
@@ -6440,6 +6613,7 @@ function ChangeIssue({
   initialAction?: "" | "cancel" | "delete";
   initialIncompleteItem?: IncompleteItem | null;
   refreshToken?: number;
+  layoutStyleOverride?: "tabs" | "quick_toggle" | "classic";
   onSave: (payload: IssueSavePayload) => Promise<void>;
   onCancel: (id: number, reason: string) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
@@ -6567,7 +6741,7 @@ function ChangeIssue({
         </section>
       ) : null}
 
-      {changeDetail ? <IssueEditor mode="change" detail={changeDetail} initialAction={initialAction} navigationRequest={navigationRequest} onNotify={onNotify} onSave={onSave} onCancel={onCancel} onDelete={onDelete} onDirtyChange={onDirtyChange} /> : null}
+      {changeDetail ? <IssueEditor mode="change" detail={changeDetail} layoutStyleOverride={layoutStyleOverride} initialAction={initialAction} navigationRequest={navigationRequest} onNotify={onNotify} onSave={onSave} onCancel={onCancel} onDelete={onDelete} onDirtyChange={onDirtyChange} /> : null}
     </div>
   );
 }

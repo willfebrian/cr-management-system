@@ -68,13 +68,13 @@ export function UIModal({
     warning: {
       badgeBg: "#fffbe8",
       badgeColor: "#d97706",
-      buttonBg: "#d97706",
+      buttonBg: "#0f766e",
       defaultIcon: <AlertTriangle size={20} />
     },
     info: {
       badgeBg: "#eff6ff",
       badgeColor: "#2563eb",
-      buttonBg: "#2563eb",
+      buttonBg: "#0f766e",
       defaultIcon: <HelpCircle size={20} />
     },
     purple: {
