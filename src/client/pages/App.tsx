@@ -1299,7 +1299,7 @@ function Dashboard({
                   <Bar
                     dataKey="open"
                     stackId="a"
-                    fill="#93c5fd"
+                    fill="#6ee7b7"
                     name="Open"
                     radius={[0, 0, 0, 0]}
                     style={{ cursor: "pointer" }}
@@ -1313,7 +1313,7 @@ function Dashboard({
                   <Bar
                     dataKey="in_progress"
                     stackId="a"
-                    fill="#2563eb"
+                    fill="#0f766e"
                     name="In Progress"
                     radius={[0, 4, 4, 0]}
                     style={{ cursor: "pointer" }}
@@ -1437,12 +1437,12 @@ function Dashboard({
                         </span>
                         <span style={{ fontWeight: "600", color: "var(--color-text-heading)" }}>{req.name}</span>
                       </div>
-                      <span style={{ fontWeight: "700", color: "#0284c7", fontSize: "0.85rem", background: "#f0f9ff", padding: "2px 10px", borderRadius: "12px", border: "1px solid #bae6fd" }}>
+                      <span style={{ fontWeight: "700", color: "#0f766e", fontSize: "0.85rem", background: "#f0fdfa", padding: "2px 10px", borderRadius: "12px", border: "1px solid #99f6e4" }}>
                         {req.count} {req.count === 1 ? "Issue" : "Issues"} &rarr;
                       </span>
                     </div>
                     <div style={{ background: "var(--color-bg-subtle, #f1f5f9)", height: "8px", borderRadius: "4px", overflow: "hidden" }}>
-                      <div style={{ width: `${percentage}%`, height: "100%", background: "linear-gradient(90deg, #38bdf8, #2563eb)", borderRadius: "4px", transition: "width 0.3s ease" }} />
+                      <div style={{ width: `${percentage}%`, height: "100%", background: "linear-gradient(90deg, #6ee7b7, #0f766e)", borderRadius: "4px", transition: "width 0.3s ease" }} />
                     </div>
                   </div>
                 );
