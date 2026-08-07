@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { nextExpandedSidebarGroup } from "../src/client/navigation";
+import { getSidebarGroupDestination, nextExpandedSidebarGroup } from "../src/client/navigation";
 
 test("opens only the requested sidebar group", () => {
   assert.equal(nextExpandedSidebarGroup("project", "issue"), "issue");
@@ -11,6 +11,12 @@ test("opens only the requested sidebar group", () => {
 test("collapses the currently open sidebar group", () => {
   assert.equal(nextExpandedSidebarGroup("issue", "issue"), null);
   assert.equal(nextExpandedSidebarGroup("project", "project"), null);
+});
+
+test("opens each sidebar group at its report destination", () => {
+  assert.equal(getSidebarGroupDestination("cr-transport"), "report");
+  assert.equal(getSidebarGroupDestination("issue"), "issue-display");
+  assert.equal(getSidebarGroupDestination("project"), "project-report");
 });
 
 test("uses semantic responsive header classes", () => {

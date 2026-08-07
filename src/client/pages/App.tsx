@@ -18,7 +18,7 @@ import { CrTransportCreate } from "../components/crTransport/CrTransportCreate";
 import { UIModal, type ModalType } from "../components/common/UIModal";
 import { fetchProjectDetail } from "../api/projectApi";
 import { afterIncompleteSectionRender, expandSection, getIncompleteItems, getIssueRowMissingItems, groupIncompleteItems, markIncompleteTarget, type ExpandedIssueSections, type IncompleteItem, type IssueSection } from "../issueIncomplete";
-import { nextExpandedSidebarGroup, type SidebarGroup } from "../navigation";
+import { getSidebarGroupDestination, nextExpandedSidebarGroup, type SidebarGroup } from "../navigation";
 import type { CrDetail, CrRequest, DashboardData, IssueDetail, IssueRow, SapSystemConfig, StatusTrendData } from "../../shared/types";
 import { AppLoadingScreen, SkeletonDetailLoader, TableDataLoader } from "../components/InteractiveLoaders";
 import type { ProjectDetail as ProjectDetailModel, ProjectStatus } from "../../shared/projectTypes";
@@ -737,7 +737,10 @@ export function App() {
           <BarChart3 size={18} /> Dashboard
         </button>
         <div className={`sidebar-group ${view === "report" || view === "cr-transport-create" ? "active" : ""}`}>
-          <button className={view === "report" || view === "cr-transport-create" ? "active" : ""} onClick={() => setExpandedSidebarGroup((current) => nextExpandedSidebarGroup(current, "cr-transport"))}>
+          <button className={view === "report" || view === "cr-transport-create" ? "active" : ""} onClick={() => {
+            setExpandedSidebarGroup("cr-transport");
+            navigateTo(getSidebarGroupDestination("cr-transport"));
+          }}>
             <FileSearch size={18} /> CR Transport
           </button>
           {expandedSidebarGroup === "cr-transport" ? <div className="sidebar-submenu">
