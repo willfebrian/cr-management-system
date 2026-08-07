@@ -4,9 +4,20 @@ export const TRANSPORT_REQUEST_TARGETS = Object.freeze({
 });
 
 export function normalizeTransportTarget(value) {
-  return String(value || "").trim().toUpperCase() === "DEV_AIX" ? "DEV_AIX" : "DEV_NC";
+  return String(value || "DEV_NC").trim().toUpperCase() || "DEV_NC";
 }
 
-export function getTransportRequestTarget(value) {
-  return TRANSPORT_REQUEST_TARGETS[normalizeTransportTarget(value)];
+export function getTransportRequestTarget(value, env = process.env) {
+  const code = normalizeTransportTarget(value);
+  if (env.SAP_CR_TARGET_CODE === code) return Object.freeze({
+    code,
+    server: String(env.SAP_CR_TARGET_SERVER || code).trim().toUpperCase(),
+    client: String(env.SAP_CR_TARGET_CLIENT || "").trim(),
+    sapUser: String(env.SAP_CR_TARGET_USER || "").trim().toUpperCase(),
+    package: String(env.SAP_CR_TARGET_PACKAGE || "ZTRD").trim().toUpperCase(),
+    connectionPrefix: "SAP_CR_TARGET"
+  });
+  const target = TRANSPORT_REQUEST_TARGETS[code];
+  if (!target) throw new Error("SAP_CR_CREATE_TARGET_NOT_CONFIGURED");
+  return target;
 }

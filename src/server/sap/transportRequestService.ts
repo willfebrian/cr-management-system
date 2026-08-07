@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "../config.js";
+import { findSapTransportTarget, type SapTransportTarget } from "./transportTargetRepository.js";
 
 export type TransportObject = {
   pgmid: string;
@@ -22,10 +23,10 @@ export type TransportRequestPayload = {
   targetSystem?: TransportTargetSystem;
 };
 
-export type TransportTargetSystem = "DEV_NC" | "DEV_AIX";
+export type TransportTargetSystem = string;
 
 export function normalizeTargetSystem(value: unknown): TransportTargetSystem {
-  return String(value || "").trim().toUpperCase() === "DEV_AIX" ? "DEV_AIX" : "DEV_NC";
+  return String(value || "DEV_NC").trim().toUpperCase() || "DEV_NC";
 }
 
 export async function resolveTransportObject(query: string, targetSystem: unknown = "DEV_NC") {
@@ -55,11 +56,15 @@ function normalizePayload(payload: TransportRequestPayload) {
 async function runPlatform(action: "resolve" | "preflight" | "create", payload: unknown) {
   const { cwd, script } = resolveTransportRequestRuntime();
   if (!fs.existsSync(script)) throw serviceError("SAP_CR_CREATE_SCRIPT_NOT_FOUND", 503);
+  const targetSystem = normalizeTargetSystem((payload as { targetSystem?: unknown })?.targetSystem);
+  const databaseTarget = await findSapTransportTarget(targetSystem);
+  if (!databaseTarget && !["DEV_NC", "DEV_AIX"].includes(targetSystem)) throw serviceError("SAP_CR_CREATE_TARGET_NOT_FOUND", 404);
+  const targetEnv = databaseTarget ? transportTargetEnvironment(databaseTarget) : {};
 
   return new Promise<Record<string, unknown>>((resolve, reject) => {
     const child = spawn(process.execPath, [script, action], {
       cwd,
-      env: process.env,
+      env: { ...process.env, ...targetEnv },
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true
     });
@@ -88,6 +93,20 @@ async function runPlatform(action: "resolve" | "preflight" | "create", payload: 
     });
     child.stdin.end(JSON.stringify(payload));
   });
+}
+
+export function transportTargetEnvironment(target: SapTransportTarget): NodeJS.ProcessEnv {
+  return {
+    SAP_CR_TARGET_CODE: target.code,
+    SAP_CR_TARGET_SERVER: target.server,
+    SAP_CR_TARGET_CLIENT: target.client,
+    SAP_CR_TARGET_USER: target.sapUser,
+    SAP_CR_TARGET_PACKAGE: target.package,
+    SAP_CR_TARGET_ASHOST: target.host,
+    SAP_CR_TARGET_SYSNR: target.systemNumber,
+    SAP_CR_TARGET_PASSWORD: target.password,
+    SAP_CR_TARGET_LANG: "EN"
+  };
 }
 
 export function resolveTransportRequestRuntime() {

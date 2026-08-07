@@ -19,7 +19,7 @@ test("automatic sync uses the fixed DEV, QA, PRD incremental three-day scope", (
   });
 });
 
-test("backend rejects an unsupported target instead of silently redirecting it", () => {
+test("backend preserves a configured target code instead of silently redirecting it", () => {
   assert.equal(normalizeTargetSystem("DEV_AIX"), "DEV_AIX");
-  assert.throws(() => normalizeTargetSystem("SAP_DEV_SANDBOX_140"), /TARGET_SYSTEM_NOT_ALLOWED/);
+  assert.equal(normalizeTargetSystem("TRS"), "TRS");
 });

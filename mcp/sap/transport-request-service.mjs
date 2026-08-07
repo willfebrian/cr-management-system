@@ -1,6 +1,6 @@
 import { AuditLogger } from "./audit-logger.mjs";
 import { AbapConfirmationService } from "./abap-confirmation-service.mjs";
-import { createSapClientForServer, SAP_GATEWAY_CALL_CONTEXT } from "./sap-client-factory.mjs";
+import { buildSapConnectionFromEnv, createSapClientForServer, SapRfcClient, SAP_GATEWAY_CALL_CONTEXT } from "./sap-client-factory.mjs";
 import { objectScope, TransportRequestGuard } from "./transport-request-guard.mjs";
 import { getTransportRequestTarget } from "./transport-request-targets.mjs";
 
@@ -10,12 +10,15 @@ export class TransportRequestService {
     client,
     confirmationService,
     auditLogger = new AuditLogger(),
-    guard
+    guard,
+    env = process.env
   } = {}) {
-    this.target = getTransportRequestTarget(targetSystem);
-    this.client = client || createSapClientForServer(this.target.server);
+    this.target = getTransportRequestTarget(targetSystem, env);
+    this.client = client || (this.target.connectionPrefix
+      ? new SapRfcClient({ serverName: this.target.server, connection: buildSapConnectionFromEnv(this.target.connectionPrefix, env), envPrefix: this.target.connectionPrefix })
+      : createSapClientForServer(this.target.server, env));
     this.confirmationService = confirmationService;
-    this.guard = guard || new TransportRequestGuard({ confirmationService });
+    this.guard = guard || new TransportRequestGuard({ confirmationService, target: this.target });
     this.auditLogger = auditLogger;
   }
 
@@ -59,7 +62,7 @@ export class TransportRequestService {
     const confirmationService = this.confirmationService || new AbapConfirmationService();
     const createGuard = this.confirmationService
       ? this.guard
-      : new TransportRequestGuard({ confirmationService });
+      : new TransportRequestGuard({ confirmationService, target: this.target });
     const confirmation = confirmationService.issue({
       agentName: "sap_abap_technical_agent",
       server: this.target.server,

@@ -1,14 +1,13 @@
-import { resolveSapServerName } from "./sap-landscape.mjs";
-import { getTransportRequestTarget } from "./transport-request-targets.mjs";
-
 export class TransportRequestGuard {
-  constructor({ confirmationService } = {}) {
+  constructor({ confirmationService, target } = {}) {
     this.confirmationService = confirmationService;
+    this.target = target;
   }
 
   authorize({ server, client, sapUser, mode, description, objects, confirmation }) {
-    const normalizedServer = resolveSapServerName(normalize(server));
-    const target = getTransportRequestTarget(normalizedServer === "SAP_DEV_AIX" ? "DEV_AIX" : "DEV_NC");
+    const normalizedServer = normalize(server);
+    const target = this.target;
+    if (!target) throw denied("TARGET_NOT_CONFIGURED");
     const normalizedMode = normalize(mode);
     const normalizedDescription = String(description || "").trim();
     const normalizedObjects = normalizeObjects(objects);
