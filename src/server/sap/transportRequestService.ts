@@ -18,10 +18,13 @@ export type TransportRequestPayload = {
   description: string;
   objects: TransportObject[];
   confirmed?: boolean;
+  targetSystem?: TransportTargetSystem;
 };
 
-export async function resolveTransportObject(query: string) {
-  return runPlatform("resolve", { query: String(query || "").trim() });
+export type TransportTargetSystem = "DEV_NC" | "DEV_AIX";
+
+export async function resolveTransportObject(query: string, targetSystem: unknown = "DEV_NC") {
+  return runPlatform("resolve", { query: String(query || "").trim(), targetSystem: normalizeTargetSystem(targetSystem) });
 }
 
 export async function preflightTransportRequest(payload: TransportRequestPayload) {
@@ -41,7 +44,7 @@ function normalizePayload(payload: TransportRequestPayload) {
     sourcePackage: String(item.sourcePackage || "").trim().toUpperCase(),
     targetPackage: "ZTRD" as const
   })) : [];
-  return { description, objects };
+  return { description, objects, targetSystem: normalizeTargetSystem(payload?.targetSystem) };
 }
 
 async function runPlatform(action: "resolve" | "preflight" | "create", payload: unknown) {
@@ -82,6 +85,12 @@ async function runPlatform(action: "resolve" | "preflight" | "create", payload: 
     });
     child.stdin.end(JSON.stringify(payload));
   });
+}
+
+export function normalizeTargetSystem(value: unknown): TransportTargetSystem {
+  const normalized = String(value || "DEV_NC").trim().toUpperCase();
+  if (normalized === "DEV_NC" || normalized === "DEV_AIX") return normalized;
+  throw serviceError("TARGET_SYSTEM_NOT_ALLOWED", 400);
 }
 
 function serviceError(message: string, status: number) {

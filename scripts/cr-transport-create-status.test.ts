@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { normalizeTransportTarget, transportTargetLabel } from "../src/client/components/crTransport/transportTarget.js";
 import { getTransportCreateState } from "../src/client/components/crTransport/CrTransportCreate.js";
 
 test("marks selected objects as assigned after SAP CR creation", () => {
@@ -37,4 +38,11 @@ test("uses English neutral guidance in the create transport form", () => {
   assert.match(source, />Request Description</);
   assert.match(source, /placeholder="Describe the requested change"/);
   assert.doesNotMatch(source, /Contoh: ZZKMK|Update ZZKMK case add new validation/);
+});
+
+test("normalizes only supported transport targets", () => {
+  assert.equal(normalizeTransportTarget("DEV_AIX"), "DEV_AIX");
+  assert.equal(normalizeTransportTarget("DEV_NC"), "DEV_NC");
+  assert.equal(normalizeTransportTarget("unknown"), "DEV_NC");
+  assert.equal(transportTargetLabel("DEV_AIX"), "DEV AIX");
 });

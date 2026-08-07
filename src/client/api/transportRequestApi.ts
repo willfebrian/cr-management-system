@@ -1,3 +1,5 @@
+import type { TransportTargetSystem } from "../components/crTransport/transportTarget.js";
+
 export type ResolvedTransportObject = {
   pgmid: string;
   objectType: string;
@@ -15,18 +17,21 @@ export type TransportRequestResult = {
   message: string;
   request?: string;
   task?: string;
+  targetSystem?: string;
+  targetServer?: string;
+  syncQueued?: boolean;
 };
 
-export async function resolveTransportObject(query: string): Promise<{ ok: boolean; message: string; rows: ResolvedTransportObject[] }> {
-  return request("/api/cr-transports/resolve-object", { query }, { retryTransient: true });
+export async function resolveTransportObject(query: string, targetSystem: TransportTargetSystem = "DEV_NC"): Promise<{ ok: boolean; message: string; rows: ResolvedTransportObject[] }> {
+  return request("/api/cr-transports/resolve-object", { query, targetSystem }, { retryTransient: true });
 }
 
-export async function preflightTransportRequest(description: string, objects: ResolvedTransportObject[]): Promise<TransportRequestResult> {
-  return request("/api/cr-transports/preflight", { description, objects });
+export async function preflightTransportRequest(description: string, objects: ResolvedTransportObject[], targetSystem: TransportTargetSystem = "DEV_NC"): Promise<TransportRequestResult> {
+  return request("/api/cr-transports/preflight", { description, objects, targetSystem });
 }
 
-export async function createTransportRequest(description: string, objects: ResolvedTransportObject[]): Promise<TransportRequestResult> {
-  return request("/api/cr-transports/create", { description, objects, confirmed: true });
+export async function createTransportRequest(description: string, objects: ResolvedTransportObject[], targetSystem: TransportTargetSystem = "DEV_NC"): Promise<TransportRequestResult> {
+  return request("/api/cr-transports/create", { description, objects, targetSystem, confirmed: true });
 }
 
 async function request<T>(url: string, body: unknown, options: { retryTransient?: boolean } = {}): Promise<T> {

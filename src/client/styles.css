@@ -5220,6 +5220,9 @@ body.dark-theme .issue-column-menu-list label.column-menu-item:hover {
 .cr-create-workspace { display: grid; gap: var(--space-4); max-width: 1240px; }
 .cr-create-workspace .card { background: var(--surface-card); border: 1px solid var(--color-border); border-radius: var(--radius-card); box-shadow: var(--shadow-sm); }
 .cr-create-intro { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; padding: 22px 24px; }
+.cr-create-intro-tools { display: flex; align-items: flex-end; gap: 12px; }
+.cr-target-picker { display: grid; gap: 6px; min-width: 150px; color: var(--color-text-muted); font-size: var(--font-size-caption); }
+.cr-target-picker select { width: 100%; min-height: 40px; padding: 0 34px 0 12px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--surface-card); color: var(--color-text); font: inherit; }
 .cr-create-intro h2 { margin: 0; font-size: var(--font-size-section-title); }
 .cr-create-intro p, .cr-create-section-heading p, .cr-create-actions p { margin: 5px 0 0; color: var(--color-text-muted); }
 .cr-create-boundary { display: flex; align-items: center; gap: 10px; color: #0f766e; background: var(--surface-selected); border: 1px solid #99d8cc; border-radius: var(--radius-control); padding: 10px 13px; white-space: nowrap; }
@@ -5290,6 +5293,7 @@ body.dark-theme .cr-confirm-error { border-color: #7f1d1d; background: #451a1a; 
 body.dark-theme .cr-selected-row button:hover { background: #451a1a; }
 @media (max-width: 900px) {
   .cr-create-intro, .cr-create-actions { grid-template-columns: 1fr; display: grid; }
+  .cr-create-intro-tools { align-items: stretch; flex-direction: column; }
   .cr-create-boundary { white-space: normal; }
   .cr-result-row { grid-template-columns: 34px minmax(0, 1fr) 92px; }
   .cr-object-package, .cr-lock-warning, .cr-assigned-badge { grid-column: 2; }
