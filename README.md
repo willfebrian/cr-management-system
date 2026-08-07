@@ -51,6 +51,8 @@ Web application for SAP Change Request management.
    SAP_CR_PRD_ENABLED=true
    ```
 
+   Create CR Transport uses the bundled `scripts/cr-transport-request.mjs` runtime. No external platform directory is required.
+
 3. Apply schema:
 
    ```powershell

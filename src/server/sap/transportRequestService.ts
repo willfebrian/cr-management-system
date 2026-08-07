@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { config } from "../config.js";
 
 export type TransportObject = {
@@ -52,9 +53,7 @@ function normalizePayload(payload: TransportRequestPayload) {
 }
 
 async function runPlatform(action: "resolve" | "preflight" | "create", payload: unknown) {
-  const cwd = config.sap.transportRequestPlatformDir || config.sap.externalPlatformDir;
-  if (!cwd) throw serviceError("SAP_CR_CREATE_PLATFORM_DIR_REQUIRED", 503);
-  const script = path.join(cwd, "scripts", "cr-transport-request.mjs");
+  const { cwd, script } = resolveTransportRequestRuntime();
   if (!fs.existsSync(script)) throw serviceError("SAP_CR_CREATE_SCRIPT_NOT_FOUND", 503);
 
   return new Promise<Record<string, unknown>>((resolve, reject) => {
@@ -89,6 +88,11 @@ async function runPlatform(action: "resolve" | "preflight" | "create", payload: 
     });
     child.stdin.end(JSON.stringify(payload));
   });
+}
+
+export function resolveTransportRequestRuntime() {
+  const cwd = fileURLToPath(new URL("../../../", import.meta.url));
+  return { cwd, script: path.join(cwd, "scripts", "cr-transport-request.mjs") };
 }
 
 
