@@ -54,7 +54,7 @@ function LoginScreen({ onLogin }: { onLogin: (user: AuthUser) => void }) {
     event.preventDefault(); setBusy(true); setError("");
     try { onLogin((await login(username, password)).user); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } finally { setBusy(false); }
   }
-  return <div className="auth-screen"><form className="auth-panel" onSubmit={submit}><div className="brand"><Database size={22} /><span>CR Management System</span></div><h1>Sign in</h1><label>Username<input autoFocus value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Enter username" autoComplete="username" /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter password" autoComplete="current-password" /></label>{error ? <div className="auth-error">{error}</div> : null}<button className="primary-button" disabled={busy}><LogIn size={17} /> {busy ? "Signing in..." : "Sign in"}</button></form></div>;
+  return <div className="auth-screen" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", boxSizing: "border-box", zIndex: 9999 }}><form className="auth-panel" onSubmit={submit}><div className="brand"><Database size={22} /><span>CR Management System</span></div><h1>Sign in</h1><label>Username<input autoFocus value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Enter username" autoComplete="username" /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter password" autoComplete="current-password" /></label>{error ? <div className="auth-error">{error}</div> : null}<button className="primary-button" disabled={busy}><LogIn size={17} /> {busy ? "Signing in..." : "Sign in"}</button></form></div>;
 }
 
 function ChangePasswordScreen({ onDone }: { onDone: () => void }) {
@@ -737,7 +737,13 @@ export function App() {
           <BarChart3 size={18} /> Dashboard
         </button>
         <div className={`sidebar-group ${view === "report" || view === "cr-transport-create" ? "active" : ""}`}>
-          <button className={view === "report" || view === "cr-transport-create" ? "active" : ""} onClick={() => setExpandedSidebarGroup((current) => nextExpandedSidebarGroup(current, "cr-transport"))}>
+          <button
+            className={view === "report" || view === "cr-transport-create" ? "active" : ""}
+            onClick={() => {
+              setExpandedSidebarGroup("cr-transport");
+              navigateTo("report");
+            }}
+          >
             <FileSearch size={18} /> CR Transport
           </button>
           {expandedSidebarGroup === "cr-transport" ? <div className="sidebar-submenu">
@@ -837,7 +843,30 @@ export function App() {
             <span className="sidebar-user">{authUser.username}</span>
             <small>Last login: {authUser.lastLoginAt ? formatDateTime(authUser.lastLoginAt) : "First session"}</small>
           </div>
-          <button className="logout-button" onClick={() => { logout().finally(() => window.location.reload()); }}><LogOut size={16} /> Logout</button>
+          <button
+            className="logout-button"
+            type="button"
+            onClick={() => {
+              setConfirmModal({
+                isOpen: true,
+                title: "Sign Out Confirmation",
+                subtitle: "Are you sure you want to sign out of CR Management System?",
+                type: "warning",
+                confirmText: "Yes, Sign Out",
+                cancelText: "Cancel",
+                onConfirm: async () => {
+                  setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+                  try {
+                    await logout();
+                  } finally {
+                    window.location.reload();
+                  }
+                }
+              });
+            }}
+          >
+            <LogOut size={16} /> Logout
+          </button>
         </div>
       </aside>
 
@@ -3467,32 +3496,36 @@ export function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(metricModalData.issues || []).length === 0 ? (
-                      <tr><td colSpan={5} style={{ padding: "24px", textAlign: "center", color: "#64748b" }}>No data found.</td></tr>
-                    ) : (
-                      (metricModalData.issues || [])
-                        .filter(i => !metricModalData.search || `${i.issue_key} ${i.issue_name} ${i.abaper_name_snapshot}`.toLowerCase().includes(metricModalData.search.toLowerCase()))
-                        .slice(0, 100)
-                        .map((i) => (
-                          <tr
-                            key={i.id}
-                            className="popup-table-row"
-                            onClick={() => {
-                              setMetricModal(prev => ({ ...prev, isOpen: false }));
-                              setChangeIssueInitialId(i.id);
-                              setChangeIssueInitialAction("");
-                              setChangeIssueInitialItem(null);
-                              navigateTo("issue-change");
-                            }}
-                          >
-                            <td style={{ padding: "10px 14px", fontWeight: "700", color: "#0f766e" }}>{i.issue_key}</td>
-                            <td style={{ padding: "10px 14px", color: "#1e293b" }}>{i.issue_name}</td>
-                            <td style={{ padding: "10px 14px", color: "#475569" }}>{i.abaper_name_snapshot || "-"}</td>
-                            <td style={{ padding: "10px 14px", color: "#475569", fontWeight: "600" }}>{i.primary_cr || "-"}</td>
-                            <td style={{ padding: "10px 14px", textAlign: "center" }}><Status value={i.issue_status || "open"} /></td>
-                          </tr>
-                        ))
-                    )}
+                    {(() => {
+                      const filteredIssues = (metricModalData.issues || []).filter((i) => {
+                        if (!metricModalData.search) return true;
+                        const query = metricModalData.search.toLowerCase();
+                        const searchStr = `${i.issue_key} ${i.issue_name} ${i.abaper_name_snapshot || "unassigned"} ${i.primary_cr || ""} ${i.requester_name_snapshot || ""}`.toLowerCase();
+                        return searchStr.includes(query);
+                      });
+                      if (filteredIssues.length === 0) {
+                        return <tr><td colSpan={5} style={{ padding: "24px", textAlign: "center", color: "#64748b" }}>No data found.</td></tr>;
+                      }
+                      return filteredIssues.slice(0, 100).map((i) => (
+                        <tr
+                          key={i.id}
+                          className="popup-table-row"
+                          onClick={() => {
+                            setMetricModal(prev => ({ ...prev, isOpen: false }));
+                            setChangeIssueInitialId(i.id);
+                            setChangeIssueInitialAction("");
+                            setChangeIssueInitialItem(null);
+                            navigateTo("issue-change");
+                          }}
+                        >
+                          <td style={{ padding: "10px 14px", fontWeight: "700", color: "#0f766e" }}>{i.issue_key}</td>
+                          <td style={{ padding: "10px 14px", color: "#1e293b" }}>{i.issue_name}</td>
+                          <td style={{ padding: "10px 14px", color: "#475569" }}>{i.abaper_name_snapshot || "Unassigned"}</td>
+                          <td style={{ padding: "10px 14px", color: "#475569", fontWeight: "600" }}>{i.primary_cr || "-"}</td>
+                          <td style={{ padding: "10px 14px", textAlign: "center" }}><Status value={i.issue_status || "open"} /></td>
+                        </tr>
+                      ));
+                    })()}
                   </tbody>
                 </table>
               </div>

@@ -45,8 +45,8 @@ body {
   background: var(--surface-page);
 }
 
-.auth-screen { min-height: 100vh; display: grid; place-items: center; background: #f3f5f8; padding: 24px; }
-.auth-panel { width: min(420px, 100%); background: #fff; border: 1px solid #d7dee8; border-radius: 8px; padding: 32px; box-shadow: 0 12px 30px rgba(20, 40, 70, .08); }
+.auth-screen { position: fixed; top: 0; left: 0; right: 0; bottom: 0; width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #f1f5f9; padding: 24px; box-sizing: border-box; z-index: 9999; overflow-y: auto; }
+.auth-panel { width: 100%; max-width: 400px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 14px; padding: 32px 28px; box-shadow: 0 20px 40px -10px rgba(15, 23, 42, 0.12); box-sizing: border-box; }
 .auth-panel .brand { color: #14233f; margin-bottom: 28px; }
 .auth-panel h1 { margin: 0 0 24px; font-size: 28px; }
 .auth-panel label { display: grid; gap: 7px; margin: 14px 0; color: #49627f; font-size: 14px; }
