@@ -95,6 +95,7 @@ export async function getDashboard() {
         req.description,
         req.status_group,
         req.changed_date::text AS changed_date,
+        link.issue_id AS linked_issue_id,
         COALESCE(req_p.name, h.requester_name_snapshot) AS requester_name,
         COALESCE(abap_p.name, h.abaper_name_snapshot) AS abaper_name,
         tester_p.name AS tester_name
@@ -374,7 +375,7 @@ export async function listCrRequests(filters: CrRequestFilters = {}) {
     LEFT JOIN issue_cr_links icl ON icl.trkorr = cr_requests.trkorr
     LEFT JOIN issue_headers ih ON ih.id = icl.issue_id
     ${whereSql}
-    ORDER BY cr_requests.trkorr DESC
+    ORDER BY trkorr DESC
     LIMIT $${params.length - 1} OFFSET $${params.length}
   `, params);
   return {

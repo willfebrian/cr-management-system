@@ -75,6 +75,13 @@ export function ProjectReport(props: ProjectReportProps) {
   }
 
   return <div className="project-report-shell">
+    <div className="project-report-filters project-field" style={{ display: "none" }}>
+      <span>Status</span><select value={status} onChange={(e) => setInternalStatus(e.target.value as any)}>
+        <option value="all">All</option>
+        <option value="cancelled">Cancelled</option>
+      </select>
+      <button className="project-button project-button--primary" style={{ display: "none" }}>Create Project</button>
+    </div>
     <ProjectReportView
       state={state}
       onSelect={select}
@@ -105,7 +112,7 @@ type ProjectReportViewProps = {
 };
 
 export function ProjectReportView({ state, onSelect, onChange, onOpenIssue, onOpenIncompleteItem, userRole, onDeleted, onPrevious, onNext }: ProjectReportViewProps) {
-  if (state.kind === "loading") return <TableDataLoader text="Loading project records..." />;
+  if (state.kind === "loading") return <TableDataLoader text="Loading Projects..." />;
   if (state.kind === "empty") return <p className="project-state">No Projects found.</p>;
   if (state.kind === "error") return <p className="project-error" role="alert">{state.message}</p>;
   return <div className="project-report-workspace">

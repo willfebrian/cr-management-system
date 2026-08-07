@@ -31,6 +31,10 @@
   justify-content: space-between;
 }
 
+.project-editor-actions {
+  justify-content: flex-end;
+}
+
 .project-report-toolbar {
   align-items: flex-end;
 }
