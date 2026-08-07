@@ -4158,26 +4158,50 @@ function Dashboard({
         </section>
       </div>
 
-      {/* Issue Overview Section */}
-      <h2 className="dashboard-section-title" style={{ gridColumn: "1 / -1", margin: "16px 0 4px" }}>Issue Overview</h2>
-      
-      {/* Row 1: Issue Completion & Status Metrics */}
-      <div className="summary-metrics-bar">
-        <Metric label="Complete Issues" value={issueInsights?.completion?.complete || 0} onClick={() => onMetricClick?.("Complete Issues List", "issue", { status: "all", completionStatus: "complete" })} />
-        <Metric label="Incomplete Active" value={issueInsights?.completion?.incomplete || 0} onClick={() => onMetricClick?.("Incomplete Active Issues List", "issue", { status: "all", completionStatus: "incomplete" })} />
-        <Metric label="Open Issues" value={issueStatusCount("open")} onClick={() => onMetricClick?.("Open Issues List", "issue", { status: "open" })} />
-        <Metric label="In Progress Issues" value={issueStatusCount("in_progress")} onClick={() => onMetricClick?.("In Progress Issues List", "issue", { status: "in_progress" })} />
-        <Metric label="OK Issues" value={issueStatusCount("ok")} onClick={() => onMetricClick?.("OK Issues List", "issue", { status: "ok" })} />
+      {/* Issue Overview Section - Responsive Side-by-Side & Horizontal Row Layout */}
+      <h2 className="dashboard-section-title" style={{ gridColumn: "1 / -1", margin: "20px 0 12px" }}>Issue Overview</h2>
+
+      {/* Row 1 on Desktop: Workflow Status (Left) & Data Audit (Right) side-by-side */}
+      <div className="overview-split-row">
+        {/* Left Column: Workflow Status (4 cards) */}
+        <div className="overview-split-col-4">
+          <div style={{ fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)", textTransform: "uppercase", marginBottom: "8px" }}>
+            Workflow Status
+          </div>
+          <div className="summary-metrics-bar-4">
+            <Metric label="Open Issues" value={issueStatusCount("open")} onClick={() => onMetricClick?.("Open Issues List", "issue", { status: "open" })} />
+            <Metric label="In Progress Issues" value={issueStatusCount("in_progress")} onClick={() => onMetricClick?.("In Progress Issues List", "issue", { status: "in_progress" })} />
+            <Metric label="OK Issues" value={issueStatusCount("ok")} onClick={() => onMetricClick?.("OK Issues List", "issue", { status: "ok" })} />
+            <Metric label="Cancelled / Excluded" value={issueLifecycleCount("cancelled")} onClick={() => onMetricClick?.("Cancelled / Excluded Issues List", "issue", { status: "cancelled" })} />
+          </div>
+        </div>
+
+        {/* Right Column: Data Completeness Audit (3 cards) */}
+        <div className="overview-split-col-3">
+          <div style={{ fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)", textTransform: "uppercase", marginBottom: "8px" }}>
+            Data Completeness Audit
+          </div>
+          <div className="summary-metrics-bar-3">
+            <Metric label="Complete Issues" value={issueInsights?.completion?.complete || 0} onClick={() => onMetricClick?.("Complete Issues List", "issue", { status: "all", completionStatus: "complete" })} />
+            <Metric label="Incomplete Issues" value={issueInsights?.completion?.incomplete || 0} onClick={() => onMetricClick?.("Incomplete Active Issues List", "issue", { status: "all", completionStatus: "incomplete" })} />
+            <Metric label="Cancelled / Excluded" value={issueLifecycleCount("cancelled")} onClick={() => onMetricClick?.("Cancelled / Excluded Issues List", "issue", { status: "cancelled" })} />
+          </div>
+        </div>
       </div>
 
-      {/* Row 2: Issue by CR Lifecycle Metrics */}
-      <div className="summary-metrics-bar summary-metrics-bar-6">
-        <Metric label="No CR Assigned" value={issueLifecycleCount("no_cr")} onClick={() => onMetricClick?.("Issues with No CR Assigned", "issue", { lifecycleStatus: "no_cr" })} />
-        <Metric label="CR Created" value={issueLifecycleCount("created")} onClick={() => onMetricClick?.("Issues with CR Created", "issue", { lifecycleStatus: "created" })} />
-        <Metric label="CR Released" value={issueLifecycleCount("released")} onClick={() => onMetricClick?.("Issues with CR Released", "issue", { lifecycleStatus: "released" })} />
-        <Metric label="CR In QA" value={issueLifecycleCount("in_qa")} onClick={() => onMetricClick?.("Issues with CR In QA", "issue", { lifecycleStatus: "in_qa" })} />
-        <Metric label="CR In PRD" value={issueLifecycleCount("in_prd")} onClick={() => onMetricClick?.("Issues with CR In PRD", "issue", { lifecycleStatus: "in_prd" })} />
-        <Metric label="Cancelled / Excluded" value={issueLifecycleCount("cancelled")} onClick={() => onMetricClick?.("Cancelled / Excluded Issues List", "issue", { status: "cancelled" })} />
+      {/* Row 2: CR SAP Lifecycle (6 cards spread horizontally to the right) */}
+      <div style={{ gridColumn: "1 / -1", marginBottom: "20px" }}>
+        <div style={{ fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)", textTransform: "uppercase", marginBottom: "8px" }}>
+          CR SAP Lifecycle
+        </div>
+        <div className="summary-metrics-bar-6">
+          <Metric label="No CR Assigned" value={issueLifecycleCount("no_cr")} onClick={() => onMetricClick?.("Issues with No CR Assigned", "issue", { lifecycleStatus: "no_cr" })} />
+          <Metric label="CR Created" value={issueLifecycleCount("created")} onClick={() => onMetricClick?.("Issues with CR Created", "issue", { lifecycleStatus: "created" })} />
+          <Metric label="CR Released" value={issueLifecycleCount("released")} onClick={() => onMetricClick?.("Issues with CR Released", "issue", { lifecycleStatus: "released" })} />
+          <Metric label="CR In QA" value={issueLifecycleCount("in_qa")} onClick={() => onMetricClick?.("Issues with CR In QA", "issue", { lifecycleStatus: "in_qa" })} />
+          <Metric label="CR In PRD" value={issueLifecycleCount("in_prd")} onClick={() => onMetricClick?.("Issues with CR In PRD", "issue", { lifecycleStatus: "in_prd" })} />
+          <Metric label="Cancelled / Excluded" value={issueLifecycleCount("cancelled")} onClick={() => onMetricClick?.("Cancelled / Excluded Issues List", "issue", { status: "cancelled" })} />
+        </div>
       </div>
 
       <section className="panel chart-panel">
