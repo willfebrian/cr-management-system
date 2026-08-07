@@ -71,6 +71,7 @@ export type DashboardData = {
     requester_name?: string | null;
     abaper_name?: string | null;
     tester_name?: string | null;
+    linked_issue_id?: number | null;
   }>;
   lastSuccessfulSync: {
     id: string;

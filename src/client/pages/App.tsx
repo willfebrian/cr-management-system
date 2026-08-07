@@ -1,7 +1,7 @@
 import { applyCustomStatusColors } from "../utils/tagColors";
 import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
-import { AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Ban, Calendar, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Database, FileOutput, FileSearch, FileText, FolderKanban, GitPullRequest, KeyRound, LayoutGrid, Link as LinkIcon, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Tag, Trash2, Users, X, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Ban, Calendar, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Database, FileOutput, FileSearch, FileText, FolderKanban, GitPullRequest, KeyRound, LayoutGrid, Link as LinkIcon, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Tag, Trash2, User, Users, X, XCircle } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchAdminSettings, fetchAdminPeople, fetchCrDetail, fetchCrList, fetchDashboard, fetchGlpiTicketDetail, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind, type GlpiTicketDetail, type AdminPersonRow } from "../api";
 import { IncompleteGroupCards } from "../components/IncompleteGroupCards";
@@ -46,15 +46,153 @@ const PROJECTS_ENABLED = import.meta.env.VITE_ENABLE_PROJECTS !== "false";
 const USER_MANAGEMENT_ENABLED = import.meta.env.VITE_ENABLE_USER_MANAGEMENT !== "false";
 
 function LoginScreen({ onLogin }: { onLogin: (user: AuthUser) => void }) {
-  const [username, setUsername] = useState("");
+  const [username, setUsername] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("cr_saved_usernames") || "[]");
+      return saved[0] || "";
+    } catch {
+      return "";
+    }
+  });
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [savedUsernames, setSavedUsernames] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("cr_saved_usernames") || "[]");
+    } catch {
+      return [];
+    }
+  });
+
   async function submit(event: FormEvent) {
-    event.preventDefault(); setBusy(true); setError("");
-    try { onLogin((await login(username, password)).user); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } finally { setBusy(false); }
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const res = await login(username, password);
+      if (username.trim()) {
+        const updated = Array.from(new Set([username.trim(), ...savedUsernames]));
+        localStorage.setItem("cr_saved_usernames", JSON.stringify(updated));
+      }
+      onLogin(res.user);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
   }
-  return <div className="auth-screen" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", boxSizing: "border-box", zIndex: 9999 }}><form className="auth-panel" onSubmit={submit}><div className="brand"><Database size={22} /><span>CR Management System</span></div><h1>Sign in</h1><label>Username<input autoFocus value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Enter username" autoComplete="username" /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter password" autoComplete="current-password" /></label>{error ? <div className="auth-error">{error}</div> : null}<button className="primary-button" disabled={busy}><LogIn size={17} /> {busy ? "Signing in..." : "Sign in"}</button></form></div>;
+
+  function handleRemoveSavedUser(e: React.MouseEvent, userToRemove: string) {
+    e.stopPropagation();
+    const updated = savedUsernames.filter((u) => u !== userToRemove);
+    setSavedUsernames(updated);
+    localStorage.setItem("cr_saved_usernames", JSON.stringify(updated));
+    if (username === userToRemove) setUsername(updated[0] || "");
+  }
+
+  return (
+    <div className="auth-screen" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", boxSizing: "border-box", zIndex: 9999 }}>
+      <form className="auth-panel" method="post" action="#" name="loginForm" onSubmit={submit}>
+        <div className="brand">
+          <Database size={22} />
+          <span>CR Management System</span>
+        </div>
+        <h1>Sign in</h1>
+
+        <label>
+          Username
+          <input
+            id="username"
+            name="username"
+            autoFocus
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            placeholder="Enter username"
+            autoComplete="username"
+            list="saved-usernames-list"
+          />
+          {savedUsernames.length > 0 && (
+            <datalist id="saved-usernames-list">
+              {savedUsernames.map((u) => (
+                <option key={u} value={u} />
+              ))}
+            </datalist>
+          )}
+        </label>
+
+        {/* Quick Selector Chips for Saved / Recent Logged-In Users */}
+        {savedUsernames.length > 0 && (
+          <div style={{ marginTop: "-4px", marginBottom: "8px" }}>
+            <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #64748b)", marginBottom: "4px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span>Recent users:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSavedUsernames([]);
+                  localStorage.removeItem("cr_saved_usernames");
+                }}
+                style={{ background: "none", border: "none", color: "var(--color-text-muted, #94a3b8)", fontSize: "0.7rem", cursor: "pointer", padding: 0 }}
+              >
+                Clear history
+              </button>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+              {savedUsernames.map((user) => (
+                <span
+                  key={user}
+                  onClick={() => setUsername(user)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    padding: "3px 8px",
+                    borderRadius: "6px",
+                    background: username === user ? "var(--color-primary-soft, #e6f4f1)" : "var(--color-bg-subtle, #f1f5f9)",
+                    border: username === user ? "1px solid var(--color-primary, #0f766e)" : "1px solid var(--color-border, #cbd5e1)",
+                    color: username === user ? "var(--color-primary, #0f766e)" : "var(--color-text, #334155)",
+                    fontSize: "0.75rem",
+                    fontWeight: username === user ? "600" : "400",
+                    cursor: "pointer",
+                    transition: "all 0.15s ease"
+                  }}
+                >
+                  <User size={12} /> {user}
+                  <button
+                    type="button"
+                    onClick={(e) => handleRemoveSavedUser(e, user)}
+                    style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", padding: 0, marginLeft: "2px", display: "flex", alignItems: "center" }}
+                    title="Remove saved user"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <label>
+          Password
+          <input
+            id="password"
+            name="password"
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="Enter password"
+            autoComplete="current-password"
+          />
+        </label>
+
+        {error ? <div className="auth-error">{error}</div> : null}
+
+        <button className="primary-button" disabled={busy}>
+          <LogIn size={17} /> {busy ? "Signing in..." : "Sign in"}
+        </button>
+      </form>
+    </div>
+  );
 }
 
 function ChangePasswordScreen({ onDone }: { onDone: () => void }) {
@@ -733,14 +871,14 @@ export function App() {
           <span>CR Management System</span>
         </div>
         <div className="sidebar-nav">
-        <button className={view === "dashboard" ? "active" : ""} onClick={() => navigateTo("dashboard")}>
+        <button className={view === "dashboard" ? "active" : ""} onClick={() => { setExpandedSidebarGroup(null); navigateTo("dashboard"); }}>
           <BarChart3 size={18} /> Dashboard
         </button>
         <div className={`sidebar-group ${view === "report" || view === "cr-transport-create" ? "active" : ""}`}>
           <button
             className={view === "report" || view === "cr-transport-create" ? "active" : ""}
             onClick={() => {
-              setExpandedSidebarGroup("cr-transport");
+              setExpandedSidebarGroup(prev => nextExpandedSidebarGroup(prev, "cr-transport"));
               navigateTo("report");
             }}
           >
@@ -753,7 +891,7 @@ export function App() {
         </div>
         <div className={`sidebar-group ${view.startsWith("issue-") ? "active" : ""}`}>
           <button className={view.startsWith("issue-") ? "active" : ""} onClick={() => {
-            setExpandedSidebarGroup("issue");
+            setExpandedSidebarGroup(prev => nextExpandedSidebarGroup(prev, "issue"));
             setChangeIssueInitialId(null);
             setChangeIssueInitialAction("");
             setChangeIssueInitialItem(null);
@@ -790,7 +928,7 @@ export function App() {
         </div>
         {PROJECTS_ENABLED ? <div className={`sidebar-group ${view.startsWith("project-") ? "active" : ""}`}>
           <button className={view.startsWith("project-") ? "active" : ""} onClick={() => {
-            setExpandedSidebarGroup("project");
+            setExpandedSidebarGroup(prev => nextExpandedSidebarGroup(prev, "project"));
             setProjectEditorDetail(null);
             navigateTo("project-report");
           }}>
@@ -813,23 +951,23 @@ export function App() {
         </div> : null}
         {authUser.role === "ADMIN" ? (
           <div className={`sidebar-group ${view === "master-data" ? "active" : ""}`}>
-            <button className={view === "master-data" ? "active" : ""} onClick={() => navigateTo("master-data")}>
+            <button className={view === "master-data" ? "active" : ""} onClick={() => { setExpandedSidebarGroup(null); navigateTo("master-data"); }}>
               <Database size={18} /> Master Data
             </button>
           </div>
         ) : null}
         <div className={`sidebar-group ${view === "settings" ? "active" : ""}`}>
-          <button className={view === "settings" ? "active" : ""} onClick={() => navigateTo("settings")}>
+          <button className={view === "settings" ? "active" : ""} onClick={() => { setExpandedSidebarGroup(null); navigateTo("settings"); }}>
             <Sliders size={18} /> Settings
           </button>
         </div>
         <div className={`sidebar-group ${view === "audit-log" ? "active" : ""}`}>
-          <button className={view === "audit-log" ? "active" : ""} onClick={() => navigateTo("audit-log")}>
+          <button className={view === "audit-log" ? "active" : ""} onClick={() => { setExpandedSidebarGroup(null); navigateTo("audit-log"); }}>
             <ShieldCheck size={18} /> Audit Log
           </button>
         </div>
         {USER_MANAGEMENT_ENABLED && authUser.role === "ADMIN" ? (
-          <button className={view === "user-management" ? "active" : ""} onClick={() => navigateTo("user-management")}>
+          <button className={view === "user-management" ? "active" : ""} onClick={() => { setExpandedSidebarGroup(null); navigateTo("user-management"); }}>
             <Users size={18} /> User Management
           </button>
         ) : null}
@@ -3199,6 +3337,11 @@ export function App() {
             onIssueTrendClick={openIssueFromTrend}
             onMetricClick={openMetricPopup}
             onNavigateView={(v) => setView(v)}
+            onOpenChangeIssue={(issueId) => {
+              if (!navigateTo("issue-change")) return;
+              setExpandedSidebarGroup("issue");
+              setChangeIssueInitialId(issueId);
+            }}
           />
         ) : view === "cr-transport-create" ? (
           <CrTransportCreate />
@@ -3680,7 +3823,8 @@ function Dashboard({
   onTrendClick,
   onIssueTrendClick,
   onMetricClick,
-  onNavigateView
+  onNavigateView,
+  onOpenChangeIssue
 }: {
   dashboard: DashboardData | null;
   requests: CrRequest[];
@@ -3692,6 +3836,7 @@ function Dashboard({
   onIssueTrendClick: (status: string, monthStart: string) => void;
   onMetricClick?: (title: string, kind: "cr" | "issue", filters: CrFilters | IssueFilters) => void;
   onNavigateView?: (view: View) => void;
+  onOpenChangeIssue?: (issueId: number) => void;
 }) {
   const outstanding = dashboard?.byStatus.find((row) => row.status_group === "outstanding")?.count || 0;
   const released = dashboard?.byStatus.find((row) => row.status_group === "released")?.count || 0;
@@ -4031,36 +4176,60 @@ function Dashboard({
       <section className="panel wide">
         <h2>Recent CR Activity</h2>
         <div className="rows">
-          {(dashboard?.recentActivity || requests.slice(0, 8)).map((request) => (
-            <div className="row" key={`${request.sap_system_code}-${request.trkorr}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", minWidth: 0, flex: 1 }}>
-                <span style={{ fontWeight: "700", fontSize: "0.875rem", whiteSpace: "nowrap" }}>{request.sap_system_code} - {request.trkorr}</span>
-                <small style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{request.description}</small>
-              </div>
+          {(dashboard?.recentActivity || requests.slice(0, 8)).map((request) => {
+            const issueId = request.linked_issue_id || (request as CrRequest).linked_issue_id;
+            return (
+              <div
+                className="row"
+                key={`${request.sap_system_code}-${request.trkorr}`}
+                onClick={() => {
+                  if (issueId) {
+                    onOpenChangeIssue?.(issueId);
+                  } else {
+                    onMetricClick?.(`CR ${request.trkorr}`, "cr", { sapSystemCode: request.sap_system_code, q: request.trkorr });
+                  }
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "1rem",
+                  cursor: "pointer",
+                  padding: "10px 12px",
+                  borderRadius: "8px",
+                  transition: "all 0.15s ease"
+                }}
+                title={issueId ? "Click to open in Change Issue" : "Click to view CR detail"}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", minWidth: 0, flex: 1 }}>
+                  <span style={{ fontWeight: "700", fontSize: "0.875rem", whiteSpace: "nowrap" }}>{request.sap_system_code} - {request.trkorr}</span>
+                  <small style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{request.description}</small>
+                </div>
 
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem" }}>
-                {request.requester_name ? (
-                  <span title="Requester" style={{ background: "#f1f5f9", color: "#475569", padding: "2px 8px", borderRadius: "12px", border: "1px solid #cbd5e1" }}>
-                    Req: <strong>{request.requester_name}</strong>
-                  </span>
-                ) : null}
-                {request.abaper_name ? (
-                  <span title="ABAPer" style={{ background: "#eff6ff", color: "#1d4ed8", padding: "2px 8px", borderRadius: "12px", border: "1px solid #bfdbfe" }}>
-                    ABAP: <strong>{request.abaper_name}</strong>
-                  </span>
-                ) : null}
-                {request.tester_name ? (
-                  <span title="Tester" style={{ background: "#f0fdf4", color: "#15803d", padding: "2px 8px", borderRadius: "12px", border: "1px solid #bbf7d0" }}>
-                    Test: <strong>{request.tester_name}</strong>
-                  </span>
-                ) : null}
-                {(request.requester_name || request.abaper_name || request.tester_name) ? (
-                  <div style={{ width: "1px", height: "16px", background: "var(--color-border, #cbd5e1)", margin: "0 4px" }} />
-                ) : null}
-                <Status value={request.status_group} />
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem" }}>
+                  {request.requester_name ? (
+                    <span title="Requester" style={{ background: "#f1f5f9", color: "#475569", padding: "2px 8px", borderRadius: "12px", border: "1px solid #cbd5e1" }}>
+                      Req: <strong>{request.requester_name}</strong>
+                    </span>
+                  ) : null}
+                  {request.abaper_name ? (
+                    <span title="ABAPer" style={{ background: "#eff6ff", color: "#1d4ed8", padding: "2px 8px", borderRadius: "12px", border: "1px solid #bfdbfe" }}>
+                      ABAP: <strong>{request.abaper_name}</strong>
+                    </span>
+                  ) : null}
+                  {request.tester_name ? (
+                    <span title="Tester" style={{ background: "#f0fdf4", color: "#15803d", padding: "2px 8px", borderRadius: "12px", border: "1px solid #bbf7d0" }}>
+                      Test: <strong>{request.tester_name}</strong>
+                    </span>
+                  ) : null}
+                  {(request.requester_name || request.abaper_name || request.tester_name) ? (
+                    <div style={{ width: "1px", height: "16px", background: "var(--color-border, #cbd5e1)", margin: "0 4px" }} />
+                  ) : null}
+                  <Status value={request.status_group} />
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </section>
 
@@ -4296,6 +4465,7 @@ function Report({
   return (
     <>
       <section className="cr-data-workspace">
+        <div className="filterbar report-filterbar cr-workspace-filterbar" style={{ display: "none" }} />
 
       <div className="report-layout detail-closed">
         <section className="table-panel report-table-panel cr-table-panel">
@@ -4383,30 +4553,16 @@ function Report({
               </div>
             </div>
 
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
-              gap: "0.75rem",
-              paddingTop: "0.5rem",
-              borderTop: "1px dashed var(--color-border, #cbd5e1)"
-            }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                <span style={{ fontSize: "0.725rem", textTransform: "uppercase", fontWeight: "600", color: "var(--color-text-muted)", letterSpacing: "0.03em" }}>Owner</span>
-                <strong style={{ fontSize: "0.875rem", color: "var(--color-text)" }}>{displayRequest?.owner || "-"}</strong>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                <span style={{ fontSize: "0.725rem", textTransform: "uppercase", fontWeight: "600", color: "var(--color-text-muted)", letterSpacing: "0.03em" }}>Target System</span>
-                <strong style={{ fontSize: "0.875rem", color: "#0f766e" }}>{displayRequest?.target_system || "-"}</strong>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                <span style={{ fontSize: "0.725rem", textTransform: "uppercase", fontWeight: "600", color: "var(--color-text-muted)", letterSpacing: "0.03em" }}>CR Type</span>
-                <strong style={{ fontSize: "0.875rem", color: "var(--color-text)" }}>{displayRequest?.function_code || "-"}</strong>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                <span style={{ fontSize: "0.725rem", textTransform: "uppercase", fontWeight: "600", color: "var(--color-text-muted)", letterSpacing: "0.03em" }}>Tasks Count</span>
-                <strong style={{ fontSize: "0.875rem", color: "var(--color-text)" }}>{detail?.tasks.length || 0} Tasks</strong>
-              </div>
-            </div>
+            <SummaryStrip
+              className="cr-summary-strip"
+              items={[
+                { label: "Owner", value: displayRequest?.owner || "-" },
+                { label: "Target System", value: displayRequest?.target_system || "-" },
+                { label: "CR Type", value: displayRequest?.function_code || "-" },
+                { label: "Requester", value: <DisplayNameList value={displayRequest?.requester_name || ""} /> },
+                { label: "ABAPer", value: <DisplayNameList value={displayRequest?.abaper_name || ""} /> }
+              ]}
+            />
           </div>
 
           {/* 2. Middle Section: Related Issues & Child Tasks + Lifecycle Timeline */}
@@ -5453,7 +5609,7 @@ function IssueEditor({
     return "tabs";
   });
   const layoutStyle = layoutStyleOverride ?? internalLayoutStyle;
-  const [editorTab, setEditorTab] = useState<"basic" | "team" | "transport" | "timeline">("basic");
+  const [editorTab, setEditorTab] = useState<"basic" | "team" | "timeline">("basic");
   const [isQuickMode, setIsQuickMode] = useState<boolean>(() => mode === "create");
 
   function saveLayoutPref(pref: "tabs" | "quick_toggle" | "classic") {
@@ -6077,56 +6233,105 @@ function IssueEditor({
   return (
     <form className="issue-editor-panel" onSubmit={submit}>
 
-      {/* Ide B: Quick Create Mode Toggle Switch */}
+      {/* Permanent AI Context & Generator Bar (Visible in ALL Modes & Tabs) */}
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        flexWrap: "wrap",
+        gap: "12px",
+        padding: "10px 16px",
+        marginBottom: "14px",
+        background: "var(--color-bg-elevated, #ffffff)",
+        border: "1px solid var(--color-border, #cbd5e1)",
+        borderRadius: "12px",
+        boxShadow: "0 1px 3px rgba(0, 0, 0, 0.04)"
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "#0f766e", display: "flex", alignItems: "center", gap: "6px" }}>
+            <Sparkles size={16} /> AI Context &amp; Generator
+          </span>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <span className={`context-status-pill ${fetchedEmailContext ? "active" : "inactive"}`} title={fetchedEmailContext ? "Email context fetched & ready" : "No email context fetched"}>
+            {fetchedEmailContext ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
+            {fetchedEmailContext ? "Email Context" : "No Email"}
+          </span>
+
+          <span className={`context-status-pill ${fetchedGlpiContext ? "active" : "inactive"}`} title={fetchedGlpiContext ? `GLPI #${fetchedGlpiContext.ticketNumber} context fetched` : "No GLPI context fetched"}>
+            {fetchedGlpiContext ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
+            {fetchedGlpiContext ? `GLPI #${fetchedGlpiContext.ticketNumber}` : "No GLPI"}
+          </span>
+
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); handleGenerateAiAnalysis(); }}
+            disabled={formDisabled || !fetchedEmailContext || !fetchedGlpiContext || generatingAi}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.375rem",
+              padding: "0.55rem 0.9rem",
+              borderRadius: "8px",
+              background: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "var(--color-bg-subtle, #e5e7eb)" : "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
+              color: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "var(--color-text-muted, #9ca3af)" : "#ffffff",
+              border: "none",
+              cursor: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "not-allowed" : "pointer",
+              fontSize: "0.8125rem",
+              fontWeight: "600",
+              boxShadow: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "none" : "0 2px 8px rgba(99, 102, 241, 0.3)",
+              transition: "all 0.2s"
+            }}
+            title={(!fetchedEmailContext || !fetchedGlpiContext) ? "Both Email context and GLPI context must be active & checked to enable AI generation" : "Generate Problem & Impact Analysis using OpenRouter AI"}
+          >
+            {generatingAi ? <Loader2 className="spinner" size={14} /> : <Sparkles size={14} />}
+            {generatingAi ? "Generating..." : "Generate AI"}
+          </button>
+        </div>
+      </div>
+
+      {/* Quick Create Mode Navigation Bar (Identical design & position to Tab Stepper) */}
       {layoutStyle === "quick_toggle" && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", background: "var(--color-bg-subtle, #f8fafc)", border: "1px solid var(--color-border, #cbd5e1)", borderRadius: "12px", padding: "6px", marginBottom: "16px" }}>
-          <button
-            type="button"
-            onClick={() => setIsQuickMode(true)}
-            style={{
-              flex: 1,
-              padding: "8px 14px",
-              borderRadius: "8px",
-              border: "none",
-              background: isQuickMode ? "#0f766e" : "transparent",
-              color: isQuickMode ? "#ffffff" : "var(--color-text, #475569)",
-              fontWeight: "700",
-              fontSize: "0.85rem",
-              cursor: "pointer",
-              transition: "all 0.15s ease"
-            }}
-          >
-            ⚡ Quick Draft (4 Key Fields)
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsQuickMode(false)}
-            style={{
-              flex: 1,
-              padding: "8px 14px",
-              borderRadius: "8px",
-              border: "none",
-              background: !isQuickMode ? "#0f766e" : "transparent",
-              color: !isQuickMode ? "#ffffff" : "var(--color-text, #475569)",
-              fontWeight: "700",
-              fontSize: "0.85rem",
-              cursor: "pointer",
-              transition: "all 0.15s ease"
-            }}
-          >
-            📄 Full Detailed Form
-          </button>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "10px", marginBottom: "16px" }}>
+          {[
+            { active: isQuickMode, onClick: () => setIsQuickMode(true), icon: "⚡", label: "Quick Draft (Issue, Problem & Stakeholders)" },
+            { active: !isQuickMode, onClick: () => setIsQuickMode(false), icon: "📄", label: "Full Detailed Form (Full Lifecycle & Processing)" }
+          ].map((modeItem, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={modeItem.onClick}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                padding: "10px 14px",
+                borderRadius: "10px",
+                border: modeItem.active ? "2px solid #0f766e" : "1px solid var(--color-border, #cbd5e1)",
+                background: modeItem.active ? "#f0fdf4" : "var(--color-bg, #ffffff)",
+                color: modeItem.active ? "#0f766e" : "var(--color-text-muted, #64748b)",
+                fontWeight: modeItem.active ? "700" : "600",
+                fontSize: "0.85rem",
+                cursor: "pointer",
+                transition: "all 0.15s ease"
+              }}
+            >
+              <span>{modeItem.icon}</span>
+              <span>{modeItem.label}</span>
+            </button>
+          ))}
         </div>
       )}
 
-      {/* Ide A: Tab Stepper Navigation Bar */}
+      {/* Option B: 3-Tab Streamlined Navigation Bar */}
       {layoutStyle === "tabs" && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "8px", marginBottom: "16px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "10px", marginBottom: "16px" }}>
           {[
-            { id: "basic", label: "1. Basic & Problem", icon: "📝" },
-            { id: "team", label: "2. Team & Stakeholders", icon: "👥" },
-            { id: "transport", label: "3. SAP Transport & CR", icon: "🔄" },
-            { id: "timeline", label: "4. Timeline & Sign-off", icon: "📅" }
+            { id: "basic", label: "1. Issue & Problem Analysis", icon: "📝" },
+            { id: "team", label: "2. Stakeholders & References", icon: "👥" },
+            { id: "timeline", label: "3. SAP CR & Lifecycle", icon: "🚀" }
           ].map((tab) => (
             <button
               key={tab.id}
@@ -6136,14 +6341,14 @@ function IssueEditor({
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: "6px",
-                padding: "9px 12px",
+                gap: "8px",
+                padding: "10px 14px",
                 borderRadius: "10px",
                 border: editorTab === tab.id ? "2px solid #0f766e" : "1px solid var(--color-border, #cbd5e1)",
                 background: editorTab === tab.id ? "#f0fdf4" : "var(--color-bg, #ffffff)",
                 color: editorTab === tab.id ? "#0f766e" : "var(--color-text-muted, #64748b)",
                 fontWeight: editorTab === tab.id ? "700" : "600",
-                fontSize: "0.825rem",
+                fontSize: "0.85rem",
                 cursor: "pointer",
                 transition: "all 0.15s ease"
               }}
@@ -6155,59 +6360,18 @@ function IssueEditor({
         </div>
       )}
 
-      {/* Initiation Section (Shown in Classic, Quick Mode, or Tab 1/Tab 2) */}
-      {(layoutStyle === "classic" || (layoutStyle === "quick_toggle" && !isQuickMode) || (layoutStyle === "tabs" && (editorTab === "basic" || editorTab === "team")) || (layoutStyle === "quick_toggle" && isQuickMode)) && (
+      {/* Option B - Tab 1: Issue & Problem Analysis (Shown in Classic, Quick Mode, or Tab 1) */}
+      {(layoutStyle === "classic" || (layoutStyle === "quick_toggle" && !isQuickMode) || (layoutStyle === "tabs" && editorTab === "basic") || (layoutStyle === "quick_toggle" && isQuickMode)) && (
       <section className="panel editor-section issue-phase-card">
         <div className="phase-title phase-toggle" style={{ cursor: "default", display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
           <button type="button" onClick={() => togglePhase("initiation")} style={{ display: "flex", alignItems: "flex-start", background: "none", border: "none", padding: 0, margin: 0, textAlign: "left", cursor: "pointer", color: "inherit", font: "inherit" }}>
             <ChevronDown size={18} style={{ marginTop: "0.25rem", marginRight: "0.75rem", transform: expandedPhases.initiation ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.2s" }} />
             <div>
-              <h2 style={{ margin: "0 0 0.25rem 0" }}>Issue Initiation</h2>
-              <p style={{ margin: 0 }}>Initial issue details, analysis, requester, ABAPer, and supporting references.</p>
+              <h2 style={{ margin: "0 0 0.25rem 0" }}>Issue &amp; Problem Analysis</h2>
+              <p style={{ margin: 0 }}>Core issue details, email context, and AI-powered problem analysis.</p>
             </div>
           </button>
           <span className="phase-title-actions" style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginLeft: "auto" }}>
-            {expandedPhases.initiation && (
-              <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
-                {/* Context Status Pills (Checkmarks) */}
-                <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginRight: "0.25rem" }}>
-                  <span className={`context-status-pill ${fetchedEmailContext ? "active" : "inactive"}`} title={fetchedEmailContext ? "Email context fetched & ready" : "No email context fetched"}>
-                    {fetchedEmailContext ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
-                    {fetchedEmailContext ? "Email Context" : "No Email"}
-                  </span>
-
-                  <span className={`context-status-pill ${fetchedGlpiContext ? "active" : "inactive"}`} title={fetchedGlpiContext ? `GLPI #${fetchedGlpiContext.ticketNumber} context fetched` : "No GLPI context fetched"}>
-                    {fetchedGlpiContext ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
-                    {fetchedGlpiContext ? `GLPI #${fetchedGlpiContext.ticketNumber}` : "No GLPI"}
-                  </span>
-                </div>
-
-                {/* Generate AI Button */}
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); handleGenerateAiAnalysis(); }}
-                  disabled={formDisabled || !fetchedEmailContext || !fetchedGlpiContext || generatingAi}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "0.375rem",
-                    padding: "0.5rem 0.75rem",
-                    borderRadius: "6px",
-                    background: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "var(--color-bg-subtle, #e5e7eb)" : "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
-                    color: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "var(--color-text-muted, #9ca3af)" : "#ffffff",
-                    border: "none",
-                    cursor: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "not-allowed" : "pointer",
-                    fontSize: "0.8125rem",
-                    fontWeight: "600",
-                    transition: "all 0.2s"
-                  }}
-                  title={(!fetchedEmailContext || !fetchedGlpiContext) ? "Both Email context and GLPI context must be active & checked to enable AI generation" : "Generate Problem & Impact Analysis using OpenRouter AI"}
-                >
-                  {generatingAi ? <Loader2 className="spinner" size={14} /> : <Sparkles size={14} />}
-                  {generatingAi ? "Generating..." : "Generate AI"}
-                </button>
-              </div>
-            )}
             <button type="button" onClick={() => togglePhase("initiation")} className="phase-chevron" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)", fontSize: "0.8125rem", fontWeight: "600" }}>
               {expandedPhases.initiation ? "Hide" : "Show"}
             </button>
@@ -6215,7 +6379,7 @@ function IssueEditor({
         </div>
         {expandedPhases.initiation ? (
           <div className="issue-initiation-layout">
-          <div className="issue-initiation-column issue-initiation-main">
+          <div className="issue-initiation-column issue-initiation-main" style={{ flex: 1 }}>
             <div className="initiation-section micro-card">
               <h3>
                 <span className="micro-card-icon-badge"><FileText size={16} /></span>
@@ -6290,7 +6454,9 @@ function IssueEditor({
                 "Fetch Email" tidak jalan? Download &amp; jalankan Outlook Agent di laptop Anda
               </a>
             </div>
+          </div>
 
+          <div className="issue-initiation-column issue-initiation-reference" style={{ flex: 1 }}>
             <div className="initiation-section micro-card">
               <h3>
                 <span className="micro-card-icon-badge" style={{ background: "#f3e8ff", color: "#7c3aed" }}><Sparkles size={16} /></span>
@@ -6306,12 +6472,50 @@ function IssueEditor({
               </label>
             </div>
           </div>
+          </div>
+        ) : null}
+      </section>
+      )}
 
-          <div className="issue-initiation-column issue-initiation-reference">
+      {/* Option B - Tab 2: Stakeholders & References (Shown in Classic, Quick Mode, or Tab 2) */}
+      {(layoutStyle === "classic" || (layoutStyle === "quick_toggle" && !isQuickMode) || (layoutStyle === "tabs" && editorTab === "team") || (layoutStyle === "quick_toggle" && isQuickMode)) && (
+      <section className="panel editor-section issue-phase-card">
+        <div className="phase-title phase-toggle" style={{ cursor: "default", display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+          <div style={{ display: "flex", alignItems: "center" }}>
+            <Users size={20} style={{ marginRight: "0.75rem", color: "#0f766e" }} />
+            <div>
+              <h2 style={{ margin: "0 0 0.25rem 0" }}>Stakeholders &amp; References</h2>
+              <p style={{ margin: 0 }}>Team assignments, requesters, ABAPers, GLPI tickets, and external references.</p>
+            </div>
+          </div>
+        </div>
+        <div className="issue-initiation-layout" style={{ marginTop: "16px" }}>
+          <div className="issue-initiation-column issue-initiation-main" style={{ flex: 1 }}>
+            <div className="initiation-section micro-card">
+              <h3>
+                <span className="micro-card-icon-badge" style={{ background: "#f0fdf4", color: "#0f766e" }}><Users size={16} /></span>
+                Key Stakeholders &amp; Team
+              </h3>
+              <div className="repeatable-row-field" data-incomplete-target="issue-requesters">
+                <MultiValueHelpField label={<FieldLabel label="Requester" badges={["required", "ai-powered"]} />} kind="people" role="requester" personMode="full_name" value={form.requesterNames || ""} onChange={(value) => update("requesterNames", value)} placeholder="Full name" disabled={formDisabled} />
+              </div>
+              <div className="repeatable-row-field" data-incomplete-target="issue-abapers">
+                <MultiValueHelpField label={<FieldLabel label="ABAPer / Developer" badges={["required", "ai-powered"]} />} kind="people" role="abaper" personMode="full_name" value={form.abaperNames || ""} onChange={(value) => update("abaperNames", value)} placeholder="Full name" disabled={formDisabled} />
+              </div>
+              {isCancelled ? (
+                <section className="issue-cancel-card">
+                  <small>Cancel Reason</small>
+                  <strong>{form.cancelledReason || detail?.issue?.cancelled_reason || "-"}</strong>
+                </section>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="issue-initiation-column issue-initiation-reference" style={{ flex: 1 }}>
             <div className="initiation-section micro-card">
               <h3>
                 <span className="micro-card-icon-badge" style={{ background: "#eff6ff", color: "#2563eb" }}><LinkIcon size={16} /></span>
-                External References
+                External References &amp; System Tickets
               </h3>
               <div className="initiation-pair reference-pair">
                 <div className="reference-field-group" data-incomplete-target="issue-glpi">
@@ -6396,33 +6600,13 @@ function IssueEditor({
                 </div>
               ) : null}
             </div>
-
-            <div className="initiation-section micro-card">
-              <h3>
-                <span className="micro-card-icon-badge" style={{ background: "#f0fdf4", color: "#0f766e" }}><Users size={16} /></span>
-                Key Stakeholders &amp; Team
-              </h3>
-              <div className="repeatable-row-field" data-incomplete-target="issue-requesters">
-                <MultiValueHelpField label={<FieldLabel label="Requester" badges={["required", "ai-powered"]} />} kind="people" role="requester" personMode="full_name" value={form.requesterNames || ""} onChange={(value) => update("requesterNames", value)} placeholder="Full name" disabled={formDisabled} />
-              </div>
-              <div className="repeatable-row-field" data-incomplete-target="issue-abapers">
-                <MultiValueHelpField label={<FieldLabel label="ABAPer / Developer" badges={["required", "ai-powered"]} />} kind="people" role="abaper" personMode="full_name" value={form.abaperNames || ""} onChange={(value) => update("abaperNames", value)} placeholder="Full name" disabled={formDisabled} />
-              </div>
-              {isCancelled ? (
-                <section className="issue-cancel-card">
-                  <small>Cancel Reason</small>
-                  <strong>{form.cancelledReason || detail?.issue?.cancelled_reason || "-"}</strong>
-                </section>
-              ) : null}
-            </div>
           </div>
-          </div>
-        ) : null}
+        </div>
       </section>
       )}
 
       {/* DEV Processing Section */}
-      {(layoutStyle === "classic" || (layoutStyle === "quick_toggle" && !isQuickMode) || (layoutStyle === "tabs" && editorTab === "transport")) && (
+      {(layoutStyle === "classic" || (layoutStyle === "quick_toggle" && !isQuickMode) || (layoutStyle === "tabs" && editorTab === "timeline")) && (
       <section className={`panel editor-section issue-phase-card ${hasCrAssigned ? "" : "phase-muted"}`}>
         <button className="phase-title phase-toggle" type="button" onClick={() => togglePhase("dev")}>
           <ChevronDown size={18} />
@@ -6510,7 +6694,7 @@ function IssueEditor({
             className="secondary"
             disabled={editorTab === "basic"}
             onClick={() => {
-              const tabs: ("basic" | "team" | "transport" | "timeline")[] = ["basic", "team", "transport", "timeline"];
+              const tabs: ("basic" | "team" | "timeline")[] = ["basic", "team", "timeline"];
               const idx = tabs.indexOf(editorTab);
               if (idx > 0) setEditorTab(tabs[idx - 1]);
             }}
@@ -6520,12 +6704,11 @@ function IssueEditor({
           </button>
 
           <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "#0f766e" }}>
-            Step {["basic", "team", "transport", "timeline"].indexOf(editorTab) + 1} of 4: {[
-              "Basic Info & Problem",
-              "Team & Stakeholders",
-              "SAP Transport & CR Links",
-              "Timeline & Sign-off Dates"
-            ][["basic", "team", "transport", "timeline"].indexOf(editorTab)]}
+            Step {["basic", "team", "timeline"].indexOf(editorTab) + 1} of 3: {[
+              "Issue & Problem Analysis",
+              "Stakeholders & References",
+              "SAP CR & Lifecycle"
+            ][["basic", "team", "timeline"].indexOf(editorTab)]}
           </span>
 
           {editorTab !== "timeline" ? (
@@ -6533,7 +6716,7 @@ function IssueEditor({
               type="button"
               className="primary"
               onClick={() => {
-                const tabs: ("basic" | "team" | "transport" | "timeline")[] = ["basic", "team", "transport", "timeline"];
+                const tabs: ("basic" | "team" | "timeline")[] = ["basic", "team", "timeline"];
                 const idx = tabs.indexOf(editorTab);
                 if (idx < tabs.length - 1) setEditorTab(tabs[idx + 1]);
               }}
