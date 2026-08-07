@@ -1,7 +1,7 @@
 import { applyCustomStatusColors } from "../utils/tagColors";
 import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
-import { AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Ban, Calendar, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Database, FileOutput, FileSearch, FileText, FolderKanban, GitPullRequest, KeyRound, LayoutGrid, Link as LinkIcon, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Tag, Trash2, User, Users, X, XCircle } from "lucide-react";
+import { AlertTriangle, BarChart3, Ban, Calendar, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Database, FileOutput, FileSearch, FileText, FolderKanban, GitPullRequest, KeyRound, LayoutGrid, Link as LinkIcon, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Tag, Trash2, User, Users, X, XCircle } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchAdminSettings, fetchAdminPeople, fetchCrDetail, fetchCrList, fetchDashboard, fetchGlpiTicketDetail, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind, type GlpiTicketDetail, type AdminPersonRow } from "../api";
 import { IncompleteGroupCards } from "../components/IncompleteGroupCards";
@@ -5627,6 +5627,8 @@ function IssueEditor({
   const layoutStyle = layoutStyleOverride ?? internalLayoutStyle;
   const [editorTab, setEditorTab] = useState<"basic" | "team" | "timeline">("basic");
   const [isQuickMode, setIsQuickMode] = useState<boolean>(() => mode === "create");
+  const incompleteItems = detail?.issue && detail.issue.issue_status !== "cancelled" ? getIncompleteItems(detail) : [];
+  const incompleteGroups = groupIncompleteItems(incompleteItems);
 
   function saveLayoutPref(pref: "tabs" | "quick_toggle" | "classic") {
     try {
@@ -5941,7 +5943,7 @@ function IssueEditor({
     if (existingFields.length > 0) {
       const initialSelections: Record<string, boolean> = {};
       for (const field of existingFields) {
-        initialSelections[field.key] = true;
+        initialSelections[field.key] = false;
       }
       setAiOverwriteSelections(initialSelections);
       setShowAiOverwriteModal(true);
@@ -5960,6 +5962,12 @@ function IssueEditor({
   const [pendingSavePayload, setPendingSavePayload] = useState<IssueSavePayload | null>(null);
 
   useEffect(() => {
+    // ALWAYS clear AI context (Email & GLPI) first whenever opening/switching an Issue in Create or Change mode
+    setFetchedGlpiContext(null);
+    setFetchedEmailContext(null);
+    fetchedGlpiTicketRef.current = null;
+    fetchedEmailSubjectRef.current = null;
+
     const nextForm = issueFormFromDetail(detail);
     initialFormRef.current = nextForm;
     setForm(nextForm);
@@ -5975,12 +5983,8 @@ function IssueEditor({
     setTemplatePreview(null);
     setGenerateMenuOpen(false);
     setMoreMenuOpen(false);
-    setFetchedGlpiContext(null);
-    setFetchedEmailContext(null);
-    fetchedGlpiTicketRef.current = null;
-    fetchedEmailSubjectRef.current = null;
     onDirtyChange?.(false);
-  }, [detail?.issue?.id, mode]);
+  }, [detail, mode]);
 
   useEffect(() => {
     if (mode === "change" && detail?.issue && initialAction) setActionDialog(initialAction);
@@ -6249,63 +6253,147 @@ function IssueEditor({
   return (
     <form className="issue-editor-panel" onSubmit={submit}>
 
-      {/* Permanent AI Context & Generator Bar (Visible in ALL Modes & Tabs) */}
-      <div style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        flexWrap: "wrap",
-        gap: "12px",
-        padding: "10px 16px",
-        marginBottom: "14px",
-        background: "var(--color-bg-elevated, #ffffff)",
-        border: "1px solid var(--color-border, #cbd5e1)",
-        borderRadius: "12px",
-        boxShadow: "0 1px 3px rgba(0, 0, 0, 0.04)"
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "#0f766e", display: "flex", alignItems: "center", gap: "6px" }}>
-            <Sparkles size={16} /> AI Context &amp; Generator
-          </span>
+      {/* Change Issue Top Summary Bar with AI Context Controls beside Status */}
+      {mode === "change" && detail?.issue ? (
+        <section className="panel issue-change-summary" style={{ marginBottom: "14px" }}>
+          <div className="change-summary-main" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", minWidth: 0, flex: 1 }}>
+              <strong style={{ fontSize: "1.1rem" }}>{detail.issue.issue_key}</strong>
+              <span style={{ fontSize: "0.95rem", color: "var(--color-text-muted)" }}>{detail.issue.issue_name}</span>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  padding: "4px 8px",
+                  background: "var(--color-bg-subtle, #f8fafc)",
+                  border: "1px solid var(--color-border-soft, #e2e8f0)",
+                  borderRadius: "10px"
+                }}
+              >
+                <span className={`context-status-pill ${fetchedEmailContext ? "active" : "inactive"}`} title={fetchedEmailContext ? "Email context fetched & ready" : "No email context fetched"}>
+                  {fetchedEmailContext ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
+                  {fetchedEmailContext ? "Email Context" : "No Email"}
+                </span>
+
+                <span className={`context-status-pill ${fetchedGlpiContext ? "active" : "inactive"}`} title={fetchedGlpiContext ? `GLPI #${fetchedGlpiContext.ticketNumber} context fetched` : "No GLPI context fetched"}>
+                  {fetchedGlpiContext ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
+                  {fetchedGlpiContext ? `GLPI #${fetchedGlpiContext.ticketNumber}` : "No GLPI"}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); handleGenerateAiAnalysis(); }}
+                  disabled={formDisabled || !fetchedEmailContext || !fetchedGlpiContext || generatingAi}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.375rem",
+                    padding: "0.4rem 0.8rem",
+                    borderRadius: "8px",
+                    background: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "var(--color-bg-subtle, #e5e7eb)" : "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
+                    color: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "var(--color-text-muted, #9ca3af)" : "#ffffff",
+                    border: "none",
+                    cursor: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "not-allowed" : "pointer",
+                    fontSize: "0.785rem",
+                    fontWeight: "600",
+                    boxShadow: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "none" : "0 2px 8px rgba(99, 102, 241, 0.3)",
+                    transition: "all 0.2s"
+                  }}
+                  title={(!fetchedEmailContext || !fetchedGlpiContext) ? "Both Email context and GLPI context must be active & checked to enable AI generation" : "Generate Problem & Impact Analysis using OpenRouter AI"}
+                >
+                  {generatingAi ? <Loader2 className="spinner" size={13} /> : <Sparkles size={13} />}
+                  {generatingAi ? "Generating..." : "Generate AI"}
+                </button>
+              </div>
+
+              {/* Vertical Separator between AI Context and Issue Status */}
+              <div style={{ width: "1px", height: "24px", background: "var(--color-border, #cbd5e1)", margin: "0 2px" }} />
+
+              <Status value={detail.issue.issue_status} />
+            </div>
+          </div>
+
+          {incompleteItems.length ? (
+            <details className="change-summary-details">
+              <summary>{incompleteItems.length} incomplete item(s)</summary>
+              <IncompleteGroupCards groups={incompleteGroups} onItemClick={(item) => {
+                setExpandedPhases((current) => expandSection(current, item.section));
+                setTimeout(() => {
+                  const target = document.querySelector<HTMLElement>(`[data-incomplete-target="${item.targetId}"]`);
+                  if (target) {
+                    target.scrollIntoView({ behavior: "smooth", block: "center" });
+                    target.focus();
+                  }
+                }, 100);
+              }} />
+            </details>
+          ) : null}
+        </section>
+      ) : null}
+
+      {/* Standalone AI Context & Generator Bar (Visible ONLY in Create Mode) */}
+      {mode === "create" && (
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: "12px",
+          padding: "10px 16px",
+          marginBottom: "14px",
+          background: "var(--color-bg-elevated, #ffffff)",
+          border: "1px solid var(--color-border, #cbd5e1)",
+          borderRadius: "12px",
+          boxShadow: "0 1px 3px rgba(0, 0, 0, 0.04)"
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "#0f766e", display: "flex", alignItems: "center", gap: "6px" }}>
+              <Sparkles size={16} /> AI Context &amp; Generator
+            </span>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span className={`context-status-pill ${fetchedEmailContext ? "active" : "inactive"}`} title={fetchedEmailContext ? "Email context fetched & ready" : "No email context fetched"}>
+              {fetchedEmailContext ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
+              {fetchedEmailContext ? "Email Context" : "No Email"}
+            </span>
+
+            <span className={`context-status-pill ${fetchedGlpiContext ? "active" : "inactive"}`} title={fetchedGlpiContext ? `GLPI #${fetchedGlpiContext.ticketNumber} context fetched` : "No GLPI context fetched"}>
+              {fetchedGlpiContext ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
+              {fetchedGlpiContext ? `GLPI #${fetchedGlpiContext.ticketNumber}` : "No GLPI"}
+            </span>
+
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); handleGenerateAiAnalysis(); }}
+              disabled={formDisabled || !fetchedEmailContext || !fetchedGlpiContext || generatingAi}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.375rem",
+                padding: "0.55rem 0.9rem",
+                borderRadius: "8px",
+                background: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "var(--color-bg-subtle, #e5e7eb)" : "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
+                color: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "var(--color-text-muted, #9ca3af)" : "#ffffff",
+                border: "none",
+                cursor: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "not-allowed" : "pointer",
+                fontSize: "0.8125rem",
+                fontWeight: "600",
+                boxShadow: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "none" : "0 2px 8px rgba(99, 102, 241, 0.3)",
+                transition: "all 0.2s"
+              }}
+              title={(!fetchedEmailContext || !fetchedGlpiContext) ? "Both Email context and GLPI context must be active & checked to enable AI generation" : "Generate Problem & Impact Analysis using OpenRouter AI"}
+            >
+              {generatingAi ? <Loader2 className="spinner" size={14} /> : <Sparkles size={14} />}
+              {generatingAi ? "Generating..." : "Generate AI"}
+            </button>
+          </div>
         </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <span className={`context-status-pill ${fetchedEmailContext ? "active" : "inactive"}`} title={fetchedEmailContext ? "Email context fetched & ready" : "No email context fetched"}>
-            {fetchedEmailContext ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
-            {fetchedEmailContext ? "Email Context" : "No Email"}
-          </span>
-
-          <span className={`context-status-pill ${fetchedGlpiContext ? "active" : "inactive"}`} title={fetchedGlpiContext ? `GLPI #${fetchedGlpiContext.ticketNumber} context fetched` : "No GLPI context fetched"}>
-            {fetchedGlpiContext ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
-            {fetchedGlpiContext ? `GLPI #${fetchedGlpiContext.ticketNumber}` : "No GLPI"}
-          </span>
-
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); handleGenerateAiAnalysis(); }}
-            disabled={formDisabled || !fetchedEmailContext || !fetchedGlpiContext || generatingAi}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.375rem",
-              padding: "0.55rem 0.9rem",
-              borderRadius: "8px",
-              background: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "var(--color-bg-subtle, #e5e7eb)" : "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
-              color: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "var(--color-text-muted, #9ca3af)" : "#ffffff",
-              border: "none",
-              cursor: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "not-allowed" : "pointer",
-              fontSize: "0.8125rem",
-              fontWeight: "600",
-              boxShadow: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "none" : "0 2px 8px rgba(99, 102, 241, 0.3)",
-              transition: "all 0.2s"
-            }}
-            title={(!fetchedEmailContext || !fetchedGlpiContext) ? "Both Email context and GLPI context must be active & checked to enable AI generation" : "Generate Problem & Impact Analysis using OpenRouter AI"}
-          >
-            {generatingAi ? <Loader2 className="spinner" size={14} /> : <Sparkles size={14} />}
-            {generatingAi ? "Generating..." : "Generate AI"}
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* Quick Create Mode Navigation Bar (Identical design & position to Tab Stepper) */}
       {layoutStyle === "quick_toggle" && (
@@ -6702,49 +6790,7 @@ function IssueEditor({
       </section>
       )}
 
-      {/* Tab Stepper Footer Controls */}
-      {layoutStyle === "tabs" && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "16px 0 24px 0", padding: "14px 18px", background: "var(--color-bg-elevated, #ffffff)", border: "1px solid var(--color-border, #cbd5e1)", borderRadius: "12px" }}>
-          <button
-            type="button"
-            className="secondary"
-            disabled={editorTab === "basic"}
-            onClick={() => {
-              const tabs: ("basic" | "team" | "timeline")[] = ["basic", "team", "timeline"];
-              const idx = tabs.indexOf(editorTab);
-              if (idx > 0) setEditorTab(tabs[idx - 1]);
-            }}
-            style={{ display: "flex", alignItems: "center", gap: "6px" }}
-          >
-            <ArrowLeft size={16} /> Previous Step
-          </button>
 
-          <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "#0f766e" }}>
-            Step {["basic", "team", "timeline"].indexOf(editorTab) + 1} of 3: {[
-              "Issue & Problem Analysis",
-              "Stakeholders & References",
-              "SAP CR & Lifecycle"
-            ][["basic", "team", "timeline"].indexOf(editorTab)]}
-          </span>
-
-          {editorTab !== "timeline" ? (
-            <button
-              type="button"
-              className="primary"
-              onClick={() => {
-                const tabs: ("basic" | "team" | "timeline")[] = ["basic", "team", "timeline"];
-                const idx = tabs.indexOf(editorTab);
-                if (idx < tabs.length - 1) setEditorTab(tabs[idx + 1]);
-              }}
-              style={{ display: "flex", alignItems: "center", gap: "6px" }}
-            >
-              Next Step <ArrowRight size={16} />
-            </button>
-          ) : (
-            <span style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", fontWeight: "600" }}>Final Step</span>
-          )}
-        </div>
-      )}
       <div className="editor-safe-space" aria-hidden="true" />
       <div className="issue-save-bar">
         <div className="sticky-actions">
@@ -6980,7 +7026,7 @@ function IssueEditor({
               </div>
 
               {fields.map((field) => {
-                const isChecked = aiOverwriteSelections[field.key] !== false;
+                const isChecked = Boolean(aiOverwriteSelections[field.key]);
                 const categoryColor = field.category === "Analysis" ? "#6366f1" : field.category === "People" ? "#0f766e" : "#d97706";
 
                 return (
@@ -7172,24 +7218,6 @@ function ChangeIssue({
 
   return (
     <div className="issue-change-layout">
-
-      {changeDetail?.issue ? (
-        <section className="panel issue-change-summary">
-          <div className="change-summary-main">
-            <div>
-              <strong>{changeDetail.issue.issue_key}</strong>
-              <span>{changeDetail.issue.issue_name}</span>
-            </div>
-            <Status value={changeDetail.issue.issue_status} />
-          </div>
-          {missing.length ? (
-            <details className="change-summary-details">
-              <summary>{missing.length} incomplete item(s)</summary>
-              <IncompleteGroupCards groups={missingGroups} onItemClick={navigateToIncompleteItem} />
-            </details>
-          ) : null}
-        </section>
-      ) : null}
 
       {changeDetail ? <IssueEditor mode="change" detail={changeDetail} layoutStyleOverride={layoutStyleOverride} initialAction={initialAction} navigationRequest={navigationRequest} onNotify={onNotify} onSave={onSave} onCancel={onCancel} onDelete={onDelete} onDirtyChange={onDirtyChange} /> : null}
     </div>
