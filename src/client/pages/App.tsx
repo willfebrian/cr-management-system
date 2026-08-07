@@ -1137,6 +1137,22 @@ export function App() {
               >
                 Group Emails
               </button>
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent("set-master-data-tab", { detail: "sap_systems" }))}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "6px",
+                  border: "none",
+                  background: masterDataTab === "sap_systems" ? "var(--color-primary, #0f766e)" : "transparent",
+                  color: masterDataTab === "sap_systems" ? "#ffffff" : "var(--color-text-muted)",
+                  fontWeight: masterDataTab === "sap_systems" ? "700" : "500",
+                  fontSize: "0.85rem",
+                  cursor: "pointer"
+                }}
+              >
+                Target Systems
+              </button>
             </div>
           ) : view === "settings" ? (
             <div className="topbar-action-slot" style={{ display: "flex", gap: "6px", background: "var(--color-bg-subtle, #f1f5f9)", padding: "4px", borderRadius: "8px", border: "1px solid var(--color-border, #e2e8f0)" }}>

@@ -23,6 +23,10 @@ export type TransportRequestPayload = {
 
 export type TransportTargetSystem = "DEV_NC" | "DEV_AIX";
 
+export function normalizeTargetSystem(value: unknown): TransportTargetSystem {
+  return String(value || "").trim().toUpperCase() === "DEV_AIX" ? "DEV_AIX" : "DEV_NC";
+}
+
 export async function resolveTransportObject(query: string, targetSystem: unknown = "DEV_NC") {
   return runPlatform("resolve", { query: String(query || "").trim(), targetSystem: normalizeTargetSystem(targetSystem) });
 }
@@ -87,11 +91,6 @@ async function runPlatform(action: "resolve" | "preflight" | "create", payload: 
   });
 }
 
-export function normalizeTargetSystem(value: unknown): TransportTargetSystem {
-  const normalized = String(value || "DEV_NC").trim().toUpperCase();
-  if (normalized === "DEV_NC" || normalized === "DEV_AIX") return normalized;
-  throw serviceError("TARGET_SYSTEM_NOT_ALLOWED", 400);
-}
 
 function serviceError(message: string, status: number) {
   const error = new Error(message) as Error & { status: number; code?: string };

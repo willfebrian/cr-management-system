@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { fetchAdminPeople, fetchAdminSettings, updateAdminPerson, updateAdminSettings, createAdminPerson, deleteAdminPerson, fetchGroupEmails, createGroupEmail, updateGroupEmail, deleteGroupEmail, type AdminPersonRow, type GroupEmailRow } from "../api";
-import { Check, Loader2, Save, X, Trash2, CheckCircle2, XCircle, AlertTriangle, Mail, Palette, Type, Sliders, User, Database, LayoutGrid } from "lucide-react";
+import { fetchAdminPeople, fetchAdminSettings, updateAdminPerson, updateAdminSettings, createAdminPerson, deleteAdminPerson, fetchGroupEmails, createGroupEmail, updateGroupEmail, deleteGroupEmail, fetchSapSystems, createSapSystem, updateSapSystem, deleteSapSystem, testSapSystemConnection, type AdminPersonRow, type GroupEmailRow, type SapSystemRow } from "../api";
+import { Check, Loader2, Save, X, Trash2, CheckCircle2, XCircle, AlertTriangle, Mail, Palette, Type, Sliders, User, Database, LayoutGrid, Server, Eye, EyeOff, Plus, Edit2, Activity, ShieldCheck, Radio } from "lucide-react";
 import { STATUS_COLOR_CONFIGS, applyCustomStatusColors } from "../utils/tagColors";
 import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
 import { TableDataLoader } from "../components/InteractiveLoaders";
@@ -14,13 +14,13 @@ interface MasterDataWorkspaceProps {
 export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, username }: MasterDataWorkspaceProps) {
   const storageKey = getActiveAppearanceKey(username);
 
-  const [activeTab, setActiveTab] = useState<"people" | "group_emails" | "general_settings" | "ai_instructions" | "appearance">("people");
+  const [activeTab, setActiveTab] = useState<"people" | "group_emails" | "sap_systems" | "general_settings" | "ai_instructions" | "appearance">("people");
 
   useEffect(() => {
     if (mode === "settings") {
       if (!isAdmin) {
         setActiveTab("appearance");
-      } else if (activeTab === "people" || activeTab === "group_emails") {
+      } else if (activeTab === "people" || activeTab === "group_emails" || activeTab === "sap_systems") {
         setActiveTab("general_settings");
       }
     } else if (mode === "master-data" && (activeTab === "general_settings" || activeTab === "ai_instructions" || activeTab === "appearance")) {
@@ -30,6 +30,24 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
 
   const [people, setPeople] = useState<AdminPersonRow[]>([]);
   const [groupEmails, setGroupEmails] = useState<GroupEmailRow[]>([]);
+  const [sapSystems, setSapSystems] = useState<SapSystemRow[]>([]);
+  const [showAddServerModal, setShowAddServerModal] = useState(false);
+  const [editingServer, setEditingServer] = useState<SapSystemRow | null>(null);
+  const [deleteConfirmServer, setDeleteConfirmServer] = useState<SapSystemRow | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [serverFormData, setServerFormData] = useState<Partial<SapSystemRow>>({
+    code: "",
+    description: "",
+    environment: "Development",
+    allow_multiple_logon: false,
+    host: "",
+    system_number: "00",
+    client: "100",
+    rfc_user: "",
+    rfc_password: "",
+    is_active: true
+  });
   const [settings, setSettings] = useState<Record<string, string>>({
     ai_instruction_glpi: "",
     ai_instruction_email: "",
@@ -69,11 +87,13 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
     Promise.all([
       isAdmin ? fetchAdminPeople().catch(() => ({ rows: [] })) : Promise.resolve({ rows: [] }),
       fetchAdminSettings().catch(() => ({} as Record<string, string>)),
-      isAdmin ? fetchGroupEmails().catch(() => ({ rows: [] })) : Promise.resolve({ rows: [] })
+      isAdmin ? fetchGroupEmails().catch(() => ({ rows: [] })) : Promise.resolve({ rows: [] }),
+      isAdmin ? fetchSapSystems().catch(() => ({ rows: [] })) : Promise.resolve({ rows: [] })
     ])
-      .then(([peopleRes, settingsRes, groupEmailsRes]) => {
+      .then(([peopleRes, settingsRes, groupEmailsRes, sapSystemsRes]) => {
         setPeople(peopleRes.rows || []);
         setGroupEmails(groupEmailsRes.rows || []);
+        setSapSystems(sapSystemsRes.rows || []);
         const merged = {
           ai_instruction_glpi: settingsRes.ai_instruction_glpi || "",
           ai_instruction_email: settingsRes.ai_instruction_email || "",
@@ -90,11 +110,103 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
           ...localAppearance,
         };
         setSettings(merged);
-        
-        
       })
       .finally(() => setLoading(false));
   }, [isAdmin]);
+
+  async function handleSaveServer(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    if (!serverFormData.code?.trim()) {
+      showToast("error", "Target System Code is required (e.g. DEV_NC)");
+      return;
+    }
+    try {
+      setSaving(true);
+      if (editingServer) {
+        const updated = await updateSapSystem(editingServer.id, serverFormData);
+        setSapSystems((prev) => prev.map((s) => (s.id === editingServer.id ? { ...s, ...updated } : s)));
+        showToast("success", `Target System "${serverFormData.code}" updated successfully!`);
+      } else {
+        const created = await createSapSystem(serverFormData);
+        setSapSystems((prev) => [...prev, created]);
+        showToast("success", `New Target System "${created.code}" created successfully!`);
+      }
+      setShowAddServerModal(false);
+      setEditingServer(null);
+      resetServerForm();
+    } catch (err) {
+      showToast("error", `Failed to save Target System: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteServer(id: number) {
+    try {
+      setSaving(true);
+      await deleteSapSystem(id);
+      setSapSystems((prev) => prev.filter((s) => s.id !== id));
+      setDeleteConfirmServer(null);
+      showToast("success", "Target system deleted successfully.");
+    } catch (err) {
+      showToast("error", `Failed to delete system: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleServerActive(id: number, active: boolean) {
+    setSapSystems((prev) => prev.map((s) => (s.id === id ? { ...s, is_active: active } : s)));
+    try {
+      await updateSapSystem(id, { is_active: active });
+    } catch (err) {
+      setSapSystems((prev) => prev.map((s) => (s.id === id ? { ...s, is_active: !active } : s)));
+      showToast("error", "Failed to update system status");
+    }
+  }
+
+  async function handleTestConnection() {
+    if (!serverFormData.host?.trim()) {
+      showToast("error", "Please specify a Host IP or Hostname to test connection.");
+      return;
+    }
+    setTestingConnection(true);
+    try {
+      const res = await testSapSystemConnection(serverFormData);
+      showToast("success", res.message || "Connection test successful!");
+    } catch (err) {
+      showToast("error", err instanceof Error ? err.message : String(err));
+    } finally {
+      setTestingConnection(false);
+    }
+  }
+
+  function resetServerForm() {
+    setServerFormData({
+      code: "",
+      description: "",
+      environment: "Development",
+      allow_multiple_logon: false,
+      host: "192.168.2.8",
+      system_number: "00",
+      client: "100",
+      rfc_user: "TRSTDEV",
+      rfc_password: "",
+      is_active: true
+    });
+  }
+
+  function openEditServerModal(server: SapSystemRow) {
+    setEditingServer(server);
+    setServerFormData({
+      ...server,
+      host: server.host || "192.168.2.8",
+      system_number: server.system_number || "00",
+      client: server.client || "100",
+      rfc_user: server.rfc_user || "TRSTDEV"
+    });
+    setShowAddServerModal(true);
+  }
 
   useEffect(() => {
     const handleSetTab = (e: Event) => {
@@ -509,6 +621,375 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "sap_systems" && (
+        <div className="sap-systems-tab" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          <div style={{ background: "var(--color-bg-elevated, #ffffff)", padding: "1.5rem", borderRadius: "8px", border: "1px solid var(--color-border, #e5e7eb)", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.5rem", flexWrap: "wrap", gap: "1rem" }}>
+              <div>
+                <h3 style={{ marginTop: 0, marginBottom: "0.5rem", fontSize: "1.25rem", color: "var(--color-text-heading, #111827)", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <Server size={20} style={{ color: "var(--color-primary, #0f766e)" }} /> Target Systems &amp; SAP Connections
+                </h3>
+                <p style={{ color: "var(--color-text-muted, #6b7280)", margin: 0, fontSize: "0.875rem" }}>
+                  Maintain target system codes, server hosts, system numbers, clients, and RFC credentials for SAP transports.
+                </p>
+              </div>
+              <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+                <button
+                  onClick={() => {
+                    resetServerForm();
+                    setEditingServer(null);
+                    setShowAddServerModal(true);
+                  }}
+                  disabled={saving}
+                  style={{ padding: "0.625rem 1.25rem", borderRadius: "6px", background: "var(--color-primary, #0f766e)", color: "white", border: "none", cursor: "pointer", fontWeight: "600", fontSize: "0.875rem", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "6px" }}
+                >
+                  <Plus size={16} /> Add Target System
+                </button>
+              </div>
+            </div>
+
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
+                <thead style={{ background: "var(--color-bg-subtle, #f9fafb)" }}>
+                  <tr>
+                    <th style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", color: "var(--color-text-muted, #6b7280)", fontWeight: "600", fontSize: "0.75rem", textTransform: "uppercase" }}>System Code</th>
+                    <th style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", color: "var(--color-text-muted, #6b7280)", fontWeight: "600", fontSize: "0.75rem", textTransform: "uppercase" }}>Server Name</th>
+                    <th style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", color: "var(--color-text-muted, #6b7280)", fontWeight: "600", fontSize: "0.75rem", textTransform: "uppercase" }}>Environment</th>
+                    <th style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", color: "var(--color-text-muted, #6b7280)", fontWeight: "600", fontSize: "0.75rem", textTransform: "uppercase" }}>Host &amp; Connection</th>
+                    <th style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", color: "var(--color-text-muted, #6b7280)", fontWeight: "600", fontSize: "0.75rem", textTransform: "uppercase" }}>RFC User</th>
+                    <th style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", color: "var(--color-text-muted, #6b7280)", fontWeight: "600", fontSize: "0.75rem", textTransform: "uppercase", textAlign: "center" }}>Active</th>
+                    <th style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", textAlign: "center" }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sapSystems.map((sys) => {
+                    const envColor = sys.environment === "Production" ? { bg: "#fee2e2", color: "#991b1b" } : sys.environment === "QA" ? { bg: "#fef3c7", color: "#92400e" } : sys.environment === "Sandbox" ? { bg: "#e0f2fe", color: "#075985" } : { bg: "#ccfbf1", color: "#0f766e" };
+                    return (
+                      <tr key={sys.id}>
+                        <td style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)" }}>
+                          <span style={{ fontWeight: "700", fontFamily: "monospace", fontSize: "0.85rem", background: "var(--color-bg-subtle, #f1f5f9)", padding: "3px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)" }}>
+                            {sys.code}
+                          </span>
+                        </td>
+                        <td style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", fontWeight: "600" }}>
+                          {sys.description || sys.code}
+                        </td>
+                        <td style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)" }}>
+                          <span style={{ background: envColor.bg, color: envColor.color, padding: "3px 10px", borderRadius: "999px", fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase" }}>
+                            {sys.environment || "Development"}
+                          </span>
+                        </td>
+                        <td style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", color: "var(--color-text-muted, #475569)", fontSize: "0.825rem" }}>
+                          <div><strong>Host:</strong> {sys.host || "192.168.2.8"}</div>
+                          <div style={{ color: "#64748b", fontSize: "0.775rem" }}>Sys #: {sys.system_number || "00"} · Client: {sys.client || "130"}</div>
+                        </td>
+                        <td style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", fontFamily: "monospace", fontSize: "0.85rem" }}>
+                          {sys.rfc_user || "TRSTDEV"}
+                        </td>
+                        <td style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", textAlign: "center" }}>
+                          <input type="checkbox" checked={sys.is_active} onChange={(e) => toggleServerActive(sys.id, e.target.checked)} style={{ cursor: "pointer", width: "1.1rem", height: "1.1rem", accentColor: "var(--color-primary, #0f766e)" }} />
+                        </td>
+                        <td style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", textAlign: "center" }}>
+                          <div style={{ display: "flex", gap: "6px", justifyContent: "center" }}>
+                            <button onClick={() => openEditServerModal(sys)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-primary, #0f766e)", padding: "0.25rem" }} title="Edit Server Configuration">
+                              <Edit2 size={16} />
+                            </button>
+                            <button onClick={() => setDeleteConfirmServer(sys)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted, #9ca3af)", padding: "0.25rem" }} title="Delete Target System">
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {sapSystems.length === 0 && (
+                    <tr>
+                      <td colSpan={7} style={{ padding: "1.5rem", textAlign: "center", color: "var(--color-text-muted, #6b7280)" }}>No Target Systems configured yet. Click "+ Add Target System" to create one.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit / Add Server Modal (adapted to project theme system) */}
+      {showAddServerModal && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15, 23, 42, 0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10000, padding: "16px" }}>
+          <div style={{ background: "var(--color-bg-elevated, #ffffff)", color: "var(--color-text, #1f2937)", width: "min(100%, 520px)", borderRadius: "12px", border: "1px solid var(--color-border, #e2e8f0)", boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.15)", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+            <div style={{ padding: "18px 24px", borderBottom: "1px solid var(--color-border, #e5e7eb)", display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--color-bg-subtle, #f9fafb)" }}>
+              <h3 style={{ margin: 0, fontSize: "1.1rem", fontWeight: "700", color: "var(--color-text-heading, #111827)", display: "flex", alignItems: "center", gap: "8px" }}>
+                <Server size={18} style={{ color: "var(--color-primary, #0f766e)" }} />
+                {editingServer ? "Edit Server" : "Add Target System"}
+              </h3>
+              <button onClick={() => { setShowAddServerModal(false); setEditingServer(null); resetServerForm(); }} style={{ background: "transparent", border: "none", color: "var(--color-text-muted, #9ca3af)", cursor: "pointer", padding: "4px", borderRadius: "6px" }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveServer} style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "16px", overflowY: "auto", maxHeight: "calc(85vh - 120px)" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)", marginBottom: "6px" }}>
+                  SERVER NAME
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={serverFormData.description || ""}
+                  onChange={(e) => setServerFormData({ ...serverFormData, description: e.target.value })}
+                  placeholder="e.g. Development AIX or Sandbox New Company"
+                  style={{ width: "100%", padding: "9px 12px", borderRadius: "6px", background: "var(--color-bg, #ffffff)", border: "1px solid var(--color-border, #d1d5db)", color: "var(--color-text, #1f2937)", fontSize: "0.875rem" }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)", marginBottom: "6px" }}>
+                  TARGET SYSTEM CODE (SYSTEM ID)
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={serverFormData.code || ""}
+                  onChange={(e) => setServerFormData({ ...serverFormData, code: e.target.value })}
+                  placeholder="e.g. DEV_NC, DEV_AIX, TR2, QA, PRD"
+                  style={{ width: "100%", padding: "9px 12px", borderRadius: "6px", background: "var(--color-bg, #ffffff)", border: "1px solid var(--color-border, #d1d5db)", color: "var(--color-text, #1f2937)", fontSize: "0.875rem" }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)", marginBottom: "6px" }}>
+                  ENVIRONMENT
+                </label>
+                <select
+                  value={serverFormData.environment || "Development"}
+                  onChange={(e) => setServerFormData({ ...serverFormData, environment: e.target.value })}
+                  style={{ width: "100%", padding: "9px 12px", borderRadius: "6px", background: "var(--color-bg, #ffffff)", border: "1px solid var(--color-border, #d1d5db)", color: "var(--color-text, #1f2937)", fontSize: "0.875rem" }}
+                >
+                  <option value="Sandbox">Sandbox</option>
+                  <option value="Development">Development</option>
+                  <option value="QA">QA</option>
+                  <option value="Production">Production</option>
+                </select>
+                <small style={{ color: "var(--color-text-muted, #6b7280)", fontSize: "0.75rem", display: "block", marginTop: "4px" }}>
+                  Sandbox servers are unlimited. Development, QA, and Production each allow custom CTS target routes.
+                </small>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)", marginBottom: "8px" }}>
+                  ALLOW MULTIPLE LOGON
+                </label>
+                <div style={{ display: "flex", gap: "20px", alignItems: "center" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "0.85rem", color: "var(--color-text, #374151)" }}>
+                    <input
+                      type="radio"
+                      name="allow_multiple_logon"
+                      checked={serverFormData.allow_multiple_logon === true}
+                      onChange={() => setServerFormData({ ...serverFormData, allow_multiple_logon: true })}
+                      style={{ accentColor: "var(--color-primary, #0f766e)" }}
+                    />
+                    YES
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "0.85rem", color: "var(--color-text, #374151)" }}>
+                    <input
+                      type="radio"
+                      name="allow_multiple_logon"
+                      checked={serverFormData.allow_multiple_logon === false}
+                      onChange={() => setServerFormData({ ...serverFormData, allow_multiple_logon: false })}
+                      style={{ accentColor: "var(--color-primary, #0f766e)" }}
+                    />
+                    NO (ENFORCE AUDIT)
+                  </label>
+                </div>
+                <small style={{ color: "var(--color-text-muted, #6b7280)", fontSize: "0.75rem", display: "block", marginTop: "4px" }}>
+                  If enabled, bypasses SAP multiple logon checks during deployment or compare operations.
+                </small>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)", marginBottom: "6px" }}>
+                  HOST
+                </label>
+                <input
+                  type="text"
+                  value={serverFormData.host || ""}
+                  onChange={(e) => setServerFormData({ ...serverFormData, host: e.target.value })}
+                  placeholder="e.g. 192.168.2.8 or 192.168.6.243"
+                  style={{ width: "100%", padding: "9px 12px", borderRadius: "6px", background: "var(--color-bg, #ffffff)", border: "1px solid var(--color-border, #d1d5db)", color: "var(--color-text, #1f2937)", fontSize: "0.875rem" }}
+                />
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)", marginBottom: "6px" }}>
+                    SYSTEM NUMBER
+                  </label>
+                  <input
+                    type="text"
+                    value={serverFormData.system_number || "00"}
+                    onChange={(e) => setServerFormData({ ...serverFormData, system_number: e.target.value })}
+                    placeholder="00"
+                    style={{ width: "100%", padding: "9px 12px", borderRadius: "6px", background: "var(--color-bg, #ffffff)", border: "1px solid var(--color-border, #d1d5db)", color: "var(--color-text, #1f2937)", fontSize: "0.875rem" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)", marginBottom: "6px" }}>
+                    CLIENT
+                  </label>
+                  <input
+                    type="text"
+                    value={serverFormData.client || "130"}
+                    onChange={(e) => setServerFormData({ ...serverFormData, client: e.target.value })}
+                    placeholder="130"
+                    style={{ width: "100%", padding: "9px 12px", borderRadius: "6px", background: "var(--color-bg, #ffffff)", border: "1px solid var(--color-border, #d1d5db)", color: "var(--color-text, #1f2937)", fontSize: "0.875rem" }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)", marginBottom: "6px" }}>
+                  RFC USER
+                </label>
+                <input
+                  type="text"
+                  value={serverFormData.rfc_user || ""}
+                  onChange={(e) => setServerFormData({ ...serverFormData, rfc_user: e.target.value })}
+                  placeholder="e.g. TRSTDEV"
+                  style={{ width: "100%", padding: "9px 12px", borderRadius: "6px", background: "var(--color-bg, #ffffff)", border: "1px solid var(--color-border, #d1d5db)", color: "var(--color-text, #1f2937)", fontSize: "0.875rem" }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)", marginBottom: "6px" }}>
+                  RFC PASSWORD {editingServer ? "(leave blank to keep)" : ""}
+                </label>
+                <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={serverFormData.rfc_password || ""}
+                    onChange={(e) => setServerFormData({ ...serverFormData, rfc_password: e.target.value })}
+                    placeholder={showPassword ? "Enter RFC Password" : "••••••••"}
+                    style={{ width: "100%", padding: "9px 12px", paddingRight: "42px", borderRadius: "6px", background: "var(--color-bg, #ffffff)", border: "1px solid var(--color-border, #d1d5db)", color: "var(--color-text, #1f2937)", fontSize: "0.875rem" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setShowPassword((prev) => !prev);
+                    }}
+                    title={showPassword ? "Hide password" : "Show password"}
+                    style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", outline: "none", color: showPassword ? "var(--color-primary, #0f766e)" : "var(--color-text-muted, #9ca3af)", cursor: "pointer", padding: "6px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "4px" }}
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px" }}>
+                <input
+                  type="checkbox"
+                  id="server_is_active"
+                  checked={serverFormData.is_active !== false}
+                  onChange={(e) => setServerFormData({ ...serverFormData, is_active: e.target.checked })}
+                  style={{ accentColor: "var(--color-primary, #0f766e)", width: "16px", height: "16px", cursor: "pointer" }}
+                />
+                <label htmlFor="server_is_active" style={{ fontSize: "0.85rem", color: "var(--color-text, #374151)", cursor: "pointer", fontWeight: "600" }}>
+                  Active (Available in Target System picker dropdown)
+                </label>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "12px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    style={{
+                      padding: "10px 16px",
+                      borderRadius: "6px",
+                      background: "var(--color-primary, #0f766e)",
+                      color: "#ffffff",
+                      border: "none",
+                      fontWeight: "600",
+                      fontSize: "0.875rem",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "6px"
+                    }}
+                  >
+                    {saving ? <Loader2 className="spinner" size={16} /> : <Save size={16} />}
+                    {saving ? "Saving..." : "Save Changes"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleTestConnection}
+                    disabled={testingConnection}
+                    style={{
+                      padding: "10px 16px",
+                      borderRadius: "6px",
+                      background: "var(--color-bg-subtle, #f1f5f9)",
+                      color: "var(--color-text, #374151)",
+                      border: "1px solid var(--color-border, #cbd5e1)",
+                      fontWeight: "600",
+                      fontSize: "0.875rem",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "6px"
+                    }}
+                  >
+                    {testingConnection ? <Loader2 className="spinner" size={16} /> : <Activity size={16} />}
+                    {testingConnection ? "Testing..." : "Test Connection"}
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => { setShowAddServerModal(false); setEditingServer(null); resetServerForm(); }}
+                  style={{
+                    padding: "9px",
+                    borderRadius: "6px",
+                    background: "transparent",
+                    color: "var(--color-text-muted, #6b7280)",
+                    border: "1px solid var(--color-border, #d1d5db)",
+                    fontWeight: "500",
+                    fontSize: "0.85rem",
+                    cursor: "pointer"
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Target System Delete Confirmation Modal */}
+      {deleteConfirmServer && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15, 23, 42, 0.75)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: "16px" }}>
+          <div style={{ background: "var(--color-bg-elevated, #ffffff)", width: "min(100%, 420px)", borderRadius: "12px", border: "1px solid var(--color-border, #e5e7eb)", padding: "1.5rem", boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.2)" }}>
+            <h3 style={{ marginTop: 0, marginBottom: "0.5rem", color: "#dc2626", fontSize: "1.1rem" }}>Delete Target System?</h3>
+            <p style={{ color: "var(--color-text-muted, #4b5563)", fontSize: "0.875rem", marginBottom: "1.25rem" }}>
+              Are you sure you want to delete Target System <strong>{deleteConfirmServer.code}</strong> ({deleteConfirmServer.description})?
+            </p>
+            <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
+              <button onClick={() => setDeleteConfirmServer(null)} style={{ padding: "0.5rem 1rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #374151)", cursor: "pointer", fontWeight: "500", fontSize: "0.875rem" }}>
+                Cancel
+              </button>
+              <button onClick={() => handleDeleteServer(deleteConfirmServer.id)} disabled={saving} style={{ padding: "0.5rem 1rem", borderRadius: "6px", border: "none", background: "#dc2626", color: "white", cursor: "pointer", fontWeight: "600", fontSize: "0.875rem" }}>
+                {saving ? "Deleting..." : "Delete System"}
+              </button>
             </div>
           </div>
         </div>

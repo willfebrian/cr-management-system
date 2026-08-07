@@ -1,14 +1,23 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, useEffect, type FormEvent } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, PackageCheck, Plus, Search, ShieldCheck, Trash2 } from "lucide-react";
 import { UIModal } from "../common/UIModal";
 import { createTransportRequest, preflightTransportRequest, resolveTransportObject, type ResolvedTransportObject, type TransportRequestResult } from "../../api/transportRequestApi";
 import { TRANSPORT_TARGETS, type TransportTargetSystem, normalizeTransportTarget, transportTargetLabel } from "./transportTarget";
+import { fetchSapSystems, type SapSystemRow } from "../../api";
 
 const PREFIX = "AB - ";
 const MAX_DESCRIPTION = 55;
+const TARGET_SYSTEM_STORAGE_KEY = "cr_transport_target_system";
 
 export function CrTransportCreate() {
-  const [targetSystem, setTargetSystem] = useState<TransportTargetSystem>("DEV_NC");
+  const [targetSystem, setTargetSystem] = useState<string>(() => {
+    try {
+      return localStorage.getItem(TARGET_SYSTEM_STORAGE_KEY) || "DEV_NC";
+    } catch {
+      return "DEV_NC";
+    }
+  });
+  const [availableSystems, setAvailableSystems] = useState<SapSystemRow[]>([]);
   const [query, setQuery] = useState("");
   const [resolvedQuery, setResolvedQuery] = useState("");
   const [results, setResults] = useState<ResolvedTransportObject[]>([]);
@@ -24,6 +33,25 @@ export function CrTransportCreate() {
   const selectedKeys = useMemo(() => new Set(objects.map(objectKey)), [objects]);
   const canPreflight = objects.length > 0 && description.trim().length > 0 && !busy && !created?.ok;
 
+  useEffect(() => {
+    fetchSapSystems()
+      .then((res) => {
+        if (res.rows && res.rows.length > 0) {
+          const active = res.rows.filter((s) => s.is_active);
+          const systemsToUse = active.length > 0 ? active : res.rows;
+          setAvailableSystems(systemsToUse);
+
+          setTargetSystem((prev) => {
+            if (systemsToUse.some((s) => s.code === prev)) return prev;
+            const fallback = systemsToUse[0].code;
+            try { localStorage.setItem(TARGET_SYSTEM_STORAGE_KEY, fallback); } catch {}
+            return fallback;
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   function invalidatePreflight() { setPreflight(null); setCreated(null); setConfirmError(""); }
 
   function startNewRequest() {
@@ -32,8 +60,10 @@ export function CrTransportCreate() {
   }
 
   function changeTarget(value: string) {
-    const next = normalizeTransportTarget(value);
-    setTargetSystem(next);
+    setTargetSystem(value);
+    try {
+      localStorage.setItem(TARGET_SYSTEM_STORAGE_KEY, value);
+    } catch {}
     setQuery(""); setResolvedQuery(""); setResults([]); setObjects([]);
     setPreflight(null); setCreated(null); setError(""); setConfirmError(""); setConfirmOpen(false);
   }
@@ -80,7 +110,7 @@ export function CrTransportCreate() {
   }
 
   return <div className="cr-create-workspace">
-    <section className="cr-create-intro card"><div><span className="eyebrow">CREATE TRANSPORT REQUEST</span><h2>New SAP CR</h2><p>Resolve repository objects, validate CTS readiness, then create a Workbench request in the selected development system.</p></div><div className="cr-create-intro-tools"><label className="cr-target-picker"><span>Target System</span><select value={targetSystem} onChange={(event) => changeTarget(event.target.value)} disabled={Boolean(busy) || Boolean(created?.ok)}>{TRANSPORT_TARGETS.map((target) => <option key={target.code} value={target.code}>{target.label}</option>)}</select></label></div></section>
+    <section className="cr-create-intro card"><div><span className="eyebrow">CREATE TRANSPORT REQUEST</span><h2>New SAP CR</h2><p>Resolve repository objects, validate CTS readiness, then create a Workbench request in the selected development system.</p></div><div className="cr-create-intro-tools"><label className="cr-target-picker"><span>Target System</span><select value={targetSystem} onChange={(event) => changeTarget(event.target.value)} disabled={Boolean(busy) || Boolean(created?.ok)}>{availableSystems.length > 0 ? availableSystems.map((sys) => <option key={sys.id} value={sys.code}>{sys.description ? `${sys.description} (${sys.code})` : sys.code}</option>) : TRANSPORT_TARGETS.map((target) => <option key={target.code} value={target.code}>{target.label}</option>)}</select></label></div></section>
     {error ? <div className="notice cr-create-notice"><AlertTriangle size={17} /> {friendlyMessage(error)}</div> : null}
     {created?.ok ? <section className="cr-create-success card"><CheckCircle2 size={24} /><div><span className="eyebrow">REQUEST CREATED</span><h3>{created.request}</h3><p>Task {created.task} was created in {transportTargetLabel(targetSystem)} and the selected objects were registered.{created.syncQueued ? " CR sync has been queued." : ""}</p></div><button type="button" className="secondary cr-start-new-request" onClick={startNewRequest}><Plus size={16} /> Start New Request</button></section> : null}
 

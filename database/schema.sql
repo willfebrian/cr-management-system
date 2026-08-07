@@ -5,9 +5,24 @@ CREATE TABLE IF NOT EXISTS sap_systems (
   id BIGSERIAL PRIMARY KEY,
   code TEXT NOT NULL UNIQUE,
   description TEXT,
+  environment TEXT DEFAULT 'Development',
+  allow_multiple_logon BOOLEAN DEFAULT FALSE,
+  host TEXT,
+  system_number TEXT DEFAULT '00',
+  client TEXT DEFAULT '100',
+  rfc_user TEXT,
+  rfc_password TEXT,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE sap_systems ADD COLUMN IF NOT EXISTS environment TEXT DEFAULT 'Development';
+ALTER TABLE sap_systems ADD COLUMN IF NOT EXISTS allow_multiple_logon BOOLEAN DEFAULT FALSE;
+ALTER TABLE sap_systems ADD COLUMN IF NOT EXISTS host TEXT;
+ALTER TABLE sap_systems ADD COLUMN IF NOT EXISTS system_number TEXT DEFAULT '00';
+ALTER TABLE sap_systems ADD COLUMN IF NOT EXISTS client TEXT DEFAULT '100';
+ALTER TABLE sap_systems ADD COLUMN IF NOT EXISTS rfc_user TEXT;
+ALTER TABLE sap_systems ADD COLUMN IF NOT EXISTS rfc_password TEXT;
 
 CREATE TABLE IF NOT EXISTS sync_runs (
   id BIGSERIAL PRIMARY KEY,
@@ -516,11 +531,12 @@ CREATE INDEX IF NOT EXISTS idx_issue_import_rows_batch ON issue_import_rows(batc
 CREATE INDEX IF NOT EXISTS idx_issue_import_rows_issue_key ON issue_import_rows(issue_key);
 CREATE INDEX IF NOT EXISTS idx_issue_import_rows_status ON issue_import_rows(row_status);
 
-INSERT INTO sap_systems (code, description)
+INSERT INTO sap_systems (code, description, environment, host, system_number, client, rfc_user)
 VALUES
-  ('DEV', 'SAP DEV AIX source for CR management'),
-  ('QA', 'SAP QA source for CR management'),
-  ('PRD', 'SAP production source for CR management')
+  ('DEV_NC', 'Development NC', 'Development', '192.168.2.8', '00', '130', 'TRSTDEV'),
+  ('DEV_AIX', 'Development AIX', 'Development', '192.168.2.9', '00', '130', 'TRSTDEV'),
+  ('QA', 'QA Server', 'QA', '192.168.2.10', '00', '130', 'TRSTDEV'),
+  ('PRD', 'Production Server', 'Production', '192.168.2.11', '00', '130', 'TRSTDEV')
 ON CONFLICT (code) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS app_users (

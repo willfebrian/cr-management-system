@@ -1,4 +1,4 @@
-export type TransportTargetSystem = "DEV_NC" | "DEV_AIX";
+export type TransportTargetSystem = string;
 
 export const TRANSPORT_TARGETS: ReadonlyArray<{ code: TransportTargetSystem; label: string }> = [
   { code: "DEV_NC", label: "DEV NC" },
@@ -6,9 +6,14 @@ export const TRANSPORT_TARGETS: ReadonlyArray<{ code: TransportTargetSystem; lab
 ];
 
 export function normalizeTransportTarget(value: unknown): TransportTargetSystem {
-  return String(value || "").trim().toUpperCase() === "DEV_AIX" ? "DEV_AIX" : "DEV_NC";
+  const str = String(value || "").trim().toUpperCase();
+  return str || "DEV_NC";
 }
 
-export function transportTargetLabel(value: TransportTargetSystem) {
-  return value === "DEV_AIX" ? "DEV AIX" : "DEV NC";
+export function transportTargetLabel(value?: TransportTargetSystem) {
+  if (!value) return "DEV NC";
+  const str = String(value).trim();
+  if (str === "DEV_AIX") return "DEV AIX";
+  if (str === "DEV_NC") return "DEV NC";
+  return str;
 }

@@ -308,6 +308,55 @@ export async function deleteGroupEmail(id: number): Promise<{ ok: boolean }> {
   });
 }
 
+export type SapSystemRow = {
+  id: number;
+  code: string;
+  description: string | null;
+  environment: string;
+  allow_multiple_logon: boolean;
+  host: string | null;
+  system_number: string | null;
+  client: string | null;
+  rfc_user: string | null;
+  rfc_password?: string | null;
+  is_active: boolean;
+  created_at?: string;
+};
+
+export async function fetchSapSystems(): Promise<{ rows: SapSystemRow[] }> {
+  return fetchJson("/api/admin/systems");
+}
+
+export async function createSapSystem(data: Partial<SapSystemRow>): Promise<SapSystemRow> {
+  return fetchJson("/api/admin/systems", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+}
+
+export async function updateSapSystem(id: number, data: Partial<SapSystemRow>): Promise<SapSystemRow> {
+  return fetchJson(`/api/admin/systems/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+}
+
+export async function deleteSapSystem(id: number): Promise<{ ok: boolean }> {
+  return fetchJson(`/api/admin/systems/${id}`, {
+    method: "DELETE"
+  });
+}
+
+export async function testSapSystemConnection(data: Partial<SapSystemRow>): Promise<{ ok: boolean; message: string }> {
+  return fetchJson("/api/admin/systems/test-connection", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+}
+
 export type OutlookSearchEmailResult = {
   receivedAt: string;
   senderName: string;
