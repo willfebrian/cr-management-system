@@ -6069,6 +6069,17 @@ function IssueEditor({
     if (form.issueName?.trim()) {
       list.push({ key: "issueName", label: "Issue Name", currentValue: form.issueName.trim(), category: "Analysis" });
     }
+    // Only include Request Description in AI generation list when currently EMPTY (prevents overwriting existing descriptions)
+    const currentReqDesc = form.requestDescription?.trim() || primaryCr?.cr_description_snapshot?.trim() || "";
+    if (!currentReqDesc) {
+      list.push({
+        key: "requestDescription",
+        label: "Request Description (CR SAP)",
+        currentValue: "",
+        category: "Analysis"
+      });
+    }
+
     if (form.problemAnalysis?.trim()) {
       list.push({ key: "problemAnalysis", label: "Problem Analysis", currentValue: form.problemAnalysis.trim(), category: "Analysis" });
     }
@@ -6185,6 +6196,13 @@ function IssueEditor({
       const canUpdateName = selections.issueName !== false || !form.issueName?.trim();
       if (canUpdateName && result.issueName) {
         update("issueName", result.issueName);
+        updatedCount++;
+      }
+
+      const currentReqDesc = form.requestDescription?.trim() || primaryCr?.cr_description_snapshot?.trim() || "";
+      const canUpdateRequestDescription = !currentReqDesc && (selections.requestDescription !== false);
+      if (canUpdateRequestDescription && result.requestDescription) {
+        update("requestDescription", result.requestDescription);
         updatedCount++;
       }
       
@@ -7446,6 +7464,7 @@ function IssueEditor({
         hideFooter={true}
       >
         <CrTransportCreate
+          initialDescription={form.requestDescription}
           targetSystem={crTargetSystem}
           onTargetSystemChange={setCrTargetSystem}
           availableSystems={sapSystems}
@@ -8267,6 +8286,7 @@ function issueFormFromDetail(detail: IssueDetail | null): IssueSavePayload {
     issueNo: issue?.issue_no,
     subIssueNo: issue?.sub_issue_no || "01",
     issueName: issue?.issue_name || "",
+    requestDescription: detail?.crLinks?.[0]?.cr_description_snapshot || issue?.primary_cr_description || "",
     requesterNames: participants.requester || issue?.requester_name_snapshot || "",
     abaperNames: participants.abaper || issue?.abaper_name_snapshot || "",
     problemAnalysis: issue?.problem_analysis || "",

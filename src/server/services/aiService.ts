@@ -2,6 +2,7 @@ import { pool } from "../db/pool.js";
 
 export type AnalysisGenerationResult = {
   issueName: string;
+  requestDescription?: string;
   problemAnalysis: string;
   impactAnalysis: string;
   participants?: Record<string, string>;
@@ -44,11 +45,13 @@ Your task is to analyze raw email communications, GLPI ticket details, and discu
 
 1. Issue Name: A short, concise, and clear title summarizing the issue (maximum 60 characters).
 ${issueNameInstructions ? `[MANDATORY INSTRUCTION FOR ISSUE NAME]:\n${issueNameInstructions}\n` : ""}
-2. Problem Analysis: Concise technical description of the reported issue, error message, system behavior, line/program affected, and root cause if mentioned.
+2. Request Description: A concise summary of the requested change / SAP request description (maximum 55 characters). Follow the EXACT SAME rules and instructions as Issue Name.
+${issueNameInstructions ? `[MANDATORY INSTRUCTION FOR REQUEST DESCRIPTION (SAME AS ISSUE NAME)]:\n${issueNameInstructions}\n` : ""}
+3. Problem Analysis: Concise technical description of the reported issue, error message, system behavior, line/program affected, and root cause if mentioned.
 ${problemInstructions ? `[MANDATORY INSTRUCTION FOR PROBLEM ANALYSIS]:\n${problemInstructions}\n` : ""}
-3. Impact Analysis: Business or operational impact, affected users/processes, urgency, and potential consequences if not resolved.
+4. Impact Analysis: Business or operational impact, affected users/processes, urgency, and potential consequences if not resolved.
 ${impactInstructions ? `[MANDATORY INSTRUCTION FOR IMPACT ANALYSIS]:\n${impactInstructions}\n` : ""}
-4. Participants (People Involved): Infer/extract person names (full name or username/nickname) from the email/GLPI context for roles:
+5. Participants (People Involved): Infer/extract person names (full name or username/nickname) from the email/GLPI context for roles:
    - requester: Person requesting the issue/CR
    - abaper: ABAP Developer/Technician assigned
    - dev_tester: DEV Tester
@@ -60,7 +63,7 @@ ${impactInstructions ? `[MANDATORY INSTRUCTION FOR IMPACT ANALYSIS]:\n${impactIn
    - prd_evaluator: PRD Evaluator
    - approval: PRD Approver
    - executor: PRD Transporter
-5. Timeline Dates: Extract any mentioned dates for:
+6. Timeline Dates: Extract any mentioned dates for:
    - dev_tested_date (YYYY-MM-DD HH:MM:SS or YYYY-MM-DD)
    - dev_evaluated_date
    - qa_tested_date
@@ -75,6 +78,7 @@ ${generalInstructions ? `[GENERAL GUIDELINES]:\n${generalInstructions}\n` : ""}
 IMPORTANT: You MUST respond ONLY with a valid JSON object strictly matching this schema, without any markdown formatting or commentary:
 {
   "issueName": "concise issue name",
+  "requestDescription": "concise request description for SAP CR (max 55 chars)",
   "problemAnalysis": "problem analysis text",
   "impactAnalysis": "impact analysis text",
   "participants": {
@@ -150,17 +154,19 @@ ${emailContext}`;
     const parsed = JSON.parse(cleanedJson);
     
     const issueName = parsed.issueName || parsed.issue_name || "";
+    const requestDescription = parsed.requestDescription || parsed.request_description || "";
     const problemAnalysis = parsed.problemAnalysis || parsed.problem_analysis || "";
     const impactAnalysis = parsed.impactAnalysis || parsed.impact_analysis || "";
     const participants = typeof parsed.participants === "object" && parsed.participants ? parsed.participants : undefined;
     const timeline = typeof parsed.timeline === "object" && parsed.timeline ? parsed.timeline : undefined;
 
-    if (!problemAnalysis && !impactAnalysis && !issueName) {
+    if (!problemAnalysis && !impactAnalysis && !issueName && !requestDescription) {
       throw new Error(`AI response JSON did not contain expected fields. Raw output: ${rawContent.slice(0, 150)}...`);
     }
 
     return {
       issueName,
+      requestDescription,
       problemAnalysis: problemAnalysis || rawContent,
       impactAnalysis,
       participants,

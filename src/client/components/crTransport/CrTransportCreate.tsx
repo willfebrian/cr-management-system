@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, type FormEvent } from "react";
-import { AlertTriangle, Check, CheckCircle2, Loader2, PackageCheck, Plus, Search, SearchX, ShieldCheck, Trash2, X } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, Database, Loader2, PackageCheck, Plus, Search, SearchX, ShieldCheck, Trash2, X } from "lucide-react";
 import { UIModal } from "../common/UIModal";
 import { createTransportRequest, preflightTransportRequest, resolveTransportObject, type ResolvedTransportObject, type TransportRequestResult } from "../../api/transportRequestApi";
 import { TRANSPORT_TARGETS, type TransportTargetSystem, normalizeTransportTarget, transportTargetLabel } from "./transportTarget";
@@ -8,6 +8,10 @@ import { fetchSapSystems, type SapSystemRow } from "../../api";
 const PREFIX = "AB - ";
 const MAX_DESCRIPTION = 55;
 const TARGET_SYSTEM_STORAGE_KEY = "cr_transport_target_system";
+
+function cleanPrefix(val?: string) {
+  return String(val || "").replace(/^AB\s*-\s*/i, "").trim();
+}
 
 function getSapObjectTypeMeta(objectType: string): { label: string; bg: string; color: string } {
   const type = String(objectType || "").trim().toUpperCase();
@@ -40,6 +44,7 @@ function getSapObjectTypeMeta(objectType: string): { label: string; bg: string; 
 }
 
 interface CrTransportCreateProps {
+  initialDescription?: string;
   targetSystem?: string;
   onTargetSystemChange?: (val: string) => void;
   availableSystems?: SapSystemRow[];
@@ -47,6 +52,7 @@ interface CrTransportCreateProps {
 }
 
 export function CrTransportCreate({
+  initialDescription = "",
   targetSystem: externalTargetSystem,
   onTargetSystemChange,
   availableSystems: externalAvailableSystems,
@@ -64,11 +70,21 @@ export function CrTransportCreate({
   const [fetchedSystems, setFetchedSystems] = useState<SapSystemRow[]>([]);
   const availableSystems = externalAvailableSystems ?? fetchedSystems;
 
+  const systemOptions = useMemo(() => {
+    if (availableSystems && availableSystems.length > 0) {
+      return availableSystems.map((sys) => ({
+        code: sys.code,
+        label: sys.description || sys.code
+      }));
+    }
+    return TRANSPORT_TARGETS.map((t) => ({ code: t.code, label: t.label }));
+  }, [availableSystems]);
+
   const [query, setQuery] = useState("");
   const [resolvedQuery, setResolvedQuery] = useState("");
   const [results, setResults] = useState<ResolvedTransportObject[]>([]);
   const [objects, setObjects] = useState<ResolvedTransportObject[]>([]);
-  const [description, setDescription] = useState("");
+  const [description, setDescription] = useState(() => cleanPrefix(initialDescription).slice(0, MAX_DESCRIPTION));
   const [busy, setBusy] = useState<"resolve" | "preflight" | "create" | "">("");
   const [error, setError] = useState("");
   const [preflight, setPreflight] = useState<TransportRequestResult | null>(null);
@@ -78,6 +94,12 @@ export function CrTransportCreate({
   const fullDescription = `${PREFIX}${description.trim()}`;
   const selectedKeys = useMemo(() => new Set(objects.map(objectKey)), [objects]);
   const canPreflight = objects.length > 0 && description.trim().length > 0 && !busy && !created?.ok;
+
+  useEffect(() => {
+    if (initialDescription) {
+      setDescription(cleanPrefix(initialDescription).slice(0, MAX_DESCRIPTION));
+    }
+  }, [initialDescription]);
 
   useEffect(() => {
     if (externalAvailableSystems) return;
@@ -167,6 +189,50 @@ export function CrTransportCreate({
 
   return <div className="cr-create-workspace">
     {created?.ok ? <section className="cr-create-success card"><CheckCircle2 size={24} /><div><span className="eyebrow">REQUEST CREATED</span><h3>{created.request}</h3><p>Task {created.task} was created in {transportTargetLabel(targetSystem)} and the selected objects were registered.{created.syncQueued ? " CR sync has been queued." : ""}</p></div><button type="button" className="secondary cr-start-new-request" onClick={startNewRequest}><Plus size={16} /> Start New Request</button></section> : null}
+
+    {/* Target System Selector Card */}
+    <section className="card cr-create-card" style={{ marginBottom: "16px" }}>
+      <div className="cr-create-section-heading">
+        <div>
+          <span className="cr-create-step">0</span>
+          <h3>Target System</h3>
+          <p>Select the SAP environment to resolve repository objects and create transport requests.</p>
+        </div>
+        <span className="cr-create-count" style={{ background: "var(--surface-selected, #ecfdf5)", color: "var(--color-primary, #0f766e)" }}>
+          Active: {transportTargetLabel(targetSystem)}
+        </span>
+      </div>
+      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "12px" }}>
+        {systemOptions.map((sys) => {
+          const isSelected = targetSystem === sys.code;
+          return (
+            <button
+              key={sys.code}
+              type="button"
+              onClick={() => changeTarget(sys.code)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "8px 14px",
+                borderRadius: "8px",
+                border: isSelected ? "2px solid var(--color-primary, #0f766e)" : "1px solid var(--color-border, #cbd5e1)",
+                background: isSelected ? "var(--surface-selected, #ecfdf5)" : "#ffffff",
+                color: isSelected ? "var(--color-primary, #0f766e)" : "var(--color-text, #0f172a)",
+                fontWeight: isSelected ? "700" : "500",
+                fontSize: "14px",
+                cursor: "pointer",
+                transition: "all 0.15s ease"
+              }}
+            >
+              <Database size={15} />
+              <span>{sys.label}</span>
+              {isSelected ? <Check size={15} color="var(--color-primary, #0f766e)" /> : null}
+            </button>
+          );
+        })}
+      </div>
+    </section>
 
     <section className="card cr-create-card">
       <div className="cr-create-section-heading"><div><span className="cr-create-step">1</span><h3>SAP Objects</h3><p>Search by TCode, program, class, function module, table, or another repository object.</p></div><span className="cr-create-count">{objects.length} selected</span></div>

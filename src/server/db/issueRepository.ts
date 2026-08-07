@@ -23,6 +23,7 @@ export type IssueSavePayload = {
   issueNo?: number | string;
   subIssueNo?: string;
   issueName: string;
+  requestDescription?: string;
   requesterNames?: string;
   abaperNames?: string;
   problemAnalysis?: string;
@@ -1341,7 +1342,7 @@ async function replaceCrHelpdeskNumbers(client: Pick<typeof pool, "query">, issu
   }
 }
 
-async function replaceCrLinks(client: Pick<typeof pool, "query">, issueId: number, crText?: string) {
+async function replaceCrLinks(client: Pick<typeof pool, "query">, issueId: number, crText?: string, requestDescription?: string) {
   const links = splitNames(crText)
     .map((item) => item.toUpperCase())
     .filter((item, index, array) => item && array.indexOf(item) === index);
@@ -1377,10 +1378,11 @@ async function replaceCrLinks(client: Pick<typeof pool, "query">, issueId: numbe
       ORDER BY CASE WHEN sap_system_code = 'DEV' THEN 0 ELSE 1 END
       LIMIT 1
     `, [trkorr]);
+    const descToUse = (index === 0 && requestDescription?.trim()) ? requestDescription.trim() : (snapshot.rows[0]?.description || null);
     await client.query(`
       INSERT INTO issue_cr_links (issue_id, sap_system_code, trkorr, relation_type, is_primary, cr_description_snapshot)
       VALUES ($1, 'DEV', $2, 'main', $3, $4)
-    `, [issueId, trkorr, index === 0, snapshot.rows[0]?.description || null]);
+    `, [issueId, trkorr, index === 0, descToUse]);
 
     await client.query(`
       INSERT INTO issue_cr_link_history (
