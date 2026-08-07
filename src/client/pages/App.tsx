@@ -994,6 +994,124 @@ export function App() {
                 Appearance
               </button>
             </div>
+          ) : view === "dashboard" ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+              {/* Source Systems Checkboxes */}
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", background: "var(--color-bg-elevated, #ffffff)", padding: "3px 6px", borderRadius: "8px", border: "1px solid var(--color-border, #cbd5e1)", height: "34px", boxSizing: "border-box" }}>
+                {systems.map((system) => (
+                  <label
+                    key={system.code}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      padding: "3px 8px",
+                      borderRadius: "6px",
+                      background: syncSystems.includes(system.code) ? "#f0fdf4" : "transparent",
+                      fontSize: "0.78rem",
+                      fontWeight: "600",
+                      color: syncSystems.includes(system.code) ? "#0f766e" : "var(--color-text, #334155)",
+                      cursor: system.enabled ? "pointer" : "not-allowed",
+                      opacity: system.enabled ? 1 : 0.5
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={syncSystems.includes(system.code)}
+                      disabled={!system.enabled}
+                      onChange={() => setSyncSystems(toggleSystem(syncSystems, system.code))}
+                      style={{ accentColor: "#0f766e", margin: 0 }}
+                    />
+                    {system.code}
+                  </label>
+                ))}
+              </div>
+
+              {/* Sync Mode Dropdown */}
+              <select
+                value={syncMode}
+                onChange={(e) => setSyncMode(e.target.value as "incremental" | "full_period")}
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--color-border, #cbd5e1)",
+                  background: "var(--color-bg-elevated, #ffffff)",
+                  color: "var(--color-text, #111827)",
+                  fontSize: "0.825rem",
+                  fontWeight: "600",
+                  height: "34px",
+                  boxSizing: "border-box"
+                }}
+              >
+                <option value="incremental">Incremental Sync</option>
+                <option value="full_period">Full Period Sync</option>
+              </select>
+
+              {/* Lookback Days or Period Inputs */}
+              {syncMode === "incremental" ? (
+                <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "var(--color-bg-elevated, #ffffff)", padding: "0 8px", borderRadius: "8px", border: "1px solid var(--color-border, #cbd5e1)", height: "34px", boxSizing: "border-box" }}>
+                  <span style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>Days:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="30"
+                    value={lookbackDays}
+                    onChange={(e) => setLookbackDays(Number(e.target.value || 0))}
+                    style={{
+                      width: "48px",
+                      padding: "2px 4px",
+                      border: "none",
+                      background: "transparent",
+                      fontSize: "0.825rem",
+                      fontWeight: "700",
+                      color: "#0f766e"
+                    }}
+                  />
+                </div>
+              ) : (
+                <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                  <input
+                    type="month"
+                    value={syncFromPeriod}
+                    onChange={(e) => setSyncFromPeriod(e.target.value)}
+                    style={{ padding: "4px 6px", borderRadius: "8px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.78rem", height: "34px", boxSizing: "border-box" }}
+                  />
+                  <span style={{ fontSize: "0.75rem", color: "#64748b" }}>to</span>
+                  <input
+                    type="month"
+                    value={syncToPeriod}
+                    onChange={(e) => setSyncToPeriod(e.target.value)}
+                    style={{ padding: "4px 6px", borderRadius: "8px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.78rem", height: "34px", boxSizing: "border-box" }}
+                  />
+                </div>
+              )}
+
+              {/* Primary Action Button: Sync CR */}
+              <button
+                type="button"
+                className="primary sync-button"
+                disabled={loading || syncSystems.length === 0}
+                onClick={() => runSync()}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  background: "#0f766e",
+                  border: "none",
+                  color: "#ffffff",
+                  padding: "6px 14px",
+                  borderRadius: "8px",
+                  fontWeight: "600",
+                  cursor: loading || syncSystems.length === 0 ? "not-allowed" : "pointer",
+                  fontSize: "0.825rem",
+                  height: "34px",
+                  boxSizing: "border-box"
+                }}
+              >
+                <RefreshCw size={15} className={loading ? "spinner" : ""} />
+                <span>{loading ? "Syncing..." : "Sync CR"}</span>
+              </button>
+            </div>
           ) : view === "report" ? (
             <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
               {/* Custom Modern Status Filter Dropdown */}
