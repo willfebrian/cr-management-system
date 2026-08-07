@@ -3,7 +3,7 @@ import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { AlertTriangle, BarChart3, Ban, Calendar, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Database, FileOutput, FileSearch, FileText, FolderKanban, GitPullRequest, KeyRound, LayoutGrid, Link as LinkIcon, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Tag, Trash2, User, Users, X, XCircle } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchAdminSettings, fetchAdminPeople, fetchCrDetail, fetchCrList, fetchDashboard, fetchGlpiTicketDetail, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind, type GlpiTicketDetail, type AdminPersonRow } from "../api";
+import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchAdminSettings, fetchAdminPeople, fetchCrDetail, fetchCrList, fetchDashboard, fetchGlpiTicketDetail, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchSapSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind, type GlpiTicketDetail, type AdminPersonRow, type SapSystemRow } from "../api";
 import { IncompleteGroupCards } from "../components/IncompleteGroupCards";
 import { DisplayNameList } from "../components/DisplayNameList";
 import { DEFAULT_ISSUE_COLUMNS, IssueColumnMenu, type IssueColumnKey } from "../components/IssueColumnMenu";
@@ -15,6 +15,7 @@ import { UserManagementWorkspace } from "../components/users/UserManagementWorks
 import { MasterDataWorkspace } from "./MasterDataWorkspace";
 import { AuditLogReport } from "./AuditLogReport";
 import { CrTransportCreate } from "../components/crTransport/CrTransportCreate";
+import { TRANSPORT_TARGETS } from "../components/crTransport/transportTarget";
 import { UIModal, type ModalType } from "../components/common/UIModal";
 import { fetchProjectDetail } from "../api/projectApi";
 import { afterIncompleteSectionRender, expandSection, getIncompleteItems, getIssueRowMissingItems, groupIncompleteItems, markIncompleteTarget, type ExpandedIssueSections, type IncompleteItem, type IssueSection } from "../issueIncomplete";
@@ -435,6 +436,34 @@ export function App() {
   const [masterDataTab, setMasterDataTab] = useState<string>("people");
   const [settingsTab, setSettingsTab] = useState<string>("general_settings");
   const [userMgmtScope, setUserMgmtScope] = useState<"current" | "archived">("current");
+  const [crTargetSystem, setCrTargetSystem] = useState<string>(() => {
+    try { return localStorage.getItem("cr_transport_target_system") || "DEV_NC"; }
+    catch { return "DEV_NC"; }
+  });
+  const [sapSystems, setSapSystems] = useState<SapSystemRow[]>([]);
+
+  useEffect(() => {
+    fetchSapSystems()
+      .then((res) => {
+        if (res.rows && res.rows.length > 0) {
+          const active = res.rows.filter((s) => s.is_active);
+          const systemsToUse = active.length > 0 ? active : res.rows;
+          setSapSystems(systemsToUse);
+          setCrTargetSystem((prev) => {
+            const stored = (() => { try { return localStorage.getItem("cr_transport_target_system"); } catch { return null; } })();
+            const candidate = stored || prev;
+            if (systemsToUse.some((s) => s.code === candidate)) {
+              try { localStorage.setItem("cr_transport_target_system", candidate); } catch {}
+              return candidate;
+            }
+            const fallback = systemsToUse[0].code;
+            try { localStorage.setItem("cr_transport_target_system", fallback); } catch {}
+            return fallback;
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const handleTabChange = (e: Event) => {
@@ -1326,6 +1355,226 @@ export function App() {
                 <RefreshCw size={15} className={loading ? "spinner" : ""} />
                 <span>{loading ? "Syncing..." : "Sync CR"}</span>
               </button>
+            </div>
+          ) : view === "cr-transport-create" ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+              {/* Target System Dropdown to the left of Sync CR button */}
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontSize: "0.825rem", color: "var(--color-text-muted, #64748b)", fontWeight: "600", whiteSpace: "nowrap" }}>Target System</span>
+                <select
+                  value={crTargetSystem}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCrTargetSystem(val);
+                    try { localStorage.setItem("cr_transport_target_system", val); } catch {}
+                  }}
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--color-border, #cbd5e1)",
+                    background: "var(--color-bg, #ffffff)",
+                    color: "var(--color-text, #1e293b)",
+                    fontSize: "0.825rem",
+                    fontWeight: "600",
+                    height: "36px",
+                    boxSizing: "border-box",
+                    cursor: "pointer"
+                  }}
+                >
+                  {sapSystems.length > 0 ? (
+                    sapSystems.map((sys) => (
+                      <option key={sys.id || sys.code} value={sys.code}>
+                        {sys.description ? `${sys.description} (${sys.code})` : sys.code}
+                      </option>
+                    ))
+                  ) : (
+                    TRANSPORT_TARGETS.map((target) => (
+                      <option key={target.code} value={target.code}>
+                        {target.label}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              {/* Sync CR Popover Button */}
+              <div
+                className="sync-cr-popover-wrapper"
+                style={{ position: "relative", display: "inline-block" }}
+                onMouseEnter={() => setSyncPopoverOpen(true)}
+                onMouseLeave={() => setSyncPopoverOpen(false)}
+              >
+                <button
+                  type="button"
+                  className="primary sync-button"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    background: "#0f766e",
+                    border: "none",
+                    color: "#ffffff",
+                    padding: "8px 18px",
+                    borderRadius: "8px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    fontSize: "0.875rem",
+                    height: "36px"
+                  }}
+                  onClick={() => setSyncPopoverOpen((prev) => !prev)}
+                >
+                  <RefreshCw size={16} className={loading ? "spinner" : ""} />
+                  <span>{loading ? "Syncing CR..." : "Sync CR"}</span>
+                  <ChevronDown size={14} style={{ opacity: 0.8, transform: syncPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                </button>
+
+                {syncPopoverOpen ? (
+                  <div
+                    className="sync-cr-popover-menu"
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      zIndex: 1000,
+                      width: "280px",
+                      background: "var(--color-bg-elevated, #ffffff)",
+                      border: "1px solid var(--color-border, #cbd5e1)",
+                      borderRadius: "12px",
+                      boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.18)",
+                      padding: "12px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "10px"
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--color-border, #cbd5e1)", paddingBottom: "8px" }}>
+                      <span style={{ fontSize: "0.825rem", fontWeight: "700", color: "var(--color-text, #1e293b)" }}>Sync CR Options</span>
+                      <span style={{ fontSize: "0.725rem", color: "var(--color-text-muted, #64748b)" }}>Config & Action</span>
+                    </div>
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>Target System(s)</label>
+                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                        {systems.map((system) => (
+                          <label
+                            key={system.code}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "6px",
+                              padding: "4px 8px",
+                              borderRadius: "6px",
+                              border: "1px solid var(--color-border, #cbd5e1)",
+                              background: syncSystems.includes(system.code) ? "#f0fdf4" : "var(--color-bg, #ffffff)",
+                              color: syncSystems.includes(system.code) ? "#0f766e" : "var(--color-text, #334155)",
+                              fontSize: "0.75rem",
+                              fontWeight: "600",
+                              cursor: "pointer"
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={syncSystems.includes(system.code)}
+                              onChange={() => setSyncSystems(toggleSystem(syncSystems, system.code))}
+                            />
+                            <span>{system.code}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>Sync Mode</label>
+                      <select
+                        value={syncMode}
+                        onChange={(e) => setSyncMode(e.target.value as any)}
+                        style={{
+                          padding: "6px 8px",
+                          borderRadius: "6px",
+                          border: "1px solid var(--color-border, #cbd5e1)",
+                          background: "var(--color-bg, #ffffff)",
+                          fontSize: "0.8rem",
+                          width: "100%"
+                        }}
+                      >
+                        <option value="incremental">Incremental</option>
+                        <option value="full_period">Full by Period</option>
+                      </select>
+                    </div>
+
+                    {syncMode === "incremental" ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>Lookback Days</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="30"
+                          value={lookbackDays}
+                          onChange={(e) => setLookbackDays(Number(e.target.value || 0))}
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: "6px",
+                            border: "1px solid var(--color-border, #cbd5e1)",
+                            background: "var(--color-bg, #ffffff)",
+                            color: "var(--color-text, #111827)",
+                            fontSize: "0.825rem",
+                            width: "100%"
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>From</label>
+                          <input
+                            type="month"
+                            value={syncFromPeriod}
+                            onChange={(e) => setSyncFromPeriod(e.target.value)}
+                            style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.78rem" }}
+                          />
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>To</label>
+                          <input
+                            type="month"
+                            value={syncToPeriod}
+                            onChange={(e) => setSyncToPeriod(e.target.value)}
+                            style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.78rem" }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      className="primary"
+                      disabled={loading || syncSystems.length === 0}
+                      onClick={() => {
+                        setSyncPopoverOpen(false);
+                        runSync();
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "8px",
+                        background: "#0f766e",
+                        color: "#ffffff",
+                        border: "none",
+                        padding: "8px 14px",
+                        borderRadius: "8px",
+                        fontWeight: "600",
+                        fontSize: "0.85rem",
+                        cursor: "pointer",
+                        marginTop: "4px"
+                      }}
+                    >
+                      <RefreshCw size={15} className={loading ? "spinner" : ""} />
+                      <span>{loading ? "Syncing..." : "Sync CR Now"}</span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             </div>
           ) : view === "report" ? (
             <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
@@ -3376,7 +3625,14 @@ export function App() {
             }}
           />
         ) : view === "cr-transport-create" ? (
-          <CrTransportCreate />
+          <CrTransportCreate
+            targetSystem={crTargetSystem}
+            onTargetSystemChange={(val) => {
+              setCrTargetSystem(val);
+              try { localStorage.setItem("cr_transport_target_system", val); } catch {}
+            }}
+            availableSystems={sapSystems}
+          />
         ) : view === "report" ? (
           <Report
             requests={requests}

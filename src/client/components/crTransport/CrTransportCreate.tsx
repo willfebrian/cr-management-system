@@ -39,15 +39,29 @@ function getSapObjectTypeMeta(objectType: string): { label: string; bg: string; 
   }
 }
 
-export function CrTransportCreate() {
-  const [targetSystem, setTargetSystem] = useState<string>(() => {
+interface CrTransportCreateProps {
+  targetSystem?: string;
+  onTargetSystemChange?: (val: string) => void;
+  availableSystems?: SapSystemRow[];
+}
+
+export function CrTransportCreate({
+  targetSystem: externalTargetSystem,
+  onTargetSystemChange,
+  availableSystems: externalAvailableSystems
+}: CrTransportCreateProps = {}) {
+  const [internalTargetSystem, setInternalTargetSystem] = useState<string>(() => {
     try {
       return localStorage.getItem(TARGET_SYSTEM_STORAGE_KEY) || "DEV_NC";
     } catch {
       return "DEV_NC";
     }
   });
-  const [availableSystems, setAvailableSystems] = useState<SapSystemRow[]>([]);
+
+  const targetSystem = externalTargetSystem ?? internalTargetSystem;
+  const [fetchedSystems, setFetchedSystems] = useState<SapSystemRow[]>([]);
+  const availableSystems = externalAvailableSystems ?? fetchedSystems;
+
   const [query, setQuery] = useState("");
   const [resolvedQuery, setResolvedQuery] = useState("");
   const [results, setResults] = useState<ResolvedTransportObject[]>([]);
@@ -64,23 +78,26 @@ export function CrTransportCreate() {
   const canPreflight = objects.length > 0 && description.trim().length > 0 && !busy && !created?.ok;
 
   useEffect(() => {
+    if (externalAvailableSystems) return;
     fetchSapSystems()
       .then((res) => {
         if (res.rows && res.rows.length > 0) {
           const active = res.rows.filter((s) => s.is_active);
           const systemsToUse = active.length > 0 ? active : res.rows;
-          setAvailableSystems(systemsToUse);
+          setFetchedSystems(systemsToUse);
 
-          setTargetSystem((prev) => {
-            if (systemsToUse.some((s) => s.code === prev)) return prev;
-            const fallback = systemsToUse[0].code;
-            try { localStorage.setItem(TARGET_SYSTEM_STORAGE_KEY, fallback); } catch {}
-            return fallback;
-          });
+          if (!externalTargetSystem) {
+            setInternalTargetSystem((prev) => {
+              if (systemsToUse.some((s) => s.code === prev)) return prev;
+              const fallback = systemsToUse[0].code;
+              try { localStorage.setItem(TARGET_SYSTEM_STORAGE_KEY, fallback); } catch {}
+              return fallback;
+            });
+          }
         }
       })
       .catch(() => {});
-  }, []);
+  }, [externalAvailableSystems, externalTargetSystem]);
 
   function invalidatePreflight() { setPreflight(null); setCreated(null); setConfirmError(""); }
 
@@ -90,7 +107,11 @@ export function CrTransportCreate() {
   }
 
   function changeTarget(value: string) {
-    setTargetSystem(value);
+    if (onTargetSystemChange) {
+      onTargetSystemChange(value);
+    } else {
+      setInternalTargetSystem(value);
+    }
     try {
       localStorage.setItem(TARGET_SYSTEM_STORAGE_KEY, value);
     } catch {}
@@ -140,7 +161,6 @@ export function CrTransportCreate() {
   }
 
   return <div className="cr-create-workspace">
-    <section className="cr-create-intro card"><div><span className="eyebrow">CREATE TRANSPORT REQUEST</span><h2>New SAP CR</h2><p>Resolve repository objects, validate CTS readiness, then create a Workbench request in the selected development system.</p></div><div className="cr-create-intro-tools"><label className="cr-target-picker"><span>Target System</span><select value={targetSystem} onChange={(event) => changeTarget(event.target.value)} disabled={Boolean(busy) || Boolean(created?.ok)}>{availableSystems.length > 0 ? availableSystems.map((sys) => <option key={sys.id} value={sys.code}>{sys.description ? `${sys.description} (${sys.code})` : sys.code}</option>) : TRANSPORT_TARGETS.map((target) => <option key={target.code} value={target.code}>{target.label}</option>)}</select></label></div></section>
     {created?.ok ? <section className="cr-create-success card"><CheckCircle2 size={24} /><div><span className="eyebrow">REQUEST CREATED</span><h3>{created.request}</h3><p>Task {created.task} was created in {transportTargetLabel(targetSystem)} and the selected objects were registered.{created.syncQueued ? " CR sync has been queued." : ""}</p></div><button type="button" className="secondary cr-start-new-request" onClick={startNewRequest}><Plus size={16} /> Start New Request</button></section> : null}
 
     <section className="card cr-create-card">
