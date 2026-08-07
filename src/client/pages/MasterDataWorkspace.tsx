@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { fetchAdminPeople, fetchAdminSettings, updateAdminPerson, updateAdminSettings, createAdminPerson, deleteAdminPerson, fetchGroupEmails, createGroupEmail, updateGroupEmail, deleteGroupEmail, type AdminPersonRow, type GroupEmailRow } from "../api";
-import { Check, Loader2, Save, X, Trash2, CheckCircle2, XCircle, AlertTriangle, Mail, Palette, Type, Sliders, User, Database } from "lucide-react";
+import { Check, Loader2, Save, X, Trash2, CheckCircle2, XCircle, AlertTriangle, Mail, Palette, Type, Sliders, User, Database, LayoutGrid } from "lucide-react";
 import { STATUS_COLOR_CONFIGS, applyCustomStatusColors } from "../utils/tagColors";
 import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
+import { TableDataLoader } from "../components/InteractiveLoaders";
 
 interface MasterDataWorkspaceProps {
   mode?: "master-data" | "settings";
@@ -94,6 +95,25 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
       })
       .finally(() => setLoading(false));
   }, [isAdmin]);
+
+  useEffect(() => {
+    const handleSetTab = (e: Event) => {
+      const customEvent = e as CustomEvent<string>;
+      if (customEvent.detail) {
+        setActiveTab(customEvent.detail as any);
+      }
+    };
+    window.addEventListener("set-master-data-tab", handleSetTab);
+    window.addEventListener("set-settings-tab", handleSetTab);
+    return () => {
+      window.removeEventListener("set-master-data-tab", handleSetTab);
+      window.removeEventListener("set-settings-tab", handleSetTab);
+    };
+  }, []);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("master-data-tab-changed", { detail: { mode, activeTab } }));
+  }, [mode, activeTab]);
 
   async function togglePersonFlag(id: number, field: keyof AdminPersonRow, value: boolean) {
     const person = people.find((p) => p.id === id);
@@ -201,7 +221,7 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
   }
 
   function getAppearancePayload() {
-    const appearanceKeys = ["app_font_size"];
+    const appearanceKeys = ["app_font_size", "issue_form_layout", "create_issue_form_layout", "change_issue_form_layout"];
     for (const cfg of STATUS_COLOR_CONFIGS) {
       appearanceKeys.push(`status_color_${cfg.key}_bg`);
       appearanceKeys.push(`status_color_${cfg.key}_text`);
@@ -306,63 +326,11 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
     });
 
   if (loading) {
-    return (
-      <div className="workspace-loading">
-        <Loader2 className="spinner" size={24} />
-      </div>
-    );
+    return <TableDataLoader text="Loading master data..." />;
   }
 
   return (
     <div className="master-data-workspace">
-      <div className="workspace-tabs" style={{ display: "flex", gap: "1rem", marginBottom: "1rem", borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
-        {mode === "master-data" ? (
-          <>
-            <button
-              className={activeTab === "people" ? "active" : ""}
-              style={{ fontWeight: activeTab === "people" ? "bold" : "normal", background: "none", border: "none", cursor: "pointer", color: "var(--text-color)" }}
-              onClick={() => setActiveTab("people")}
-            >
-              People Roles
-            </button>
-            <button
-              className={activeTab === "group_emails" ? "active" : ""}
-              style={{ fontWeight: activeTab === "group_emails" ? "bold" : "normal", background: "none", border: "none", cursor: "pointer", color: "var(--text-color)" }}
-              onClick={() => setActiveTab("group_emails")}
-            >
-              Group Emails
-            </button>
-          </>
-        ) : (
-          <>
-            {isAdmin ? (
-              <>
-                <button
-                  className={activeTab === "general_settings" ? "active" : ""}
-                  style={{ fontWeight: activeTab === "general_settings" ? "bold" : "normal", background: "none", border: "none", cursor: "pointer", color: "var(--text-color)" }}
-                  onClick={() => setActiveTab("general_settings")}
-                >
-                  General Settings
-                </button>
-                <button
-                  className={activeTab === "ai_instructions" ? "active" : ""}
-                  style={{ fontWeight: activeTab === "ai_instructions" ? "bold" : "normal", background: "none", border: "none", cursor: "pointer", color: "var(--text-color)" }}
-                  onClick={() => setActiveTab("ai_instructions")}
-                >
-                  AI Instructions
-                </button>
-              </>
-            ) : null}
-            <button
-              className={activeTab === "appearance" ? "active" : ""}
-              style={{ fontWeight: activeTab === "appearance" ? "bold" : "normal", background: "none", border: "none", cursor: "pointer", color: "var(--text-color)" }}
-              onClick={() => setActiveTab("appearance")}
-            >
-              Appearance Settings
-            </button>
-          </>
-        )}
-      </div>
 
       {activeTab === "people" && (
         <div className="people-tab" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
@@ -372,21 +340,21 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
                 <h3 style={{ marginTop: 0, marginBottom: "0.5rem", fontSize: "1.25rem", color: "var(--color-text-heading, #111827)" }}>People Roles</h3>
                 <p style={{ color: "var(--color-text-muted, #6b7280)", margin: 0, fontSize: "0.875rem" }}>Manage the access control and specific roles for all team members.</p>
               </div>
-              <div style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  disabled={saving}
+                  style={{ padding: "0.625rem 1.25rem", borderRadius: "6px", background: "var(--color-primary, #0f766e)", color: "white", border: "none", cursor: "pointer", fontWeight: "600", fontSize: "0.875rem", whiteSpace: "nowrap", transition: "all 0.2s" }}
+                >
+                  + Add New Person
+                </button>
                 <input
                   type="text"
                   placeholder="Search by name or email..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  style={{ padding: "0.625rem 1rem", width: "100%", minWidth: "250px", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #111827)", fontSize: "0.875rem", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
+                  style={{ padding: "0.625rem 1rem", minWidth: "250px", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #111827)", fontSize: "0.875rem", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
                 />
-                <button
-                  onClick={() => setShowAddModal(true)}
-                  disabled={saving}
-                  style={{ padding: "0.625rem 1.25rem", borderRadius: "6px", background: "var(--color-primary, #2563eb)", color: "white", border: "none", cursor: "pointer", fontWeight: "600", fontSize: "0.875rem", whiteSpace: "nowrap", transition: "all 0.2s" }}
-                >
-                  + Add New Person
-                </button>
               </div>
             </div>
             
@@ -394,10 +362,10 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
               <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.875rem" }}>
                 <thead style={{ background: "var(--color-bg-subtle, #f9fafb)" }}>
                   <tr>
-                    <th style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", minWidth: "200px", color: "var(--color-text-muted, #6b7280)", fontWeight: "600", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>Full Name</th>
-                    <th style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", minWidth: "100px", color: "var(--color-text-muted, #6b7280)", fontWeight: "600", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>Alias</th>
-                    <th style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", minWidth: "200px", color: "var(--color-text-muted, #6b7280)", fontWeight: "600", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>Email</th>
-                    <th style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", minWidth: "250px", color: "var(--color-text-muted, #6b7280)", fontWeight: "600", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>Tags</th>
+                    <th style={{ position: "sticky", left: 0, zIndex: 3, background: "var(--color-bg-subtle, #f9fafb)", padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", minWidth: "200px", width: "200px", color: "var(--color-text-muted, #6b7280)", fontWeight: "600", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>Full Name</th>
+                    <th style={{ position: "sticky", left: "200px", zIndex: 3, background: "var(--color-bg-subtle, #f9fafb)", padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", minWidth: "100px", width: "100px", color: "var(--color-text-muted, #6b7280)", fontWeight: "600", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>Alias</th>
+                    <th style={{ position: "sticky", left: "300px", zIndex: 3, background: "var(--color-bg-subtle, #f9fafb)", padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", minWidth: "200px", width: "200px", color: "var(--color-text-muted, #6b7280)", fontWeight: "600", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>Email</th>
+                    <th style={{ position: "sticky", left: "500px", zIndex: 3, background: "var(--color-bg-subtle, #f9fafb)", padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", minWidth: "250px", width: "250px", color: "var(--color-text-muted, #6b7280)", fontWeight: "600", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", boxShadow: "3px 0 5px -2px rgba(0, 0, 0, 0.12)" }}>Tags</th>
                     <th style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", color: "var(--color-text-muted, #6b7280)", fontWeight: "600", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>Active</th>
                     <th style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", color: "var(--color-text-muted, #6b7280)", fontWeight: "600", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>Requester</th>
                     <th style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", color: "var(--color-text-muted, #6b7280)", fontWeight: "600", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>ABAPer</th>
@@ -411,7 +379,7 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
               <tbody>
                 {filteredPeople.map((p) => (
                   <tr key={p.id}>
-                    <td style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", verticalAlign: "middle" }}>
+                    <td style={{ position: "sticky", left: 0, zIndex: 2, background: "var(--color-bg-elevated, #ffffff)", padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", verticalAlign: "middle", minWidth: "200px", width: "200px" }}>
                       <input
                         type="text"
                         defaultValue={p.full_name || ""}
@@ -423,7 +391,7 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
                         onMouseEnter={(e) => { if (document.activeElement !== e.currentTarget) { e.currentTarget.style.border = "1px solid var(--color-border, #d1d5db)"; e.currentTarget.style.background = "var(--color-bg, #ffffff)"; } }}
                       />
                     </td>
-                    <td style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", verticalAlign: "middle" }}>
+                    <td style={{ position: "sticky", left: "200px", zIndex: 2, background: "var(--color-bg-elevated, #ffffff)", padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", verticalAlign: "middle", minWidth: "100px", width: "100px" }}>
                       <input
                         type="text"
                         defaultValue={p.nickname || ""}
@@ -435,7 +403,7 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
                         onMouseEnter={(e) => { if (document.activeElement !== e.currentTarget) { e.currentTarget.style.border = "1px solid var(--color-border, #d1d5db)"; e.currentTarget.style.background = "var(--color-bg, #ffffff)"; } }}
                       />
                     </td>
-                    <td style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", verticalAlign: "middle" }}>
+                    <td style={{ position: "sticky", left: "300px", zIndex: 2, background: "var(--color-bg-elevated, #ffffff)", padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", verticalAlign: "middle", minWidth: "200px", width: "200px" }}>
                       <input
                         type="text"
                         defaultValue={p.email || ""}
@@ -447,7 +415,7 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
                         onMouseEnter={(e) => { if (document.activeElement !== e.currentTarget) { e.currentTarget.style.border = "1px solid var(--color-border, #d1d5db)"; e.currentTarget.style.background = "var(--color-bg, #ffffff)"; } }}
                       />
                     </td>
-                    <td style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", verticalAlign: "middle" }}>
+                    <td style={{ position: "sticky", left: "500px", zIndex: 2, background: "var(--color-bg-elevated, #ffffff)", padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", verticalAlign: "middle", minWidth: "250px", width: "250px", boxShadow: "3px 0 5px -2px rgba(0, 0, 0, 0.12)" }}>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem" }}>
                         {p.is_abaper && <span style={{ padding: "0.125rem 0.5rem", borderRadius: "9999px", fontSize: "0.65rem", fontWeight: "600", backgroundColor: "#e0f2fe", color: "#0369a1", border: "1px solid #bae6fd" }}>ABAPer</span>}
                         {p.is_tester && <span style={{ padding: "0.125rem 0.5rem", borderRadius: "9999px", fontSize: "0.65rem", fontWeight: "600", backgroundColor: "#f3e8ff", color: "#7e22ce", border: "1px solid #e9d5ff" }}>Functional</span>}
@@ -503,7 +471,7 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
               <button
                 onClick={() => setShowAddGroupModal(true)}
                 disabled={saving}
-                style={{ padding: "0.625rem 1.25rem", borderRadius: "6px", background: "var(--color-primary, #2563eb)", color: "white", border: "none", cursor: "pointer", fontWeight: "600", fontSize: "0.875rem", whiteSpace: "nowrap" }}
+                style={{ padding: "0.625rem 1.25rem", borderRadius: "6px", background: "var(--color-primary, #0f766e)", color: "white", border: "none", cursor: "pointer", fontWeight: "600", fontSize: "0.875rem", whiteSpace: "nowrap" }}
               >
                 + Add Group Email
               </button>
@@ -614,13 +582,13 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
             <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
               <div>
                 <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "600", color: "var(--color-text, #374151)", fontSize: "0.875rem" }}>
-                  GLPI Generation Guidelines
+                  CR dan GLPI Generation Guidelines
                 </label>
                 <textarea
                   value={settings.ai_instruction_glpi}
                   onChange={(e) => setSettings({ ...settings, ai_instruction_glpi: e.target.value })}
                   placeholder="e.g., Always use professional tone. Include standard disclaimer at the bottom..."
-                  style={{ width: "100%", height: "120px", padding: "1rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "var(--font-mono, monospace)", fontSize: "0.875rem", lineHeight: "1.5", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
+                  style={{ width: "100%", minHeight: "180px", padding: "0.875rem 1rem", borderRadius: "8px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "inherit", fontSize: "0.875rem", lineHeight: "1.6", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
                 />
               </div>
               
@@ -632,7 +600,7 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
                   value={settings.ai_instruction_issue_name}
                   onChange={(e) => setSettings({ ...settings, ai_instruction_issue_name: e.target.value })}
                   placeholder="e.g., Keep issue name concise (max 60 chars). Include module prefix like [FI] or [COA] if applicable..."
-                  style={{ width: "100%", height: "100px", padding: "1rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "var(--font-mono, monospace)", fontSize: "0.875rem", lineHeight: "1.5", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
+                  style={{ width: "100%", minHeight: "120px", padding: "0.875rem 1rem", borderRadius: "8px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "inherit", fontSize: "0.875rem", lineHeight: "1.6", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
                 />
               </div>
 
@@ -644,7 +612,7 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
                   value={settings.ai_instruction_problem}
                   onChange={(e) => setSettings({ ...settings, ai_instruction_problem: e.target.value })}
                   placeholder="e.g., Focus on technical root cause, error codes, affected SAP T-code or program name, and steps to reproduce..."
-                  style={{ width: "100%", height: "120px", padding: "1rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "var(--font-mono, monospace)", fontSize: "0.875rem", lineHeight: "1.5", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
+                  style={{ width: "100%", minHeight: "150px", padding: "0.875rem 1rem", borderRadius: "8px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "inherit", fontSize: "0.875rem", lineHeight: "1.6", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
                 />
               </div>
 
@@ -656,7 +624,7 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
                   value={settings.ai_instruction_impact}
                   onChange={(e) => setSettings({ ...settings, ai_instruction_impact: e.target.value })}
                   placeholder="e.g., Describe operational impact on business operations, affected plant/department, urgency level, and financial or compliance risks..."
-                  style={{ width: "100%", height: "120px", padding: "1rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "var(--font-mono, monospace)", fontSize: "0.875rem", lineHeight: "1.5", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
+                  style={{ width: "100%", minHeight: "150px", padding: "0.875rem 1rem", borderRadius: "8px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "inherit", fontSize: "0.875rem", lineHeight: "1.6", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
                 />
               </div>
 
@@ -668,7 +636,7 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
                   value={settings.ai_instruction_email}
                   onChange={(e) => setSettings({ ...settings, ai_instruction_email: e.target.value })}
                   placeholder="e.g., Address the user by their first name. Keep paragraphs short..."
-                  style={{ width: "100%", height: "100px", padding: "1rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "var(--font-mono, monospace)", fontSize: "0.875rem", lineHeight: "1.5", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
+                  style={{ width: "100%", minHeight: "120px", padding: "0.875rem 1rem", borderRadius: "8px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "inherit", fontSize: "0.875rem", lineHeight: "1.6", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
                 />
               </div>
             </div>
@@ -954,13 +922,185 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
                 );
               })}
             </div>
+          </div>
+
+          {/* Section 3: Issue Form Layout Preferences (Create vs Edit) */}
+          <div className="settings-card">
+            <div style={{ marginBottom: "1.5rem" }}>
+              <h3 style={{ marginTop: 0, marginBottom: "0.5rem", fontSize: "1.25rem", display: "flex", alignItems: "center", gap: "8px" }}>
+                <LayoutGrid size={20} color="#0f766e" /> Default Issue Form Layout Preferences
+              </h3>
+              <p style={{ margin: 0, fontSize: "0.875rem" }}>
+                Configure separate default UI layouts for <strong>Create Issue</strong> and <strong>Edit/Change Issue</strong>. Each mode maintains its own independent layout preference in local storage.
+              </p>
+            </div>
+
+            {/* Create Issue Layout Preference */}
+            <div style={{ marginBottom: "1.75rem" }}>
+              <h4 style={{ margin: "0 0 0.75rem 0", fontSize: "1rem", color: "#0f766e", display: "flex", alignItems: "center", gap: "6px" }}>
+                ➕ Create Issue Default Layout
+              </h4>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.75rem" }}>
+                {[
+                  {
+                    id: "quick_toggle",
+                    title: "Quick Draft Toggle",
+                    badge: "Best for Create",
+                    desc: "Starts with 4 essential fields for 10-second draft creation with quick toggle to full form.",
+                    icon: "⚡"
+                  },
+                  {
+                    id: "tabs",
+                    title: "Tab Lifecycle Stepper",
+                    badge: "Structured",
+                    desc: "Organizes fields into 4 sequential tabs (Basic, Team, SAP Transport, Timeline).",
+                    icon: "📑"
+                  },
+                  {
+                    id: "classic",
+                    title: "Classic Continuous Page",
+                    badge: "Single Page",
+                    desc: "Renders all form sections in a single long continuous scroll page.",
+                    icon: "📄"
+                  }
+                ].map((layoutOpt) => {
+                  const currentLayout = settings.create_issue_form_layout || settings.issue_form_layout || "quick_toggle";
+                  const isSelected = currentLayout === layoutOpt.id;
+
+                  return (
+                    <button
+                      key={layoutOpt.id}
+                      type="button"
+                      onClick={() => {
+                        const newSet = { ...settings, create_issue_form_layout: layoutOpt.id };
+                        setSettings(newSet);
+                      }}
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "flex-start",
+                        textAlign: "left",
+                        padding: "1rem",
+                        borderRadius: "10px",
+                        border: isSelected ? "2px solid #0f766e" : "1px solid var(--color-border, #cbd5e1)",
+                        background: isSelected ? "#f0fdf4" : "var(--color-bg, #ffffff)",
+                        cursor: "pointer",
+                        transition: "all 0.15s ease"
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", marginBottom: "6px" }}>
+                        <span style={{ fontSize: "1.25rem" }}>{layoutOpt.icon}</span>
+                        <span
+                          style={{
+                            fontSize: "0.68rem",
+                            fontWeight: "700",
+                            padding: "2px 7px",
+                            borderRadius: "999px",
+                            background: isSelected ? "#0f766e" : "#e2e8f0",
+                            color: isSelected ? "#ffffff" : "#475569"
+                          }}
+                        >
+                          {layoutOpt.badge}
+                        </span>
+                      </div>
+                      <strong style={{ fontSize: "0.9rem", color: isSelected ? "#0f766e" : "var(--color-text, #1e293b)", marginBottom: "3px" }}>
+                        {layoutOpt.title}
+                      </strong>
+                      <span style={{ fontSize: "0.78rem", color: "var(--color-text-muted, #64748b)", lineHeight: 1.35 }}>
+                        {layoutOpt.desc}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Change Issue Layout Preference */}
+            <div>
+              <h4 style={{ margin: "0 0 0.75rem 0", fontSize: "1rem", color: "#0f766e", display: "flex", alignItems: "center", gap: "6px" }}>
+                ✏️ Edit / Change Issue Default Layout
+              </h4>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.75rem" }}>
+                {[
+                  {
+                    id: "quick_toggle",
+                    title: "Quick Draft Toggle",
+                    badge: "Fast Draft",
+                    desc: "Quick 4-field draft toggle for fast edits.",
+                    icon: "⚡"
+                  },
+                  {
+                    id: "tabs",
+                    title: "Tab Lifecycle Stepper",
+                    badge: "Best for Edit",
+                    desc: "Keeps long issue details neat and clean across 4 focused phase tabs.",
+                    icon: "📑"
+                  },
+                  {
+                    id: "classic",
+                    title: "Classic Continuous Page",
+                    badge: "Single Page",
+                    desc: "Renders all form sections in a single long continuous scroll page.",
+                    icon: "📄"
+                  }
+                ].map((layoutOpt) => {
+                  const currentLayout = settings.change_issue_form_layout || settings.issue_form_layout || "tabs";
+                  const isSelected = currentLayout === layoutOpt.id;
+
+                  return (
+                    <button
+                      key={layoutOpt.id}
+                      type="button"
+                      onClick={() => {
+                        const newSet = { ...settings, change_issue_form_layout: layoutOpt.id };
+                        setSettings(newSet);
+                      }}
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "flex-start",
+                        textAlign: "left",
+                        padding: "1rem",
+                        borderRadius: "10px",
+                        border: isSelected ? "2px solid #0f766e" : "1px solid var(--color-border, #cbd5e1)",
+                        background: isSelected ? "#f0fdf4" : "var(--color-bg, #ffffff)",
+                        cursor: "pointer",
+                        transition: "all 0.15s ease"
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", marginBottom: "6px" }}>
+                        <span style={{ fontSize: "1.25rem" }}>{layoutOpt.icon}</span>
+                        <span
+                          style={{
+                            fontSize: "0.68rem",
+                            fontWeight: "700",
+                            padding: "2px 7px",
+                            borderRadius: "999px",
+                            background: isSelected ? "#0f766e" : "#e2e8f0",
+                            color: isSelected ? "#ffffff" : "#475569"
+                          }}
+                        >
+                          {layoutOpt.badge}
+                        </span>
+                      </div>
+                      <strong style={{ fontSize: "0.9rem", color: isSelected ? "#0f766e" : "var(--color-text, #1e293b)", marginBottom: "3px" }}>
+                        {layoutOpt.title}
+                      </strong>
+                      <span style={{ fontSize: "0.78rem", color: "var(--color-text-muted, #64748b)", lineHeight: 1.35 }}>
+                        {layoutOpt.desc}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
             <div style={{ marginTop: "2rem", paddingTop: "1.5rem", borderTop: "1px solid var(--color-border, #e5e7eb)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <button
                 type="button"
                 onClick={() => {
                   localStorage.removeItem(storageKey);
-                  const resetSet: Record<string, string> = { ...settings, app_font_size: "14" };
+                  const resetSet: Record<string, string> = { ...settings, app_font_size: "14", issue_form_layout: "tabs" };
                   for (const cfg of STATUS_COLOR_CONFIGS) {
                     resetSet[`status_color_${cfg.key}_bg`] = cfg.defaultBg;
                     resetSet[`status_color_${cfg.key}_text`] = cfg.defaultText;
@@ -979,7 +1119,7 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
               <button
                 onClick={handleSaveAppearanceClick}
                 disabled={saving}
-                style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.625rem 1.25rem", borderRadius: "6px", background: "var(--color-primary, #059669)", color: "white", border: "none", cursor: "pointer", fontWeight: "600", fontSize: "0.875rem", transition: "all 0.2s" }}
+                style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.625rem 1.25rem", borderRadius: "6px", background: "var(--color-primary, #0f766e)", color: "white", border: "none", cursor: "pointer", fontWeight: "600", fontSize: "0.875rem", transition: "all 0.2s" }}
               >
                 {saving ? <Loader2 className="spinner" size={16} /> : <Save size={16} />}
                 {saving ? "Saving Changes..." : "Save Appearance Settings"}

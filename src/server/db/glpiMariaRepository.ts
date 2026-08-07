@@ -93,3 +93,136 @@ export async function searchGlpiTicketsFromMaria(q = ""): Promise<GlpiTicketRow[
   }));
 }
 
+export type GlpiTicketParticipant = {
+  userId: number;
+  username: string;
+  fullName: string;
+};
+
+export type GlpiTicketFollowup = {
+  id: number;
+  date: string;
+  author: string;
+  content: string;
+};
+
+export type GlpiTicketSolution = {
+  id: number;
+  date: string;
+  solver: string;
+  content: string;
+};
+
+export type GlpiTicketDetail = {
+  ticketNumber: number;
+  title: string;
+  content: string;
+  date: string;
+  status: number | string;
+  solvedate?: string | null;
+  closedate?: string | null;
+  requesters: GlpiTicketParticipant[];
+  technicians: GlpiTicketParticipant[];
+  observers: GlpiTicketParticipant[];
+  followups: GlpiTicketFollowup[];
+  solutions: GlpiTicketSolution[];
+};
+
+function decodeHtmlEntities(str = "") {
+  return str
+    .replace(/&#60;/g, "<")
+    .replace(/&#62;/g, ">")
+    .replace(/&#38;/g, "&")
+    .replace(/&#39;/g, "'")
+    .replace(/&#34;/g, '"')
+    .replace(/&nbsp;/g, " ")
+    .replace(/<[^>]+>/g, "")
+    .trim();
+}
+
+export async function getGlpiTicketDetailFromMaria(ticketId: number): Promise<GlpiTicketDetail | null> {
+  const db = getPool();
+  if (!db || !ticketId) return null;
+
+  try {
+    const [ticketRows] = await db.query<mysql.RowDataPacket[]>(
+      `SELECT id, name, content, date, status, solvedate, closedate FROM glpi_tickets WHERE id = ?`,
+      [ticketId]
+    );
+
+    if (!ticketRows.length) return null;
+    const ticket = ticketRows[0];
+
+    const [users] = await db.query<mysql.RowDataPacket[]>(
+      `SELECT tu.type, u.id as user_id, u.name as username, u.realname, u.firstname
+       FROM glpi_tickets_users tu
+       JOIN glpi_users u ON tu.users_id = u.id
+       WHERE tu.tickets_id = ?`,
+      [ticketId]
+    );
+
+    const mapUser = (u: any): GlpiTicketParticipant => ({
+      userId: Number(u.user_id),
+      username: String(u.username || ""),
+      fullName: [u.firstname, u.realname].filter(Boolean).join(" ") || String(u.username || "")
+    });
+
+    const requesters = users.filter((u) => u.type === 1).map(mapUser);
+    const technicians = users.filter((u) => u.type === 2).map(mapUser);
+    const observers = users.filter((u) => u.type === 3).map(mapUser);
+
+    let followups: GlpiTicketFollowup[] = [];
+    try {
+      const [chats] = await db.query<mysql.RowDataPacket[]>(
+        `SELECT f.id, f.date, f.content, u.name as username, u.realname, u.firstname
+         FROM glpi_itilfollowups f
+         LEFT JOIN glpi_users u ON f.users_id = u.id
+         WHERE f.itemtype = 'Ticket' AND f.items_id = ?
+         ORDER BY f.date ASC`,
+        [ticketId]
+      );
+      followups = chats.map((c) => ({
+        id: Number(c.id),
+        date: String(c.date || ""),
+        author: [c.firstname, c.realname].filter(Boolean).join(" ") || String(c.username || "System"),
+        content: decodeHtmlEntities(c.content || "")
+      }));
+    } catch {}
+
+    let solutions: GlpiTicketSolution[] = [];
+    try {
+      const [solRows] = await db.query<mysql.RowDataPacket[]>(
+        `SELECT s.id, s.date_creation, s.content, u.name as username, u.realname, u.firstname
+         FROM glpi_itilsolutions s
+         LEFT JOIN glpi_users u ON s.users_id = u.id
+         WHERE s.itemtype = 'Ticket' AND s.items_id = ?`,
+        [ticketId]
+      );
+      solutions = solRows.map((s) => ({
+        id: Number(s.id),
+        date: String(s.date_creation || ""),
+        solver: [s.firstname, s.realname].filter(Boolean).join(" ") || String(s.username || "System"),
+        content: decodeHtmlEntities(s.content || "")
+      }));
+    } catch {}
+
+    return {
+      ticketNumber: Number(ticket.id),
+      title: String(ticket.name || ""),
+      content: decodeHtmlEntities(ticket.content || ""),
+      date: ticket.date ? String(ticket.date) : "",
+      status: ticket.status,
+      solvedate: ticket.solvedate ? String(ticket.solvedate) : null,
+      closedate: ticket.closedate ? String(ticket.closedate) : null,
+      requesters,
+      technicians,
+      observers,
+      followups,
+      solutions
+    };
+  } catch (error) {
+    console.error(`Failed to fetch GLPI ticket #${ticketId} detail:`, error);
+    return null;
+  }
+}
+

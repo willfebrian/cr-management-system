@@ -1,13 +1,14 @@
 import { applyCustomStatusColors } from "../utils/tagColors";
-import { applyCustomFontSize } from "../utils/fontSize";
+import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
-import { AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Ban, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Database, FileOutput, FileSearch, FolderKanban, KeyRound, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Trash2, Users, X, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, BarChart3, Ban, Calendar, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Database, FileOutput, FileSearch, FileText, FolderKanban, GitPullRequest, KeyRound, LayoutGrid, Link as LinkIcon, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Tag, Trash2, Users, X, XCircle } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchAdminSettings, fetchCrDetail, fetchCrList, fetchDashboard, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind } from "../api";
+import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchAdminSettings, fetchAdminPeople, fetchCrDetail, fetchCrList, fetchDashboard, fetchGlpiTicketDetail, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind, type GlpiTicketDetail, type AdminPersonRow } from "../api";
 import { IncompleteGroupCards } from "../components/IncompleteGroupCards";
 import { DisplayNameList } from "../components/DisplayNameList";
 import { DEFAULT_ISSUE_COLUMNS, IssueColumnMenu, type IssueColumnKey } from "../components/IssueColumnMenu";
 import { SummaryStrip } from "../components/SummaryStrip";
+import { PaginationControls } from "../components/PaginationControls";
 import { ProjectEditor } from "../components/projects/ProjectEditor";
 import { ProjectReport } from "../components/projects/ProjectReport";
 import { UserManagementWorkspace } from "../components/users/UserManagementWorkspace";
@@ -16,10 +17,11 @@ import { AuditLogReport } from "./AuditLogReport";
 import { CrTransportCreate } from "../components/crTransport/CrTransportCreate";
 import { UIModal, type ModalType } from "../components/common/UIModal";
 import { fetchProjectDetail } from "../api/projectApi";
-import { afterIncompleteSectionRender, expandSection, getIncompleteItems, groupIncompleteItems, markIncompleteTarget, type ExpandedIssueSections, type IncompleteItem, type IssueSection } from "../issueIncomplete";
+import { afterIncompleteSectionRender, expandSection, getIncompleteItems, getIssueRowMissingItems, groupIncompleteItems, markIncompleteTarget, type ExpandedIssueSections, type IncompleteItem, type IssueSection } from "../issueIncomplete";
 import { nextExpandedSidebarGroup, type SidebarGroup } from "../navigation";
 import type { CrDetail, CrRequest, DashboardData, IssueDetail, IssueRow, SapSystemConfig, StatusTrendData } from "../../shared/types";
-import type { ProjectDetail as ProjectDetailModel } from "../../shared/projectTypes";
+import { AppLoadingScreen, SkeletonDetailLoader, TableDataLoader } from "../components/InteractiveLoaders";
+import type { ProjectDetail as ProjectDetailModel, ProjectStatus } from "../../shared/projectTypes";
 
 type View = "dashboard" | "report" | "cr-transport-create" | "issue-display" | "issue-create" | "issue-change" | "user-management" | "project-report" | "project-create" | "project-change" | "master-data" | "settings" | "audit-log";
 const VIEW_META: Record<View, { title: string; description: string }> = {
@@ -122,6 +124,9 @@ export function App() {
   }, [view]);
   const [projectEditorDetail, setProjectEditorDetail] = useState<ProjectDetailModel | null>(null);
   const [projectFormDirty, setProjectFormDirty] = useState(false);
+  const [projectSearch, setProjectSearch] = useState("");
+  const [projectStatus, setProjectStatus] = useState<ProjectStatus | "all">("all");
+  const [projectStatusPopoverOpen, setProjectStatusPopoverOpen] = useState(false);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [systems, setSystems] = useState<SapSystemConfig[]>([]);
   const [trend, setTrend] = useState<StatusTrendData | null>(null);
@@ -163,7 +168,62 @@ export function App() {
   const [runningSyncSystems, setRunningSyncSystems] = useState<string[]>([]);
   const [syncRefreshToken, setSyncRefreshToken] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [syncPopoverOpen, setSyncPopoverOpen] = useState(false);
+  const [formLayoutPopoverOpen, setFormLayoutPopoverOpen] = useState(false);
+  const [createFormLayoutStyle, setCreateFormLayoutStyle] = useState<"tabs" | "quick_toggle" | "classic">(() => {
+    try {
+      const storageKey = getActiveAppearanceKey();
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.create_issue_form_layout) return parsed.create_issue_form_layout;
+        if (parsed.issue_form_layout) return parsed.issue_form_layout;
+      }
+    } catch {}
+    return "quick_toggle";
+  });
+
+  const [changeFormLayoutStyle, setChangeFormLayoutStyle] = useState<"tabs" | "quick_toggle" | "classic">(() => {
+    try {
+      const storageKey = getActiveAppearanceKey();
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.change_issue_form_layout) return parsed.change_issue_form_layout;
+        if (parsed.issue_form_layout) return parsed.issue_form_layout;
+      }
+    } catch {}
+    return "tabs";
+  });
+
+  function updateFormLayoutPref(mode: "create" | "change", pref: "tabs" | "quick_toggle" | "classic") {
+    if (mode === "create") setCreateFormLayoutStyle(pref);
+    else setChangeFormLayoutStyle(pref);
+
+    try {
+      const storageKey = getActiveAppearanceKey();
+      const saved = localStorage.getItem(storageKey) || "{}";
+      const parsed = JSON.parse(saved);
+      if (mode === "create") parsed.create_issue_form_layout = pref;
+      else parsed.change_issue_form_layout = pref;
+      localStorage.setItem(storageKey, JSON.stringify(parsed));
+    } catch {}
+  }
+  const [periodPopoverOpen, setPeriodPopoverOpen] = useState(false);
+  const [statusPopoverOpen, setStatusPopoverOpen] = useState(false);
+  const [issuePeriodPopoverOpen, setIssuePeriodPopoverOpen] = useState(false);
+  const [issueStatusPopoverOpen, setIssueStatusPopoverOpen] = useState(false);
+  const [columnMenuOpen, setColumnMenuOpen] = useState(false);
+  const [visibleIssueColumns, setVisibleIssueColumns] = useState<IssueColumnKey[]>([...DEFAULT_ISSUE_COLUMNS]);
   const [issueFormDirty, setIssueFormDirty] = useState(false);
+  const [issueCreateMode, setIssueCreateMode] = useState<"new" | "sub">("new");
+  const [nextIssueNo, setNextIssueNo] = useState<number | null>(null);
+  const [baseIssueSearch, setBaseIssueSearch] = useState("");
+  const [baseIssueCandidates, setBaseIssueCandidates] = useState<IssueRow[]>([]);
+  const [showBaseIssueModal, setShowBaseIssueModal] = useState(false);
+  const [loadingBaseIssueCandidates, setLoadingBaseIssueCandidates] = useState(false);
+  const [selectedBaseIssue, setSelectedBaseIssue] = useState<IssueRow | null>(null);
+  const [nextSubIssueNo, setNextSubIssueNo] = useState<string>("01");
   const reportRequestId = useRef(0);
   const issueRequestId = useRef(0);
 
@@ -180,21 +240,64 @@ export function App() {
 
   async function loadReport(nextFilters = filters) {
     const requestId = ++reportRequestId.current;
-    const crData = await fetchCrList(nextFilters);
-    if (requestId !== reportRequestId.current) return;
-    setRequests(crData.rows);
-    setPagination({ page: crData.page, pageSize: crData.pageSize, total: crData.total, totalPages: crData.totalPages });
-    if (!crData.rows.some((request) => requestKey(request) === selected)) setSelected("");
+    setLoading(true);
+    try {
+      const crData = await fetchCrList(nextFilters);
+      if (requestId !== reportRequestId.current) return;
+      setRequests(crData.rows);
+      setPagination({ page: crData.page, pageSize: crData.pageSize, total: crData.total, totalPages: crData.totalPages });
+      if (!crData.rows.some((request) => requestKey(request) === selected)) setSelected("");
+    } finally {
+      if (requestId === reportRequestId.current) {
+        setLoading(false);
+      }
+    }
   }
 
   async function loadIssues(nextFilters = issueFilters, options?: { preserveSelection?: boolean }) {
     const requestId = ++issueRequestId.current;
-    const issueData = await fetchIssueList(nextFilters);
-    if (requestId !== issueRequestId.current) return;
-    setIssues(issueData.rows);
-    setIssuePagination({ page: issueData.page, pageSize: issueData.pageSize, total: issueData.total, totalPages: issueData.totalPages });
-    if (!options?.preserveSelection && !issueData.rows.some((issue) => issue.id === selectedIssueId)) setSelectedIssueId(null);
+    setLoading(true);
+    try {
+      const issueData = await fetchIssueList(nextFilters);
+      if (requestId !== issueRequestId.current) return;
+      setIssues(issueData.rows);
+      setIssuePagination({ page: issueData.page, pageSize: issueData.pageSize, total: issueData.total, totalPages: issueData.totalPages });
+      if (!options?.preserveSelection && !issueData.rows.some((issue) => issue.id === selectedIssueId)) setSelectedIssueId(null);
+    } finally {
+      if (requestId === issueRequestId.current) {
+        setLoading(false);
+      }
+    }
   }
+
+  const [masterDataTab, setMasterDataTab] = useState<string>("people");
+  const [settingsTab, setSettingsTab] = useState<string>("general_settings");
+  const [userMgmtScope, setUserMgmtScope] = useState<"current" | "archived">("current");
+
+  useEffect(() => {
+    const handleTabChange = (e: Event) => {
+      const customEvent = e as CustomEvent<{ mode: string; activeTab: string }>;
+      if (customEvent.detail) {
+        if (customEvent.detail.mode === "master-data") {
+          setMasterDataTab(customEvent.detail.activeTab);
+        } else if (customEvent.detail.mode === "settings") {
+          setSettingsTab(customEvent.detail.activeTab);
+        }
+      }
+    };
+    const handleScopeChange = (e: Event) => {
+      const customEvent = e as CustomEvent<"current" | "archived">;
+      if (customEvent.detail) {
+        setUserMgmtScope(customEvent.detail);
+      }
+    };
+    window.addEventListener("master-data-tab-changed", handleTabChange);
+    window.addEventListener("user-management-scope-changed", handleScopeChange);
+    return () => {
+      window.removeEventListener("master-data-tab-changed", handleTabChange);
+      window.removeEventListener("user-management-scope-changed", handleScopeChange);
+    };
+  }, []);
 
   async function load(nextFilters = filters) {
     setError("");
@@ -481,6 +584,40 @@ export function App() {
   }, [view, issueFilters, selectedIssueId]);
 
   useEffect(() => {
+    if (view === "issue-create") {
+      fetchNextIssueNumber().then((res) => setNextIssueNo(res.issueNo)).catch(() => setNextIssueNo(null));
+    }
+  }, [view]);
+
+  useEffect(() => {
+    if (!showBaseIssueModal) return;
+    setLoadingBaseIssueCandidates(true);
+    const timer = setTimeout(() => {
+      fetchIssueList({ q: baseIssueSearch.trim() || undefined, pageSize: 15 })
+        .then((res) => {
+          setBaseIssueCandidates(res.rows);
+          setLoadingBaseIssueCandidates(false);
+        })
+        .catch(() => {
+          setBaseIssueCandidates([]);
+          setLoadingBaseIssueCandidates(false);
+        });
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [baseIssueSearch, showBaseIssueModal]);
+
+  async function selectTopBaseIssue(issue: IssueRow) {
+    setSelectedBaseIssue(issue);
+    setShowBaseIssueModal(false);
+    try {
+      const res = await fetchNextSubIssueNumber(issue.issue_no);
+      setNextSubIssueNo(res.subIssueNo);
+    } catch {
+      setNextSubIssueNo("01");
+    }
+  }
+
+  useEffect(() => {
     const enabledCodes = systems.filter((system) => system.enabled).map((system) => system.code);
     if (enabledCodes.length && syncSystems.length === 0) setSyncSystems(enabledCodes);
   }, [systems, syncSystems.length]);
@@ -584,7 +721,7 @@ export function App() {
 
   const selectedRequest = useMemo(() => requests.find((request) => requestKey(request) === selected), [requests, selected]);
 
-  if (authLoading) return <div className="auth-screen"><div className="auth-panel"><h1>CR Management System</h1><p>Loading...</p></div></div>;
+  if (authLoading) return <AppLoadingScreen />;
   if (!authUser) return <LoginScreen onLogin={(user) => { setAuthUser(user); window.location.reload(); }} />;
   if (authUser.mustChangePassword) return <ChangePasswordScreen onDone={() => window.location.reload()} />;
 
@@ -610,7 +747,13 @@ export function App() {
         </div>
         <div className={`sidebar-group ${view.startsWith("issue-") ? "active" : ""}`}>
           <button className={view.startsWith("issue-") ? "active" : ""} onClick={() => {
-            setExpandedSidebarGroup((current) => nextExpandedSidebarGroup(current, "issue"));
+            setExpandedSidebarGroup("issue");
+            setChangeIssueInitialId(null);
+            setChangeIssueInitialAction("");
+            setChangeIssueInitialItem(null);
+            if (navigateTo("issue-display")) {
+              loadIssues(issueFilters).catch((err) => setError(err instanceof Error ? err.message : String(err)));
+            }
           }}>
             <ClipboardList size={18} /> Issue
           </button>
@@ -631,17 +774,20 @@ export function App() {
                 setChangeIssueInitialItem(null);
                 navigateTo("issue-create");
               }}><Plus size={15} /> Create</button>
-              <button className={view === "issue-change" ? "active" : ""} onClick={() => {
-                setChangeIssueInitialId(null);
-                setChangeIssueInitialAction("");
-                setChangeIssueInitialItem(null);
-                navigateTo("issue-change");
-              }}><PencilLine size={15} /> Change</button>
+              {view === "issue-change" ? (
+                <button className="active" onClick={() => {}}>
+                  <PencilLine size={15} /> Change
+                </button>
+              ) : null}
             </div>
           ) : null}
         </div>
         {PROJECTS_ENABLED ? <div className={`sidebar-group ${view.startsWith("project-") ? "active" : ""}`}>
-          <button className={view.startsWith("project-") ? "active" : ""} onClick={() => setExpandedSidebarGroup((current) => nextExpandedSidebarGroup(current, "project"))}>
+          <button className={view.startsWith("project-") ? "active" : ""} onClick={() => {
+            setExpandedSidebarGroup("project");
+            setProjectEditorDetail(null);
+            navigateTo("project-report");
+          }}>
             <FolderKanban size={18} /> Project
           </button>
           {expandedSidebarGroup === "project" ? (
@@ -651,10 +797,11 @@ export function App() {
                 setProjectEditorDetail(null);
                 navigateTo("project-create");
               }}><Plus size={15} /> Create</button>
-              <button className={view === "project-change" ? "active" : ""} onClick={() => {
-                setProjectEditorDetail(null);
-                navigateTo("project-change");
-              }}><PencilLine size={15} /> Change</button>
+              {view === "project-change" ? (
+                <button className="active" onClick={() => {}}>
+                  <PencilLine size={15} /> Change
+                </button>
+              ) : null}
             </div>
           ) : null}
         </div> : null}
@@ -709,51 +856,2283 @@ export function App() {
               </div>
             ) : null}
           </div>
-          <div className={`sync-controls report-sync-controls page-sync-toolbar ${syncMode === "full_period" ? "full-mode" : "incremental-mode"}`}>
-            <label>
-              Source Systems
-              <div className="system-checks">
+          {view === "user-management" ? (
+            <div className="topbar-action-slot" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div style={{ display: "flex", gap: "4px", background: "var(--color-bg-subtle, #f1f5f9)", padding: "4px", borderRadius: "8px", border: "1px solid var(--color-border, #e2e8f0)" }}>
+                <button
+                  type="button"
+                  onClick={() => window.dispatchEvent(new CustomEvent("set-user-management-scope", { detail: "current" }))}
+                  style={{
+                    padding: "6px 14px",
+                    borderRadius: "6px",
+                    border: "none",
+                    background: userMgmtScope === "current" ? "var(--color-primary, #0f766e)" : "transparent",
+                    color: userMgmtScope === "current" ? "#ffffff" : "var(--color-text-muted)",
+                    fontWeight: userMgmtScope === "current" ? "700" : "500",
+                    fontSize: "0.85rem",
+                    cursor: "pointer"
+                  }}
+                >
+                  Users
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.dispatchEvent(new CustomEvent("set-user-management-scope", { detail: "archived" }))}
+                  style={{
+                    padding: "6px 14px",
+                    borderRadius: "6px",
+                    border: "none",
+                    background: userMgmtScope === "archived" ? "var(--color-primary, #0f766e)" : "transparent",
+                    color: userMgmtScope === "archived" ? "#ffffff" : "var(--color-text-muted)",
+                    fontWeight: userMgmtScope === "archived" ? "700" : "500",
+                    fontSize: "0.85rem",
+                    cursor: "pointer"
+                  }}
+                >
+                  Archived Users
+                </button>
+              </div>
+              <button
+                type="button"
+                className="primary sync-button"
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "#0f766e", border: "none", color: "#ffffff", padding: "8px 18px", borderRadius: "8px", fontWeight: "600", cursor: "pointer", fontSize: "0.875rem" }}
+                onClick={() => window.dispatchEvent(new CustomEvent("trigger-create-user"))}
+              >
+                <Plus size={16} /> <span>Create User</span>
+              </button>
+            </div>
+          ) : view === "audit-log" ? (
+            <div className="topbar-action-slot" style={{ display: "flex", alignItems: "center" }}>
+              <button
+                type="button"
+                className="secondary"
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "8px 16px", borderRadius: "8px" }}
+                onClick={() => window.dispatchEvent(new CustomEvent("trigger-refresh-audit-log"))}
+              >
+                <RefreshCw size={14} /> <span>Refresh</span>
+              </button>
+            </div>
+          ) : view === "master-data" ? (
+            <div className="topbar-action-slot" style={{ display: "flex", gap: "6px", background: "var(--color-bg-subtle, #f1f5f9)", padding: "4px", borderRadius: "8px", border: "1px solid var(--color-border, #e2e8f0)" }}>
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent("set-master-data-tab", { detail: "people" }))}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "6px",
+                  border: "none",
+                  background: masterDataTab === "people" ? "var(--color-primary, #0f766e)" : "transparent",
+                  color: masterDataTab === "people" ? "#ffffff" : "var(--color-text-muted)",
+                  fontWeight: masterDataTab === "people" ? "700" : "500",
+                  fontSize: "0.85rem",
+                  cursor: "pointer"
+                }}
+              >
+                People Roles
+              </button>
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent("set-master-data-tab", { detail: "group_emails" }))}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "6px",
+                  border: "none",
+                  background: masterDataTab === "group_emails" ? "var(--color-primary, #0f766e)" : "transparent",
+                  color: masterDataTab === "group_emails" ? "#ffffff" : "var(--color-text-muted)",
+                  fontWeight: masterDataTab === "group_emails" ? "700" : "500",
+                  fontSize: "0.85rem",
+                  cursor: "pointer"
+                }}
+              >
+                Group Emails
+              </button>
+            </div>
+          ) : view === "settings" ? (
+            <div className="topbar-action-slot" style={{ display: "flex", gap: "6px", background: "var(--color-bg-subtle, #f1f5f9)", padding: "4px", borderRadius: "8px", border: "1px solid var(--color-border, #e2e8f0)" }}>
+              {authUser?.role === "ADMIN" && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => window.dispatchEvent(new CustomEvent("set-settings-tab", { detail: "general_settings" }))}
+                    style={{
+                      padding: "6px 14px",
+                      borderRadius: "6px",
+                      border: "none",
+                      background: settingsTab === "general_settings" ? "var(--color-primary, #0f766e)" : "transparent",
+                      color: settingsTab === "general_settings" ? "#ffffff" : "var(--color-text-muted)",
+                      fontWeight: settingsTab === "general_settings" ? "700" : "500",
+                      fontSize: "0.85rem",
+                      cursor: "pointer"
+                    }}
+                  >
+                    General Settings
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.dispatchEvent(new CustomEvent("set-settings-tab", { detail: "ai_instructions" }))}
+                    style={{
+                      padding: "6px 14px",
+                      borderRadius: "6px",
+                      border: "none",
+                      background: settingsTab === "ai_instructions" ? "var(--color-primary, #0f766e)" : "transparent",
+                      color: settingsTab === "ai_instructions" ? "#ffffff" : "var(--color-text-muted)",
+                      fontWeight: settingsTab === "ai_instructions" ? "700" : "500",
+                      fontSize: "0.85rem",
+                      cursor: "pointer"
+                    }}
+                  >
+                    AI Instructions
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent("set-settings-tab", { detail: "appearance" }))}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "6px",
+                  border: "none",
+                  background: settingsTab === "appearance" ? "var(--color-primary, #0f766e)" : "transparent",
+                  color: settingsTab === "appearance" ? "#ffffff" : "var(--color-text-muted)",
+                  fontWeight: settingsTab === "appearance" ? "700" : "500",
+                  fontSize: "0.85rem",
+                  cursor: "pointer"
+                }}
+              >
+                Appearance
+              </button>
+            </div>
+          ) : view === "dashboard" ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+              {/* Source Systems Checkboxes */}
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", background: "var(--color-bg-elevated, #ffffff)", padding: "3px 6px", borderRadius: "8px", border: "1px solid var(--color-border, #cbd5e1)", height: "34px", boxSizing: "border-box" }}>
                 {systems.map((system) => (
-                  <label key={system.code} className={!system.enabled ? "disabled" : ""} title={!system.enabled ? "Disabled in .env" : systemLabel(system)}>
+                  <label
+                    key={system.code}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      padding: "3px 8px",
+                      borderRadius: "6px",
+                      background: syncSystems.includes(system.code) ? "#f0fdf4" : "transparent",
+                      fontSize: "0.78rem",
+                      fontWeight: "600",
+                      color: syncSystems.includes(system.code) ? "#0f766e" : "var(--color-text, #334155)",
+                      cursor: system.enabled ? "pointer" : "not-allowed",
+                      opacity: system.enabled ? 1 : 0.5
+                    }}
+                  >
                     <input
                       type="checkbox"
                       checked={syncSystems.includes(system.code)}
                       disabled={!system.enabled}
                       onChange={() => setSyncSystems(toggleSystem(syncSystems, system.code))}
+                      style={{ accentColor: "#0f766e", margin: 0 }}
                     />
                     {system.code}
                   </label>
                 ))}
               </div>
-            </label>
-            <label>
-              Sync Mode
-              <select value={syncMode} onChange={(event) => setSyncMode(event.target.value as "incremental" | "full_period")}>
-                <option value="incremental">Incremental</option>
-                <option value="full_period">Full by Period</option>
+
+              {/* Sync Mode Dropdown */}
+              <select
+                value={syncMode}
+                onChange={(e) => setSyncMode(e.target.value as "incremental" | "full_period")}
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--color-border, #cbd5e1)",
+                  background: "var(--color-bg-elevated, #ffffff)",
+                  color: "var(--color-text, #111827)",
+                  fontSize: "0.825rem",
+                  fontWeight: "600",
+                  height: "34px",
+                  boxSizing: "border-box"
+                }}
+              >
+                <option value="incremental">Incremental Sync</option>
+                <option value="full_period">Full Period Sync</option>
               </select>
-            </label>
-            {syncMode === "incremental" ? (
-              <label>
-                Lookback Days
-                <input type="number" min="0" max="30" value={lookbackDays} onChange={(event) => setLookbackDays(Number(event.target.value || 0))} />
-              </label>
-            ) : (
-              <>
-            <label>
-              From Period
-              <input type="month" value={syncFromPeriod} onChange={(event) => setSyncFromPeriod(event.target.value)} />
-            </label>
-            <label>
-              To Period
-              <input type="month" value={syncToPeriod} onChange={(event) => setSyncToPeriod(event.target.value)} />
-            </label>
-              </>
-            )}
-            <button className="primary sync-button" onClick={runSync} disabled={loading || syncSystems.length === 0}>
-              <RefreshCw size={18} /> <span>{loading ? "Syncing" : "Sync CR"}</span>
-            </button>
-          </div>
+
+              {/* Lookback Days or Period Inputs */}
+              {syncMode === "incremental" ? (
+                <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "var(--color-bg-elevated, #ffffff)", padding: "0 8px", borderRadius: "8px", border: "1px solid var(--color-border, #cbd5e1)", height: "34px", boxSizing: "border-box" }}>
+                  <span style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>Days:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="30"
+                    value={lookbackDays}
+                    onChange={(e) => setLookbackDays(Number(e.target.value || 0))}
+                    style={{
+                      width: "48px",
+                      padding: "2px 4px",
+                      border: "none",
+                      background: "transparent",
+                      fontSize: "0.825rem",
+                      fontWeight: "700",
+                      color: "#0f766e"
+                    }}
+                  />
+                </div>
+              ) : (
+                <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                  <input
+                    type="month"
+                    value={syncFromPeriod}
+                    onChange={(e) => setSyncFromPeriod(e.target.value)}
+                    style={{ padding: "4px 6px", borderRadius: "8px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.78rem", height: "34px", boxSizing: "border-box" }}
+                  />
+                  <span style={{ fontSize: "0.75rem", color: "#64748b" }}>to</span>
+                  <input
+                    type="month"
+                    value={syncToPeriod}
+                    onChange={(e) => setSyncToPeriod(e.target.value)}
+                    style={{ padding: "4px 6px", borderRadius: "8px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.78rem", height: "34px", boxSizing: "border-box" }}
+                  />
+                </div>
+              )}
+
+              {/* Primary Action Button: Sync CR */}
+              <button
+                type="button"
+                className="primary sync-button"
+                disabled={loading || syncSystems.length === 0}
+                onClick={() => runSync()}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  background: "#0f766e",
+                  border: "none",
+                  color: "#ffffff",
+                  padding: "6px 14px",
+                  borderRadius: "8px",
+                  fontWeight: "600",
+                  cursor: loading || syncSystems.length === 0 ? "not-allowed" : "pointer",
+                  fontSize: "0.825rem",
+                  height: "34px",
+                  boxSizing: "border-box"
+                }}
+              >
+                <RefreshCw size={15} className={loading ? "spinner" : ""} />
+                <span>{loading ? "Syncing..." : "Sync CR"}</span>
+              </button>
+            </div>
+          ) : view === "report" ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              {/* Custom Modern Status Filter Dropdown */}
+              {(() => {
+                const statusOptions = [
+                  { value: "all", label: "All Status", color: "#64748b" },
+                  { value: "outstanding", label: "Outstanding", color: "#ea580c" },
+                  { value: "released", label: "Released", color: "#059669" },
+                  { value: "pending_qa", label: "Pending to QA", color: "#d97706" },
+                  { value: "in_qa", label: "In QA", color: "#2563eb" },
+                  { value: "pending_prd", label: "Pending to PRD", color: "#4f46e5" },
+                  { value: "in_prd", label: "In PRD", color: "#7c3aed" }
+                ];
+                const currentStatusVal = draftFilters.lifecycleStatus && draftFilters.lifecycleStatus !== "all"
+                  ? draftFilters.lifecycleStatus
+                  : draftFilters.status || "all";
+                const currentStatusObj = statusOptions.find(o => o.value === currentStatusVal) || statusOptions[0];
+
+                return (
+                  <div style={{ position: "relative", display: "inline-block" }}>
+                    <button
+                      type="button"
+                      onClick={() => setStatusPopoverOpen((prev) => !prev)}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        padding: "6px 12px",
+                        borderRadius: "8px",
+                        border: "1px solid var(--color-border, #cbd5e1)",
+                        background: "var(--color-bg, #ffffff)",
+                        color: "var(--color-text, #1e293b)",
+                        fontSize: "0.85rem",
+                        fontWeight: "500",
+                        height: "36px",
+                        cursor: "pointer"
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: "8px",
+                          height: "8px",
+                          borderRadius: "50%",
+                          backgroundColor: currentStatusObj.color,
+                          display: "inline-block"
+                        }}
+                      />
+                      <span>{currentStatusObj.label}</span>
+                      <ChevronDown size={14} style={{ opacity: 0.7, transform: statusPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                    </button>
+
+                    {statusPopoverOpen ? (
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: "calc(100% + 6px)",
+                          left: 0,
+                          zIndex: 1000,
+                          width: "190px",
+                          background: "var(--color-bg-elevated, #ffffff)",
+                          border: "1px solid var(--color-border, #cbd5e1)",
+                          borderRadius: "12px",
+                          boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.18)",
+                          padding: "6px",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "2px"
+                        }}
+                      >
+                        {statusOptions.map((opt) => {
+                          const isSelected = opt.value === currentStatusVal;
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => {
+                                setStatusPopoverOpen(false);
+                                const val = opt.value;
+                                const status = ["all", "outstanding", "released"].includes(val) ? val : "all";
+                                const lifecycleStatus = val.startsWith("pending_") || val.startsWith("in_") ? val : "all";
+                                const nextFilters = { ...draftFilters, status, lifecycleStatus, page: 1 };
+                                setDraftFilters(nextFilters);
+                                setFilters(nextFilters);
+                                loadReport(nextFilters).catch((err) => setError(err instanceof Error ? err.message : String(err)));
+                              }}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                padding: "8px 10px",
+                                borderRadius: "7px",
+                                border: "none",
+                                background: isSelected ? "var(--color-bg-subtle, #f1f5f9)" : "transparent",
+                                cursor: "pointer",
+                                fontSize: "0.825rem",
+                                fontWeight: isSelected ? "700" : "500",
+                                color: isSelected ? "var(--color-primary, #0f766e)" : "var(--color-text, #334155)",
+                                textAlign: "left",
+                                transition: "background 0.15s ease"
+                              }}
+                            >
+                              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                <span
+                                  style={{
+                                    width: "8px",
+                                    height: "8px",
+                                    borderRadius: "50%",
+                                    backgroundColor: opt.color,
+                                    display: "inline-block"
+                                  }}
+                                />
+                                <span>{opt.label}</span>
+                              </div>
+                              {isSelected && <CheckCircle2 size={14} color="#0f766e" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })()}
+
+              {/* Search Bar */}
+              <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+                <Search size={15} style={{ position: "absolute", left: "10px", color: "#64748b", pointerEvents: "none" }} />
+                <input
+                  type="text"
+                  value={draftFilters.q || ""}
+                  onChange={(e) => {
+                    const nextFilters = { ...draftFilters, q: e.target.value, page: 1 };
+                    setDraftFilters(nextFilters);
+                    setFilters(nextFilters);
+                    loadReport(nextFilters).catch((err) => setError(err instanceof Error ? err.message : String(err)));
+                  }}
+                  placeholder="Search CR, description..."
+                  style={{
+                    padding: "6px 12px 6px 32px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--color-border, #cbd5e1)",
+                    background: "var(--color-bg, #ffffff)",
+                    fontSize: "0.85rem",
+                    width: "200px",
+                    height: "36px",
+                    boxSizing: "border-box"
+                  }}
+                />
+              </div>
+
+              {/* 1 Single Period Picker Field Button + Popover */}
+              <div style={{ position: "relative", display: "inline-block" }}>
+                <button
+                  type="button"
+                  onClick={() => setPeriodPopoverOpen((prev) => !prev)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    padding: "6px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--color-border, #cbd5e1)",
+                    background: (draftFilters.fromDate || draftFilters.toDate) ? "#f0fdf4" : "var(--color-bg, #ffffff)",
+                    color: (draftFilters.fromDate || draftFilters.toDate) ? "#0f766e" : "var(--color-text, #334155)",
+                    fontSize: "0.85rem",
+                    fontWeight: "500",
+                    height: "36px",
+                    cursor: "pointer"
+                  }}
+                >
+                  <Calendar size={15} color={draftFilters.fromDate || draftFilters.toDate ? "#0f766e" : "#64748b"} />
+                  <span>
+                    {draftFilters.fromDate || draftFilters.toDate
+                      ? `${draftFilters.fromDate || "..."} - ${draftFilters.toDate || "..."}`
+                      : "Select Period"}
+                  </span>
+                  <ChevronDown size={14} style={{ opacity: 0.7, transform: periodPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                </button>
+
+                {periodPopoverOpen ? (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      zIndex: 1000,
+                      width: "290px",
+                      background: "var(--color-bg-elevated, #ffffff)",
+                      border: "1px solid var(--color-border, #cbd5e1)",
+                      borderRadius: "12px",
+                      boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.2)",
+                      padding: "16px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "12px",
+                      textAlign: "left"
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--color-border-soft, #e2e8f0)", paddingBottom: "8px" }}>
+                      <span style={{ fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)" }}>
+                        Filter by Period
+                      </span>
+                      {(draftFilters.fromDate || draftFilters.toDate) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextFilters = { ...draftFilters, fromDate: "", toDate: "", page: 1 };
+                            setDraftFilters(nextFilters);
+                            setFilters(nextFilters);
+                            setPeriodPopoverOpen(false);
+                            loadReport(nextFilters).catch((err) => setError(err instanceof Error ? err.message : String(err)));
+                          }}
+                          style={{ border: "none", background: "none", color: "#dc2626", fontSize: "0.75rem", fontWeight: "600", cursor: "pointer", padding: 0 }}
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>From Date</label>
+                        <input
+                          type="date"
+                          value={draftFilters.fromDate || ""}
+                          onChange={(e) => setDraftFilters((prev) => ({ ...prev, fromDate: e.target.value }))}
+                          style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.8rem", width: "100%", boxSizing: "border-box" }}
+                        />
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>To Date</label>
+                        <input
+                          type="date"
+                          value={draftFilters.toDate || ""}
+                          onChange={(e) => setDraftFilters((prev) => ({ ...prev, toDate: e.target.value }))}
+                          style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.8rem", width: "100%", boxSizing: "border-box" }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const today = todayYmd();
+                          const firstOfMonth = `${today.slice(0, 7)}-01`;
+                          setDraftFilters((prev) => ({ ...prev, fromDate: firstOfMonth, toDate: today }));
+                        }}
+                        style={{ flex: 1, padding: "4px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", background: "var(--color-bg, #ffffff)", fontSize: "0.75rem", cursor: "pointer" }}
+                      >
+                        This Month
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const today = todayYmd();
+                          const d = new Date();
+                          d.setDate(d.getDate() - 30);
+                          const thirtyDaysAgo = d.toISOString().slice(0, 10);
+                          setDraftFilters((prev) => ({ ...prev, fromDate: thirtyDaysAgo, toDate: today }));
+                        }}
+                        style={{ flex: 1, padding: "4px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", background: "var(--color-bg, #ffffff)", fontSize: "0.75rem", cursor: "pointer" }}
+                      >
+                        Last 30 Days
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPeriodPopoverOpen(false);
+                        const nextFilters = { ...draftFilters, page: 1 };
+                        setFilters(nextFilters);
+                        loadReport(nextFilters).catch((err) => setError(err instanceof Error ? err.message : String(err)));
+                      }}
+                      style={{
+                        background: "#0f766e",
+                        color: "#ffffff",
+                        border: "none",
+                        padding: "8px 14px",
+                        borderRadius: "8px",
+                        fontWeight: "600",
+                        fontSize: "0.85rem",
+                        cursor: "pointer",
+                        marginTop: "4px"
+                      }}
+                    >
+                      Apply Filter
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+
+              {/* Sync CR Popover Button */}
+              <div
+                className="sync-cr-popover-wrapper"
+                style={{ position: "relative", display: "inline-block" }}
+                onMouseEnter={() => setSyncPopoverOpen(true)}
+                onMouseLeave={() => setSyncPopoverOpen(false)}
+              >
+                <button
+                  type="button"
+                  className="primary sync-button"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    background: "#0f766e",
+                    border: "none",
+                    color: "#ffffff",
+                    padding: "8px 18px",
+                    borderRadius: "8px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    fontSize: "0.875rem",
+                    height: "36px"
+                  }}
+                  onClick={() => setSyncPopoverOpen((prev) => !prev)}
+                >
+                  <RefreshCw size={16} className={loading ? "spinner" : ""} />
+                  <span>{loading ? "Syncing CR..." : "Sync CR"}</span>
+                  <ChevronDown size={14} style={{ opacity: 0.8, transform: syncPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                </button>
+
+                {syncPopoverOpen ? (
+                  <div
+                    className="sync-cr-popover-menu"
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      zIndex: 1000,
+                      width: "280px",
+                      background: "var(--color-bg-elevated, #ffffff)",
+                      border: "1px solid var(--color-border, #cbd5e1)",
+                      borderRadius: "14px",
+                      boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.2)",
+                      padding: "16px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "12px",
+                      textAlign: "left"
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--color-border-soft, #e2e8f0)", paddingBottom: "8px" }}>
+                      <span style={{ fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)" }}>
+                        Sync SAP CR Options
+                      </span>
+                    </div>
+
+                    {/* Source Systems */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                        Source Systems
+                      </label>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        {systems.map((system) => (
+                          <label
+                            key={system.code}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "5px",
+                              padding: "4px 10px",
+                              borderRadius: "6px",
+                              border: "1px solid var(--color-border, #cbd5e1)",
+                              background: syncSystems.includes(system.code) ? "#f0fdf4" : "var(--color-bg, #ffffff)",
+                              fontSize: "0.78rem",
+                              fontWeight: "600",
+                              color: syncSystems.includes(system.code) ? "#0f766e" : "var(--color-text, #334155)",
+                              cursor: system.enabled ? "pointer" : "not-allowed",
+                              opacity: system.enabled ? 1 : 0.5
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={syncSystems.includes(system.code)}
+                              disabled={!system.enabled}
+                              onChange={() => setSyncSystems(toggleSystem(syncSystems, system.code))}
+                              style={{ accentColor: "#0f766e", margin: 0 }}
+                            />
+                            {system.code}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Sync Mode */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                        Sync Mode
+                      </label>
+                      <select
+                        value={syncMode}
+                        onChange={(e) => setSyncMode(e.target.value as "incremental" | "full_period")}
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: "6px",
+                          border: "1px solid var(--color-border, #cbd5e1)",
+                          background: "var(--color-bg, #ffffff)",
+                          color: "var(--color-text, #111827)",
+                          fontSize: "0.825rem",
+                          width: "100%"
+                        }}
+                      >
+                        <option value="incremental">Incremental</option>
+                        <option value="full_period">Full by Period</option>
+                      </select>
+                    </div>
+
+                    {/* Lookback Days or Period Inputs */}
+                    {syncMode === "incremental" ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                          Lookback Days
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="30"
+                          value={lookbackDays}
+                          onChange={(e) => setLookbackDays(Number(e.target.value || 0))}
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: "6px",
+                            border: "1px solid var(--color-border, #cbd5e1)",
+                            background: "var(--color-bg, #ffffff)",
+                            color: "var(--color-text, #111827)",
+                            fontSize: "0.825rem",
+                            width: "100%"
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>From</label>
+                          <input
+                            type="month"
+                            value={syncFromPeriod}
+                            onChange={(e) => setSyncFromPeriod(e.target.value)}
+                            style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.78rem" }}
+                          />
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>To</label>
+                          <input
+                            type="month"
+                            value={syncToPeriod}
+                            onChange={(e) => setSyncToPeriod(e.target.value)}
+                            style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.78rem" }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Sync Action Button */}
+                    <button
+                      type="button"
+                      className="primary"
+                      disabled={loading || syncSystems.length === 0}
+                      onClick={() => {
+                        setSyncPopoverOpen(false);
+                        runSync();
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "8px",
+                        background: "#0f766e",
+                        color: "#ffffff",
+                        border: "none",
+                        padding: "8px 14px",
+                        borderRadius: "8px",
+                        fontWeight: "600",
+                        fontSize: "0.85rem",
+                        cursor: "pointer",
+                        marginTop: "4px"
+                      }}
+                    >
+                      <RefreshCw size={15} className={loading ? "spinner" : ""} />
+                      <span>{loading ? "Syncing..." : "Sync CR Now"}</span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : view === "issue-create" ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              {/* Next Issue / Sub-Issue Preview Tag (Clickable when in sub mode) */}
+              {issueCreateMode === "sub" ? (
+                <button
+                  type="button"
+                  onClick={() => setShowBaseIssueModal(true)}
+                  title="Click to select or change Base Issue"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "6px 14px",
+                    borderRadius: "8px",
+                    background: selectedBaseIssue ? "#f0fdf4" : "#fffbeb",
+                    border: selectedBaseIssue ? "1px solid #bbf7d0" : "1px solid #fde68a",
+                    color: selectedBaseIssue ? "#0f766e" : "#b45309",
+                    fontSize: "0.825rem",
+                    fontWeight: "600",
+                    height: "36px",
+                    boxSizing: "border-box",
+                    cursor: "pointer",
+                    transition: "all 0.15s ease"
+                  }}
+                >
+                  <Tag size={14} color={selectedBaseIssue ? "#0f766e" : "#b45309"} />
+                  <span>
+                    {selectedBaseIssue ? (
+                      <>Next sub-issue: <strong>{selectedBaseIssue.issue_no}-{nextSubIssueNo}</strong></>
+                    ) : (
+                      "Select Base Issue"
+                    )}
+                  </span>
+                  <ChevronDown size={14} style={{ opacity: 0.7 }} />
+                </button>
+              ) : (
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "6px 14px",
+                    borderRadius: "8px",
+                    background: "#f0fdf4",
+                    border: "1px solid #bbf7d0",
+                    color: "#0f766e",
+                    fontSize: "0.825rem",
+                    fontWeight: "600",
+                    height: "36px",
+                    boxSizing: "border-box"
+                  }}
+                >
+                  <Tag size={14} color="#0f766e" />
+                  <span>Next issue preview: <strong>{nextIssueNo || "..."}-01</strong></span>
+                </div>
+              )}
+
+              {/* Create Mode Toggle Buttons */}
+              <div style={{ display: "inline-flex", alignItems: "center", gap: "3px", background: "var(--color-bg-subtle, #f1f5f9)", padding: "2px", borderRadius: "8px", border: "1px solid var(--color-border, #cbd5e1)", height: "34px", boxSizing: "border-box" }}>
+                <button
+                  type="button"
+                  onClick={() => setIssueCreateMode("new")}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px",
+                    padding: "4px 10px",
+                    borderRadius: "6px",
+                    border: "none",
+                    background: issueCreateMode === "new" ? "#0f766e" : "transparent",
+                    color: issueCreateMode === "new" ? "#ffffff" : "var(--color-text-muted, #64748b)",
+                    fontSize: "0.825rem",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    height: "28px",
+                    transition: "all 0.15s ease"
+                  }}
+                >
+                  <Plus size={14} /> New Issue
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIssueCreateMode("sub");
+                    if (!selectedBaseIssue) {
+                      setShowBaseIssueModal(true);
+                    }
+                  }}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px",
+                    padding: "4px 10px",
+                    borderRadius: "6px",
+                    border: "none",
+                    background: issueCreateMode === "sub" ? "#0f766e" : "transparent",
+                    color: issueCreateMode === "sub" ? "#ffffff" : "var(--color-text-muted, #64748b)",
+                    fontSize: "0.825rem",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    height: "28px",
+                    transition: "all 0.15s ease"
+                  }}
+                >
+                  <Plus size={14} /> Add Sub Issue
+                </button>
+              </div>
+
+              {/* Form Layout Popover Button */}
+              <div
+                className="form-layout-popover-wrapper"
+                style={{ position: "relative", display: "inline-block" }}
+                onMouseEnter={() => setFormLayoutPopoverOpen(true)}
+                onMouseLeave={() => setFormLayoutPopoverOpen(false)}
+              >
+                <button
+                  type="button"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    background: "var(--color-bg-elevated, #ffffff)",
+                    border: "1px solid var(--color-border, #cbd5e1)",
+                    color: "var(--color-text, #1e293b)",
+                    padding: "4px 10px",
+                    borderRadius: "8px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    fontSize: "0.825rem",
+                    height: "34px",
+                    boxSizing: "border-box"
+                  }}
+                  onClick={() => setFormLayoutPopoverOpen((prev) => !prev)}
+                >
+                  <LayoutGrid size={15} color="#0f766e" />
+                  <span>Layout</span>
+                  <span style={{ fontSize: "0.725rem", color: "#0f766e", background: "#f0fdf4", padding: "1px 6px", borderRadius: "4px", fontWeight: "700" }}>
+                    {createFormLayoutStyle === "tabs" ? "Tabs" : createFormLayoutStyle === "quick_toggle" ? "Quick" : "Classic"}
+                  </span>
+                  <ChevronDown size={13} style={{ opacity: 0.7, transform: formLayoutPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                </button>
+
+                {formLayoutPopoverOpen ? (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      zIndex: 1000,
+                      width: "250px",
+                      background: "var(--color-bg-elevated, #ffffff)",
+                      border: "1px solid var(--color-border, #cbd5e1)",
+                      borderRadius: "12px",
+                      boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.2)",
+                      padding: "8px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "4px",
+                      textAlign: "left"
+                    }}
+                  >
+                    <div style={{ padding: "6px 8px 4px 8px", fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)", borderBottom: "1px solid var(--color-border-soft, #e2e8f0)", marginBottom: "4px" }}>
+                      Create Layout Preference
+                    </div>
+
+                    {[
+                      { id: "quick_toggle", name: "⚡ Quick Draft Toggle", badge: "Fast Draft" },
+                      { id: "tabs", name: "📑 Tab Stepper", badge: "Structured" },
+                      { id: "classic", name: "📄 Classic Continuous", badge: "Legacy" }
+                    ].map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          updateFormLayoutPref("create", opt.id as any);
+                          setFormLayoutPopoverOpen(false);
+                        }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          padding: "8px 10px",
+                          borderRadius: "8px",
+                          border: "none",
+                          background: createFormLayoutStyle === opt.id ? "#f0fdf4" : "transparent",
+                          color: createFormLayoutStyle === opt.id ? "#0f766e" : "var(--color-text, #334155)",
+                          fontWeight: createFormLayoutStyle === opt.id ? "700" : "500",
+                          fontSize: "0.825rem",
+                          cursor: "pointer",
+                          textAlign: "left"
+                        }}
+                      >
+                        <span>{opt.name}</span>
+                        {createFormLayoutStyle === opt.id ? <CheckCircle2 size={14} color="#0f766e" /> : null}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              {/* Sync CR Popover Button */}
+              <div
+                className="sync-cr-popover-wrapper"
+                style={{ position: "relative", display: "inline-block" }}
+                onMouseEnter={() => setSyncPopoverOpen(true)}
+                onMouseLeave={() => setSyncPopoverOpen(false)}
+              >
+                <button
+                  type="button"
+                  className="primary sync-button"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    background: "#0f766e",
+                    border: "none",
+                    color: "#ffffff",
+                    padding: "6px 14px",
+                    borderRadius: "8px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    fontSize: "0.825rem",
+                    height: "34px",
+                    boxSizing: "border-box"
+                  }}
+                  onClick={() => setSyncPopoverOpen((prev) => !prev)}
+                >
+                  <RefreshCw size={16} className={loading ? "spinner" : ""} />
+                  <span>{loading ? "Syncing CR..." : "Sync CR"}</span>
+                  <ChevronDown size={14} style={{ opacity: 0.8, transform: syncPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                </button>
+
+                {syncPopoverOpen ? (
+                  <div
+                    className="sync-cr-popover-menu"
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      zIndex: 1000,
+                      width: "280px",
+                      background: "var(--color-bg-elevated, #ffffff)",
+                      border: "1px solid var(--color-border, #cbd5e1)",
+                      borderRadius: "14px",
+                      boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.2)",
+                      padding: "16px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "12px",
+                      textAlign: "left"
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--color-border-soft, #e2e8f0)", paddingBottom: "8px" }}>
+                      <span style={{ fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)" }}>
+                        Sync SAP CR Options
+                      </span>
+                    </div>
+
+                    {/* Source Systems */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                        Source Systems
+                      </label>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        {systems.map((system) => (
+                          <label
+                            key={system.code}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "5px",
+                              padding: "4px 10px",
+                              borderRadius: "6px",
+                              border: "1px solid var(--color-border, #cbd5e1)",
+                              background: syncSystems.includes(system.code) ? "#f0fdf4" : "var(--color-bg, #ffffff)",
+                              fontSize: "0.78rem",
+                              fontWeight: "600",
+                              color: syncSystems.includes(system.code) ? "#0f766e" : "var(--color-text, #334155)",
+                              cursor: system.enabled ? "pointer" : "not-allowed",
+                              opacity: system.enabled ? 1 : 0.5
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={syncSystems.includes(system.code)}
+                              disabled={!system.enabled}
+                              onChange={() => setSyncSystems(toggleSystem(syncSystems, system.code))}
+                              style={{ accentColor: "#0f766e", margin: 0 }}
+                            />
+                            {system.code}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Sync Mode */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                        Sync Mode
+                      </label>
+                      <select
+                        value={syncMode}
+                        onChange={(e) => setSyncMode(e.target.value as "incremental" | "full_period")}
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: "6px",
+                          border: "1px solid var(--color-border, #cbd5e1)",
+                          background: "var(--color-bg, #ffffff)",
+                          color: "var(--color-text, #111827)",
+                          fontSize: "0.825rem",
+                          width: "100%"
+                        }}
+                      >
+                        <option value="incremental">Incremental</option>
+                        <option value="full_period">Full by Period</option>
+                      </select>
+                    </div>
+
+                    {/* Lookback Days or Period Inputs */}
+                    {syncMode === "incremental" ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                          Lookback Days
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="30"
+                          value={lookbackDays}
+                          onChange={(e) => setLookbackDays(Number(e.target.value || 0))}
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: "6px",
+                            border: "1px solid var(--color-border, #cbd5e1)",
+                            background: "var(--color-bg, #ffffff)",
+                            color: "var(--color-text, #111827)",
+                            fontSize: "0.825rem",
+                            width: "100%"
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>From</label>
+                          <input
+                            type="month"
+                            value={syncFromPeriod}
+                            onChange={(e) => setSyncFromPeriod(e.target.value)}
+                            style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.78rem" }}
+                          />
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>To</label>
+                          <input
+                            type="month"
+                            value={syncToPeriod}
+                            onChange={(e) => setSyncToPeriod(e.target.value)}
+                            style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.78rem" }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Sync Action Button */}
+                    <button
+                      type="button"
+                      className="primary"
+                      disabled={loading || syncSystems.length === 0}
+                      onClick={() => {
+                        setSyncPopoverOpen(false);
+                        runSync();
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "8px",
+                        background: "#0f766e",
+                        color: "#ffffff",
+                        border: "none",
+                        padding: "8px 14px",
+                        borderRadius: "8px",
+                        fontWeight: "600",
+                        fontSize: "0.85rem",
+                        cursor: "pointer",
+                        marginTop: "4px"
+                      }}
+                    >
+                      <RefreshCw size={15} className={loading ? "spinner" : ""} />
+                      <span>{loading ? "Syncing..." : "Sync CR Now"}</span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : view === "issue-change" ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <IssueSwitcherTopbar
+                onSelectIssue={(issueId) => {
+                  setChangeIssueInitialId(issueId);
+                  setChangeIssueInitialAction("");
+                  setChangeIssueInitialItem(null);
+                  setSelectedIssueId(issueId);
+                  setView("issue-change");
+                }}
+              />
+
+              {/* Form Layout Popover Button */}
+              <div
+                className="form-layout-popover-wrapper"
+                style={{ position: "relative", display: "inline-block" }}
+                onMouseEnter={() => setFormLayoutPopoverOpen(true)}
+                onMouseLeave={() => setFormLayoutPopoverOpen(false)}
+              >
+                <button
+                  type="button"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    background: "var(--color-bg-elevated, #ffffff)",
+                    border: "1px solid var(--color-border, #cbd5e1)",
+                    color: "var(--color-text, #1e293b)",
+                    padding: "4px 10px",
+                    borderRadius: "8px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    fontSize: "0.825rem",
+                    height: "34px",
+                    boxSizing: "border-box"
+                  }}
+                  onClick={() => setFormLayoutPopoverOpen((prev) => !prev)}
+                >
+                  <LayoutGrid size={15} color="#0f766e" />
+                  <span>Layout</span>
+                  <span style={{ fontSize: "0.725rem", color: "#0f766e", background: "#f0fdf4", padding: "1px 6px", borderRadius: "4px", fontWeight: "700" }}>
+                    {changeFormLayoutStyle === "tabs" ? "Tabs" : changeFormLayoutStyle === "quick_toggle" ? "Quick" : "Classic"}
+                  </span>
+                  <ChevronDown size={13} style={{ opacity: 0.7, transform: formLayoutPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                </button>
+
+                {formLayoutPopoverOpen ? (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      zIndex: 1000,
+                      width: "250px",
+                      background: "var(--color-bg-elevated, #ffffff)",
+                      border: "1px solid var(--color-border, #cbd5e1)",
+                      borderRadius: "12px",
+                      boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.2)",
+                      padding: "8px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "4px",
+                      textAlign: "left"
+                    }}
+                  >
+                    <div style={{ padding: "6px 8px 4px 8px", fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)", borderBottom: "1px solid var(--color-border-soft, #e2e8f0)", marginBottom: "4px" }}>
+                      Edit Layout Preference
+                    </div>
+
+                    {[
+                      { id: "quick_toggle", name: "⚡ Quick Draft Toggle", badge: "Fast Draft" },
+                      { id: "tabs", name: "📑 Tab Stepper", badge: "Recommended" },
+                      { id: "classic", name: "📄 Classic Continuous", badge: "Legacy" }
+                    ].map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          updateFormLayoutPref("change", opt.id as any);
+                          setFormLayoutPopoverOpen(false);
+                        }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          padding: "8px 10px",
+                          borderRadius: "8px",
+                          border: "none",
+                          background: changeFormLayoutStyle === opt.id ? "#f0fdf4" : "transparent",
+                          color: changeFormLayoutStyle === opt.id ? "#0f766e" : "var(--color-text, #334155)",
+                          fontWeight: changeFormLayoutStyle === opt.id ? "700" : "500",
+                          fontSize: "0.825rem",
+                          cursor: "pointer",
+                          textAlign: "left"
+                        }}
+                      >
+                        <span>{opt.name}</span>
+                        {changeFormLayoutStyle === opt.id ? <CheckCircle2 size={14} color="#0f766e" /> : null}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              {/* Sync CR Popover Button */}
+              <div
+                className="sync-cr-popover-wrapper"
+                style={{ position: "relative", display: "inline-block" }}
+                onMouseEnter={() => setSyncPopoverOpen(true)}
+                onMouseLeave={() => setSyncPopoverOpen(false)}
+              >
+                <button
+                  type="button"
+                  className="primary sync-button"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    background: "#0f766e",
+                    border: "none",
+                    color: "#ffffff",
+                    padding: "6px 14px",
+                    borderRadius: "8px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    fontSize: "0.825rem",
+                    height: "34px",
+                    boxSizing: "border-box"
+                  }}
+                  onClick={() => setSyncPopoverOpen((prev) => !prev)}
+                >
+                  <RefreshCw size={16} className={loading ? "spinner" : ""} />
+                  <span>{loading ? "Syncing CR..." : "Sync CR"}</span>
+                  <ChevronDown size={14} style={{ opacity: 0.8, transform: syncPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                </button>
+
+                {syncPopoverOpen ? (
+                  <div
+                    className="sync-cr-popover-menu"
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      zIndex: 1000,
+                      width: "280px",
+                      background: "var(--color-bg-elevated, #ffffff)",
+                      border: "1px solid var(--color-border, #cbd5e1)",
+                      borderRadius: "14px",
+                      boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.2)",
+                      padding: "16px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "12px",
+                      textAlign: "left"
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--color-border-soft, #e2e8f0)", paddingBottom: "8px" }}>
+                      <span style={{ fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)" }}>
+                        Sync SAP CR Options
+                      </span>
+                    </div>
+
+                    {/* Source Systems */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                        Source Systems
+                      </label>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        {systems.map((system) => (
+                          <label
+                            key={system.code}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "5px",
+                              padding: "4px 10px",
+                              borderRadius: "6px",
+                              border: "1px solid var(--color-border, #cbd5e1)",
+                              background: syncSystems.includes(system.code) ? "#f0fdf4" : "var(--color-bg, #ffffff)",
+                              fontSize: "0.78rem",
+                              fontWeight: "600",
+                              color: syncSystems.includes(system.code) ? "#0f766e" : "var(--color-text, #334155)",
+                              cursor: system.enabled ? "pointer" : "not-allowed",
+                              opacity: system.enabled ? 1 : 0.5
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={syncSystems.includes(system.code)}
+                              disabled={!system.enabled}
+                              onChange={() => setSyncSystems(toggleSystem(syncSystems, system.code))}
+                              style={{ accentColor: "#0f766e", margin: 0 }}
+                            />
+                            {system.code}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Sync Mode */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                        Sync Mode
+                      </label>
+                      <select
+                        value={syncMode}
+                        onChange={(e) => setSyncMode(e.target.value as "incremental" | "full_period")}
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: "6px",
+                          border: "1px solid var(--color-border, #cbd5e1)",
+                          background: "var(--color-bg, #ffffff)",
+                          color: "var(--color-text, #111827)",
+                          fontSize: "0.825rem",
+                          width: "100%"
+                        }}
+                      >
+                        <option value="incremental">Incremental</option>
+                        <option value="full_period">Full by Period</option>
+                      </select>
+                    </div>
+
+                    {syncMode === "incremental" ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                          Lookback Days
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="30"
+                          value={lookbackDays}
+                          onChange={(e) => setLookbackDays(Number(e.target.value || 0))}
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: "6px",
+                            border: "1px solid var(--color-border, #cbd5e1)",
+                            background: "var(--color-bg, #ffffff)",
+                            color: "var(--color-text, #111827)",
+                            fontSize: "0.825rem",
+                            width: "100%"
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>From</label>
+                          <input
+                            type="month"
+                            value={syncFromPeriod}
+                            onChange={(e) => setSyncFromPeriod(e.target.value)}
+                            style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.78rem" }}
+                          />
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>To</label>
+                          <input
+                            type="month"
+                            value={syncToPeriod}
+                            onChange={(e) => setSyncToPeriod(e.target.value)}
+                            style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.78rem" }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Sync Action Button */}
+                    <button
+                      type="button"
+                      className="primary"
+                      disabled={loading || syncSystems.length === 0}
+                      onClick={() => {
+                        setSyncPopoverOpen(false);
+                        runSync();
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "8px",
+                        background: "#0f766e",
+                        color: "#ffffff",
+                        border: "none",
+                        padding: "8px 14px",
+                        borderRadius: "8px",
+                        fontWeight: "600",
+                        fontSize: "0.85rem",
+                        cursor: "pointer",
+                        marginTop: "4px"
+                      }}
+                    >
+                      <RefreshCw size={15} className={loading ? "spinner" : ""} />
+                      <span>{loading ? "Syncing..." : "Sync CR Now"}</span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : view === "issue-display" ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              {/* Issue Custom Status Filter Dropdown */}
+              {(() => {
+                const issueStatusOptions = [
+                  { value: "all", label: "All Status", color: "#64748b" },
+                  { value: "open", label: "Open Issues", color: "#2563eb" },
+                  { value: "in_progress", label: "In Progress", color: "#d97706" },
+                  { value: "ok", label: "OK Issues", color: "#059669" },
+                  { value: "cancelled", label: "Cancelled", color: "#dc2626" }
+                ];
+                const currentStatusVal = draftIssueFilters.status || "all";
+                const currentStatusObj = issueStatusOptions.find(o => o.value === currentStatusVal) || issueStatusOptions[0];
+
+                return (
+                  <div style={{ position: "relative", display: "inline-block" }}>
+                    <button
+                      type="button"
+                      onClick={() => setIssueStatusPopoverOpen((prev) => !prev)}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        padding: "6px 12px",
+                        borderRadius: "8px",
+                        border: "1px solid var(--color-border, #cbd5e1)",
+                        background: "var(--color-bg, #ffffff)",
+                        color: "var(--color-text, #1e293b)",
+                        fontSize: "0.85rem",
+                        fontWeight: "500",
+                        height: "36px",
+                        cursor: "pointer"
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: "8px",
+                          height: "8px",
+                          borderRadius: "50%",
+                          backgroundColor: currentStatusObj.color,
+                          display: "inline-block"
+                        }}
+                      />
+                      <span>{currentStatusObj.label}</span>
+                      <ChevronDown size={14} style={{ opacity: 0.7, transform: issueStatusPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                    </button>
+
+                    {issueStatusPopoverOpen ? (
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: "calc(100% + 6px)",
+                          left: 0,
+                          zIndex: 1000,
+                          width: "180px",
+                          background: "var(--color-bg-elevated, #ffffff)",
+                          border: "1px solid var(--color-border, #cbd5e1)",
+                          borderRadius: "12px",
+                          boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.18)",
+                          padding: "6px",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "2px"
+                        }}
+                      >
+                        {issueStatusOptions.map((opt) => {
+                          const isSelected = opt.value === currentStatusVal;
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => {
+                                setIssueStatusPopoverOpen(false);
+                                setDraftIssueFilters((prev) => ({ ...prev, status: opt.value, page: 1 }));
+                              }}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                padding: "8px 10px",
+                                borderRadius: "7px",
+                                border: "none",
+                                background: isSelected ? "var(--color-bg-subtle, #f1f5f9)" : "transparent",
+                                cursor: "pointer",
+                                fontSize: "0.825rem",
+                                fontWeight: isSelected ? "700" : "500",
+                                color: isSelected ? "var(--color-primary, #0f766e)" : "var(--color-text, #334155)",
+                                textAlign: "left",
+                                transition: "background 0.15s ease"
+                              }}
+                            >
+                              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                <span
+                                  style={{
+                                    width: "8px",
+                                    height: "8px",
+                                    borderRadius: "50%",
+                                    backgroundColor: opt.color,
+                                    display: "inline-block"
+                                  }}
+                                />
+                                <span>{opt.label}</span>
+                              </div>
+                              {isSelected && <CheckCircle2 size={14} color="#0f766e" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })()}
+
+              {/* Search Bar */}
+              <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+                <Search size={15} style={{ position: "absolute", left: "10px", color: "#64748b", pointerEvents: "none" }} />
+                <input
+                  type="text"
+                  value={draftIssueFilters.q || ""}
+                  onChange={(e) => setDraftIssueFilters((prev) => ({ ...prev, q: e.target.value, page: 1 }))}
+                  placeholder="Search issue, requester, CR..."
+                  style={{
+                    padding: "6px 12px 6px 32px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--color-border, #cbd5e1)",
+                    background: "var(--color-bg, #ffffff)",
+                    fontSize: "0.85rem",
+                    width: "210px",
+                    height: "36px",
+                    boxSizing: "border-box"
+                  }}
+                />
+              </div>
+
+              {/* 1 Single Period Picker Field Button + Popover */}
+              <div style={{ position: "relative", display: "inline-block" }}>
+                <button
+                  type="button"
+                  onClick={() => setIssuePeriodPopoverOpen((prev) => !prev)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    padding: "6px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--color-border, #cbd5e1)",
+                    background: (draftIssueFilters.fromDate || draftIssueFilters.toDate) ? "#f0fdf4" : "var(--color-bg, #ffffff)",
+                    color: (draftIssueFilters.fromDate || draftIssueFilters.toDate) ? "#0f766e" : "var(--color-text, #334155)",
+                    fontSize: "0.85rem",
+                    fontWeight: "500",
+                    height: "36px",
+                    cursor: "pointer"
+                  }}
+                >
+                  <Calendar size={15} color={draftIssueFilters.fromDate || draftIssueFilters.toDate ? "#0f766e" : "#64748b"} />
+                  <span>
+                    {draftIssueFilters.fromDate || draftIssueFilters.toDate
+                      ? `${draftIssueFilters.fromDate || "..."} - ${draftIssueFilters.toDate || "..."}`
+                      : "Select Period"}
+                  </span>
+                  <ChevronDown size={14} style={{ opacity: 0.7, transform: issuePeriodPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                </button>
+
+                {issuePeriodPopoverOpen ? (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      zIndex: 1000,
+                      width: "290px",
+                      background: "var(--color-bg-elevated, #ffffff)",
+                      border: "1px solid var(--color-border, #cbd5e1)",
+                      borderRadius: "12px",
+                      boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.2)",
+                      padding: "16px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "12px",
+                      textAlign: "left"
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--color-border-soft, #e2e8f0)", paddingBottom: "8px" }}>
+                      <span style={{ fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)" }}>
+                        Filter by Period
+                      </span>
+                      {(draftIssueFilters.fromDate || draftIssueFilters.toDate) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDraftIssueFilters((prev) => ({ ...prev, fromDate: undefined, toDate: undefined, page: 1 }));
+                            setIssuePeriodPopoverOpen(false);
+                          }}
+                          style={{ border: "none", background: "none", color: "#dc2626", fontSize: "0.75rem", fontWeight: "600", cursor: "pointer", padding: 0 }}
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>From Date</label>
+                        <input
+                          type="date"
+                          value={draftIssueFilters.fromDate || ""}
+                          onChange={(e) => setDraftIssueFilters((prev) => ({ ...prev, fromDate: e.target.value }))}
+                          style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.8rem", width: "100%", boxSizing: "border-box" }}
+                        />
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>To Date</label>
+                        <input
+                          type="date"
+                          value={draftIssueFilters.toDate || ""}
+                          onChange={(e) => setDraftIssueFilters((prev) => ({ ...prev, toDate: e.target.value }))}
+                          style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.8rem", width: "100%", boxSizing: "border-box" }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const today = todayYmd();
+                          const firstOfMonth = `${today.slice(0, 7)}-01`;
+                          setDraftIssueFilters((prev) => ({ ...prev, fromDate: firstOfMonth, toDate: today }));
+                        }}
+                        style={{ flex: 1, padding: "4px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", background: "var(--color-bg, #ffffff)", fontSize: "0.75rem", cursor: "pointer" }}
+                      >
+                        This Month
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const today = todayYmd();
+                          const d = new Date();
+                          d.setDate(d.getDate() - 30);
+                          const thirtyDaysAgo = d.toISOString().slice(0, 10);
+                          setDraftIssueFilters((prev) => ({ ...prev, fromDate: thirtyDaysAgo, toDate: today }));
+                        }}
+                        style={{ flex: 1, padding: "4px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", background: "var(--color-bg, #ffffff)", fontSize: "0.75rem", cursor: "pointer" }}
+                      >
+                        Last 30 Days
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIssuePeriodPopoverOpen(false);
+                        setDraftIssueFilters((prev) => ({ ...prev, page: 1 }));
+                      }}
+                      style={{
+                        background: "#0f766e",
+                        color: "#ffffff",
+                        border: "none",
+                        padding: "8px 14px",
+                        borderRadius: "8px",
+                        fontWeight: "600",
+                        fontSize: "0.85rem",
+                        cursor: "pointer",
+                        marginTop: "4px"
+                      }}
+                    >
+                      Apply Filter
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+
+              {/* Column Menu Button for Issue */}
+              {view === "issue-display" && (
+                <IssueColumnMenu
+                  open={columnMenuOpen}
+                  visibleColumns={visibleIssueColumns}
+                  onOpenChange={setColumnMenuOpen}
+                  onToggle={(col) => setVisibleIssueColumns((curr) => curr.includes(col) ? curr.filter(c => c !== col) : [...curr, col])}
+                />
+              )}
+
+              {/* Sync CR Popover Button */}
+              <div
+                className="sync-cr-popover-wrapper"
+                style={{ position: "relative", display: "inline-block" }}
+                onMouseEnter={() => setSyncPopoverOpen(true)}
+                onMouseLeave={() => setSyncPopoverOpen(false)}
+              >
+                <button
+                  type="button"
+                  className="primary sync-button"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    background: "#0f766e",
+                    border: "none",
+                    color: "#ffffff",
+                    padding: "8px 18px",
+                    borderRadius: "8px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    fontSize: "0.875rem",
+                    height: "36px"
+                  }}
+                  onClick={() => setSyncPopoverOpen((prev) => !prev)}
+                >
+                  <RefreshCw size={16} className={loading ? "spinner" : ""} />
+                  <span>{loading ? "Syncing CR..." : "Sync CR"}</span>
+                  <ChevronDown size={14} style={{ opacity: 0.8, transform: syncPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                </button>
+
+                {syncPopoverOpen ? (
+                  <div
+                    className="sync-cr-popover-menu"
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      zIndex: 1000,
+                      width: "280px",
+                      background: "var(--color-bg-elevated, #ffffff)",
+                      border: "1px solid var(--color-border, #cbd5e1)",
+                      borderRadius: "14px",
+                      boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.2)",
+                      padding: "16px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "12px",
+                      textAlign: "left"
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--color-border-soft, #e2e8f0)", paddingBottom: "8px" }}>
+                      <span style={{ fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)" }}>
+                        Sync SAP CR Options
+                      </span>
+                    </div>
+
+                    {/* Source Systems */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                        Source Systems
+                      </label>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        {systems.map((system) => (
+                          <label
+                            key={system.code}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "5px",
+                              padding: "4px 10px",
+                              borderRadius: "6px",
+                              border: "1px solid var(--color-border, #cbd5e1)",
+                              background: syncSystems.includes(system.code) ? "#f0fdf4" : "var(--color-bg, #ffffff)",
+                              fontSize: "0.78rem",
+                              fontWeight: "600",
+                              color: syncSystems.includes(system.code) ? "#0f766e" : "var(--color-text, #334155)",
+                              cursor: system.enabled ? "pointer" : "not-allowed",
+                              opacity: system.enabled ? 1 : 0.5
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={syncSystems.includes(system.code)}
+                              disabled={!system.enabled}
+                              onChange={() => setSyncSystems(toggleSystem(syncSystems, system.code))}
+                              style={{ accentColor: "#0f766e", margin: 0 }}
+                            />
+                            {system.code}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Sync Mode */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                        Sync Mode
+                      </label>
+                      <select
+                        value={syncMode}
+                        onChange={(e) => setSyncMode(e.target.value as "incremental" | "full_period")}
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: "6px",
+                          border: "1px solid var(--color-border, #cbd5e1)",
+                          background: "var(--color-bg, #ffffff)",
+                          color: "var(--color-text, #111827)",
+                          fontSize: "0.825rem",
+                          width: "100%"
+                        }}
+                      >
+                        <option value="incremental">Incremental</option>
+                        <option value="full_period">Full by Period</option>
+                      </select>
+                    </div>
+
+                    {/* Lookback Days or Period Inputs */}
+                    {syncMode === "incremental" ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                          Lookback Days
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="30"
+                          value={lookbackDays}
+                          onChange={(e) => setLookbackDays(Number(e.target.value || 0))}
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: "6px",
+                            border: "1px solid var(--color-border, #cbd5e1)",
+                            background: "var(--color-bg, #ffffff)",
+                            color: "var(--color-text, #111827)",
+                            fontSize: "0.825rem",
+                            width: "100%"
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>From</label>
+                          <input
+                            type="month"
+                            value={syncFromPeriod}
+                            onChange={(e) => setSyncFromPeriod(e.target.value)}
+                            style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.78rem" }}
+                          />
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>To</label>
+                          <input
+                            type="month"
+                            value={syncToPeriod}
+                            onChange={(e) => setSyncToPeriod(e.target.value)}
+                            style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.78rem" }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Sync Action Button */}
+                    <button
+                      type="button"
+                      className="primary"
+                      disabled={loading || syncSystems.length === 0}
+                      onClick={() => {
+                        setSyncPopoverOpen(false);
+                        runSync();
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "8px",
+                        background: "#0f766e",
+                        color: "#ffffff",
+                        border: "none",
+                        padding: "8px 14px",
+                        borderRadius: "8px",
+                        fontWeight: "600",
+                        fontSize: "0.85rem",
+                        cursor: "pointer",
+                        marginTop: "4px"
+                      }}
+                    >
+                      <RefreshCw size={15} className={loading ? "spinner" : ""} />
+                      <span>{loading ? "Syncing..." : "Sync CR Now"}</span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : view.startsWith("project-") ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              {view === "project-report" ? (
+                <>
+                  {/* Project Custom Status Filter Dropdown */}
+                  {(() => {
+                    const projectStatusOptions = [
+                      { value: "all", label: "All Statuses", color: "#64748b" },
+                      { value: "planned", label: "Planned", color: "#2563eb" },
+                      { value: "in_progress", label: "In Progress", color: "#d97706" },
+                      { value: "on_hold", label: "On Hold", color: "#6b7280" },
+                      { value: "completed", label: "Completed", color: "#059669" },
+                      { value: "cancelled", label: "Cancelled", color: "#dc2626" }
+                    ];
+                    const currentStatusVal = projectStatus || "all";
+                    const currentStatusObj = projectStatusOptions.find(o => o.value === currentStatusVal) || projectStatusOptions[0];
+
+                    return (
+                      <div style={{ position: "relative", display: "inline-block" }}>
+                        <button
+                          type="button"
+                          onClick={() => setProjectStatusPopoverOpen((prev) => !prev)}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            padding: "6px 12px",
+                            borderRadius: "8px",
+                            border: "1px solid var(--color-border, #cbd5e1)",
+                            background: "var(--color-bg, #ffffff)",
+                            color: "var(--color-text, #1e293b)",
+                            fontSize: "0.85rem",
+                            fontWeight: "500",
+                            height: "36px",
+                            cursor: "pointer"
+                          }}
+                        >
+                          <span
+                            style={{
+                              width: "8px",
+                              height: "8px",
+                              borderRadius: "50%",
+                              backgroundColor: currentStatusObj.color,
+                              display: "inline-block"
+                            }}
+                          />
+                          <span>{currentStatusObj.label}</span>
+                          <ChevronDown size={14} style={{ opacity: 0.7, transform: projectStatusPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                        </button>
+
+                        {projectStatusPopoverOpen ? (
+                          <div
+                            style={{
+                              position: "absolute",
+                              top: "calc(100% + 6px)",
+                              left: 0,
+                              zIndex: 1000,
+                              width: "190px",
+                              background: "var(--color-bg-elevated, #ffffff)",
+                              border: "1px solid var(--color-border, #cbd5e1)",
+                              borderRadius: "12px",
+                              boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.18)",
+                              padding: "6px",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "2px"
+                            }}
+                          >
+                            {projectStatusOptions.map((opt) => {
+                              const isSelected = opt.value === currentStatusVal;
+                              return (
+                                <button
+                                  key={opt.value}
+                                  type="button"
+                                  onClick={() => {
+                                    setProjectStatus(opt.value as ProjectStatus | "all");
+                                    setProjectStatusPopoverOpen(false);
+                                  }}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "10px",
+                                    padding: "8px 10px",
+                                    borderRadius: "6px",
+                                    border: "none",
+                                    background: isSelected ? "var(--color-bg-subtle, #f1f5f9)" : "transparent",
+                                    color: isSelected ? "#0f766e" : "var(--color-text, #334155)",
+                                    fontWeight: isSelected ? "600" : "400",
+                                    fontSize: "0.825rem",
+                                    cursor: "pointer",
+                                    textAlign: "left",
+                                    width: "100%"
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      width: "8px",
+                                      height: "8px",
+                                      borderRadius: "50%",
+                                      backgroundColor: opt.color,
+                                      display: "inline-block"
+                                    }}
+                                  />
+                                  <span>{opt.label}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Search Bar Input */}
+                  <div style={{ position: "relative" }}>
+                    <Search size={15} style={{ position: "absolute", left: "11px", top: "50%", transform: "translateY(-50%)", color: "var(--color-text-muted, #64748b)" }} />
+                    <input
+                      type="text"
+                      value={projectSearch}
+                      onChange={(e) => setProjectSearch(e.target.value)}
+                      placeholder="Search projects..."
+                      style={{
+                        padding: "6px 12px 6px 32px",
+                        borderRadius: "8px",
+                        border: "1px solid var(--color-border, #cbd5e1)",
+                        background: "var(--color-bg, #ffffff)",
+                        fontSize: "0.85rem",
+                        width: "200px",
+                        height: "36px",
+                        boxSizing: "border-box"
+                      }}
+                    />
+                  </div>
+
+                  {/* Create Project Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProjectEditorDetail(null);
+                      navigateTo("project-create");
+                    }}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      padding: "0 14px",
+                      height: "36px",
+                      borderRadius: "8px",
+                      background: "#0f766e",
+                      color: "#ffffff",
+                      border: "none",
+                      fontWeight: "600",
+                      fontSize: "0.85rem",
+                      cursor: "pointer"
+                    }}
+                  >
+                    <Plus size={15} />
+                    <span>+ Create Project</span>
+                  </button>
+                </>
+              ) : null}
+
+              {/* Unified Sync CR Popover Button */}
+              <div style={{ position: "relative" }}>
+                <button
+                  type="button"
+                  className="primary sync-button"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    background: "#0f766e",
+                    border: "none",
+                    color: "#ffffff",
+                    padding: "8px 18px",
+                    borderRadius: "8px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    fontSize: "0.875rem",
+                    height: "36px"
+                  }}
+                  onClick={() => setSyncPopoverOpen((prev) => !prev)}
+                >
+                  <RefreshCw size={16} className={loading ? "spinner" : ""} />
+                  <span>{loading ? "Syncing CR..." : "Sync CR"}</span>
+                  <ChevronDown size={14} style={{ opacity: 0.8, transform: syncPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                </button>
+
+                {syncPopoverOpen ? (
+                  <div
+                    className="sync-cr-popover-menu"
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      zIndex: 1000,
+                      width: "280px",
+                      background: "var(--color-bg-elevated, #ffffff)",
+                      border: "1px solid var(--color-border, #cbd5e1)",
+                      borderRadius: "14px",
+                      boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.2)",
+                      padding: "16px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "12px",
+                      textAlign: "left"
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--color-border-soft, #e2e8f0)", paddingBottom: "8px" }}>
+                      <span style={{ fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)" }}>
+                        Sync SAP CR Options
+                      </span>
+                    </div>
+
+                    {/* Source Systems */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                        Source Systems
+                      </label>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        {systems.map((system) => (
+                          <label
+                            key={system.code}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "5px",
+                              padding: "4px 10px",
+                              borderRadius: "6px",
+                              border: "1px solid var(--color-border, #cbd5e1)",
+                              background: syncSystems.includes(system.code) ? "#f0fdf4" : "var(--color-bg, #ffffff)",
+                              fontSize: "0.78rem",
+                              fontWeight: "600",
+                              color: syncSystems.includes(system.code) ? "#0f766e" : "var(--color-text, #334155)",
+                              cursor: system.enabled ? "pointer" : "not-allowed",
+                              opacity: system.enabled ? 1 : 0.5
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={syncSystems.includes(system.code)}
+                              disabled={!system.enabled}
+                              onChange={() => setSyncSystems(toggleSystem(syncSystems, system.code))}
+                              style={{ accentColor: "#0f766e", margin: 0 }}
+                            />
+                            {system.code}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Sync Mode */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                        Sync Mode
+                      </label>
+                      <select
+                        value={syncMode}
+                        onChange={(e) => setSyncMode(e.target.value as "incremental" | "full_period")}
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: "6px",
+                          border: "1px solid var(--color-border, #cbd5e1)",
+                          background: "var(--color-bg, #ffffff)",
+                          color: "var(--color-text, #111827)",
+                          fontSize: "0.825rem",
+                          width: "100%"
+                        }}
+                      >
+                        <option value="incremental">Incremental</option>
+                        <option value="full_period">Full by Period</option>
+                      </select>
+                    </div>
+
+                    {/* Lookback Days or Period Inputs */}
+                    {syncMode === "incremental" ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>
+                          Lookback Days
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="30"
+                          value={lookbackDays}
+                          onChange={(e) => setLookbackDays(Number(e.target.value || 0))}
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: "6px",
+                            border: "1px solid var(--color-border, #cbd5e1)",
+                            background: "var(--color-bg, #ffffff)",
+                            color: "var(--color-text, #111827)",
+                            fontSize: "0.825rem",
+                            width: "100%"
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>From</label>
+                          <input
+                            type="month"
+                            value={syncFromPeriod}
+                            onChange={(e) => setSyncFromPeriod(e.target.value)}
+                            style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.78rem" }}
+                          />
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>To</label>
+                          <input
+                            type="month"
+                            value={syncToPeriod}
+                            onChange={(e) => setSyncToPeriod(e.target.value)}
+                            style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.78rem" }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Sync Action Button */}
+                    <button
+                      type="button"
+                      className="primary"
+                      disabled={loading || syncSystems.length === 0}
+                      onClick={() => {
+                        setSyncPopoverOpen(false);
+                        runSync();
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "8px",
+                        background: "#0f766e",
+                        color: "#ffffff",
+                        border: "none",
+                        padding: "8px 14px",
+                        borderRadius: "8px",
+                        fontWeight: "600",
+                        fontSize: "0.85rem",
+                        cursor: "pointer",
+                        marginTop: "4px"
+                      }}
+                    >
+                      <RefreshCw size={15} className={loading ? "spinner" : ""} />
+                      <span>{loading ? "Syncing..." : "Sync CR Now"}</span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
         </header>
 
         {error ? <div className="notice">{error}</div> : null}
@@ -763,8 +3142,8 @@ export function App() {
             <span>{toast.message}</span>
           </div>
         ) : null}
-        {loading || syncResult ? (
-          <SyncRunSummary loading={loading} systems={runningSyncSystems} result={syncResult} />
+        {runningSyncSystems.length > 0 || syncResult ? (
+          <SyncRunSummary loading={runningSyncSystems.length > 0} systems={runningSyncSystems} result={syncResult} />
         ) : null}
 
         {view === "user-management" ? <UserManagementWorkspace
@@ -799,6 +3178,7 @@ export function App() {
             requests={requests}
             filters={draftFilters}
             pagination={pagination}
+            loadingData={loading}
             onFilters={setDraftFilters}
             onPage={(page) => {
               const nextFilters = { ...filters, page };
@@ -823,7 +3203,9 @@ export function App() {
           <IssueDisplay
             issues={issues}
             filters={draftIssueFilters}
+            visibleIssueColumns={visibleIssueColumns}
             pagination={issuePagination}
+            loadingData={loading}
             selectedId={selectedIssueId}
             detail={issueDetail}
             loadingDetail={loadingIssueDetail}
@@ -867,6 +3249,11 @@ export function App() {
           <IssueEditor
             mode="create"
             detail={null}
+            layoutStyleOverride={createFormLayoutStyle}
+            externalCreateMode={issueCreateMode}
+            onExternalCreateModeChange={setIssueCreateMode}
+            selectedBaseIssue={selectedBaseIssue}
+            nextSubIssueNo={nextSubIssueNo}
             onNotify={showToast}
             onDirtyChange={setIssueFormDirty}
             onSave={async (payload) => {
@@ -889,6 +3276,8 @@ export function App() {
           />
         ) : view === "project-report" ? (
           <ProjectReport
+            q={projectSearch}
+            status={projectStatus}
             userRole={authUser.role}
             onCreate={() => {
               setProjectEditorDetail(null);
@@ -927,6 +3316,8 @@ export function App() {
               showToast("success", "Project saved.");
             }}
           /> : <ProjectReport
+            q={projectSearch}
+            status={projectStatus}
             userRole={authUser.role}
             onChange={openProjectEditor}
             onOpenIssue={openIssueFromProjectLink}
@@ -939,6 +3330,7 @@ export function App() {
         ) : (
           <ChangeIssue
             initialIssueId={changeIssueInitialId}
+            layoutStyleOverride={changeFormLayoutStyle}
             initialAction={changeIssueInitialAction}
             initialIncompleteItem={changeIssueInitialItem}
             refreshToken={syncRefreshToken}
@@ -997,9 +3389,9 @@ export function App() {
           isOpen={metricModal.isOpen}
           onClose={() => setMetricModal(prev => ({ ...prev, isOpen: false }))}
           title={`${metricModal.title} (${metricModalData.total} Data)`}
-          subtitle={`Klik pada salah satu baris untuk membuka detail ${metricModal.kind === "cr" ? "CR Transport" : "Issue"}`}
+          subtitle={`Click on any row to open ${metricModal.kind === "cr" ? "CR Transport" : "Issue"} details`}
           type="primary"
-          cancelText="Tutup"
+          cancelText="Close"
           maxWidth="980px"
         >
           <div style={{ display: "flex", flexDirection: "column", gap: "14px", width: "100%" }}>
@@ -1007,36 +3399,33 @@ export function App() {
               <Search size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#64748b" }} />
               <input
                 type="text"
-                placeholder="Cari berdasarkan nomor, nama, owner/ABAPer..."
+                placeholder="Search by number, description, owner/ABAPer..."
                 value={metricModalData.search}
                 onChange={(e) => setMetricModalData(prev => ({ ...prev, search: e.target.value }))}
-                style={{ padding: "9px 12px 9px 36px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%", boxSizing: "border-box", fontSize: "13px" }}
+                style={{ padding: "9px 12px 9px 36px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%", boxSizing: "border-box", fontSize: "0.875rem" }}
               />
             </div>
 
             {metricModalData.loading ? (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "50px 0", gap: "10px", color: "#0f766e" }}>
-                <Loader2 className="animate-spin" size={22} />
-                <span style={{ fontWeight: "600" }}>Memuat daftar data...</span>
-              </div>
+              <TableDataLoader text="Loading data list..." />
             ) : metricModal.kind === "cr" ? (
               <div style={{ overflowY: "auto", maxHeight: "420px", border: "1px solid #e2e8f0", borderRadius: "8px" }}>
-                <table className="report-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                <table className="report-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
                   <thead style={{ background: "#f8fafc", position: "sticky", top: 0, zIndex: 1, borderBottom: "1px solid #e2e8f0" }}>
                     <tr>
                       <th style={{ padding: "10px 14px", textAlign: "left", width: "130px" }}>CR NUMBER</th>
-                      <th style={{ padding: "10px 14px", textAlign: "left", width: "80px" }}>SYSTEM</th>
                       <th style={{ padding: "10px 14px", textAlign: "left" }}>DESCRIPTION</th>
-                      <th style={{ padding: "10px 14px", textAlign: "left", width: "160px" }}>OWNER</th>
-                      <th style={{ padding: "10px 14px", textAlign: "center", width: "120px" }}>STATUS</th>
+                      <th style={{ padding: "10px 14px", textAlign: "left", width: "140px" }}>LINKED ISSUE</th>
+                      <th style={{ padding: "10px 14px", textAlign: "left", width: "130px" }}>OWNER</th>
+                      <th style={{ padding: "10px 14px", textAlign: "center", width: "100px" }}>STATUS</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(metricModalData.crs || []).length === 0 ? (
-                      <tr><td colSpan={5} style={{ padding: "24px", textAlign: "center", color: "#64748b" }}>Tidak ada data ditemukan.</td></tr>
+                      <tr><td colSpan={5} style={{ padding: "24px", textAlign: "center", color: "#64748b" }}>No data found.</td></tr>
                     ) : (
                       (metricModalData.crs || [])
-                        .filter(c => !metricModalData.search || `${c.trkorr} ${c.description} ${c.owner}`.toLowerCase().includes(metricModalData.search.toLowerCase()))
+                        .filter(c => !metricModalData.search || `${c.trkorr} ${c.description} ${c.owner} ${c.linked_issue_key || ""} ${c.linked_issue_name || ""}`.toLowerCase().includes(metricModalData.search.toLowerCase()))
                         .slice(0, 100)
                         .map((c) => (
                           <tr
@@ -1044,12 +3433,19 @@ export function App() {
                             className="popup-table-row"
                             onClick={() => {
                               setMetricModal(prev => ({ ...prev, isOpen: false }));
-                              openReportFromCrLink({ trkorr: c.trkorr, sap_system_code: c.sap_system_code });
+                              if (c.linked_issue_id) {
+                                setChangeIssueInitialId(c.linked_issue_id);
+                                setChangeIssueInitialAction("");
+                                setChangeIssueInitialItem(null);
+                                navigateTo("issue-change");
+                              } else {
+                                openReportFromCrLink({ trkorr: c.trkorr, sap_system_code: c.sap_system_code });
+                              }
                             }}
                           >
                             <td style={{ padding: "10px 14px", fontWeight: "700", color: "#0f766e" }}>{c.trkorr}</td>
-                            <td style={{ padding: "10px 14px", fontWeight: "600", color: "#475569" }}>{c.sap_system_code}</td>
                             <td style={{ padding: "10px 14px", color: "#1e293b" }}>{c.description}</td>
+                            <td style={{ padding: "10px 14px", color: c.linked_issue_key ? "#2563eb" : "#94a3b8", fontWeight: c.linked_issue_key ? "600" : "400" }}>{c.linked_issue_key || "-"}</td>
                             <td style={{ padding: "10px 14px", color: "#475569" }}>{c.owner}</td>
                             <td style={{ padding: "10px 14px", textAlign: "center" }}><Status value={c.status_group} /></td>
                           </tr>
@@ -1060,7 +3456,7 @@ export function App() {
               </div>
             ) : (
               <div style={{ overflowY: "auto", maxHeight: "420px", border: "1px solid #e2e8f0", borderRadius: "8px" }}>
-                <table className="report-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                <table className="report-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
                   <thead style={{ background: "#f8fafc", position: "sticky", top: 0, zIndex: 1, borderBottom: "1px solid #e2e8f0" }}>
                     <tr>
                       <th style={{ padding: "10px 14px", textAlign: "left", width: "120px" }}>ISSUE KEY</th>
@@ -1072,7 +3468,7 @@ export function App() {
                   </thead>
                   <tbody>
                     {(metricModalData.issues || []).length === 0 ? (
-                      <tr><td colSpan={5} style={{ padding: "24px", textAlign: "center", color: "#64748b" }}>Tidak ada data ditemukan.</td></tr>
+                      <tr><td colSpan={5} style={{ padding: "24px", textAlign: "center", color: "#64748b" }}>No data found.</td></tr>
                     ) : (
                       (metricModalData.issues || [])
                         .filter(i => !metricModalData.search || `${i.issue_key} ${i.issue_name} ${i.abaper_name_snapshot}`.toLowerCase().includes(metricModalData.search.toLowerCase()))
@@ -1101,6 +3497,72 @@ export function App() {
                 </table>
               </div>
             )}
+          </div>
+        </UIModal>
+      )}
+      {showBaseIssueModal && (
+        <UIModal
+          isOpen={showBaseIssueModal}
+          onClose={() => setShowBaseIssueModal(false)}
+          title="Select Base Issue to Attach Sub-Issue To"
+          subtitle="Search and select an existing issue to create a sub-issue under it"
+          type="primary"
+          cancelText="Cancel"
+          maxWidth="620px"
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: "14px", width: "100%", padding: "4px 0" }}>
+            <div style={{ position: "relative", width: "100%" }}>
+              <Search size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#64748b" }} />
+              <input
+                type="text"
+                autoFocus
+                placeholder="Search by issue number (e.g. 26032), key, or title..."
+                value={baseIssueSearch}
+                onChange={(e) => setBaseIssueSearch(e.target.value)}
+                style={{ padding: "10px 12px 10px 38px", borderRadius: "8px", border: "1px solid #cbd5e1", width: "100%", boxSizing: "border-box", fontSize: "0.875rem" }}
+              />
+            </div>
+
+            <div style={{ maxHeight: "340px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "6px" }}>
+              {baseIssueCandidates.map((issue) => {
+                const isSelected = selectedBaseIssue?.id === issue.id;
+                return (
+                  <button
+                    key={issue.id}
+                    type="button"
+                    onClick={() => selectTopBaseIssue(issue)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "12px 14px",
+                      borderRadius: "8px",
+                      border: isSelected ? "2px solid #0f766e" : "1px solid var(--color-border, #e2e8f0)",
+                      background: isSelected ? "#f0fdf4" : "var(--color-bg, #ffffff)",
+                      cursor: "pointer",
+                      textAlign: "left",
+                      transition: "all 0.15s ease"
+                    }}
+                  >
+                    <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <strong style={{ color: "#0f766e", fontSize: "0.95rem" }}>{issue.issue_key}</strong>
+                        <span style={{ fontSize: "0.75rem", padding: "2px 8px", borderRadius: "12px", background: "var(--color-bg-subtle, #e2e8f0)", color: "#475569" }}>
+                          {formatStatusLabel(issue.issue_status)}
+                        </span>
+                      </div>
+                      <span style={{ color: "var(--color-text, #334155)", fontSize: "0.85rem" }}>{issue.issue_name}</span>
+                    </div>
+                    {isSelected ? <CheckCircle2 size={18} color="#0f766e" /> : null}
+                  </button>
+                );
+              })}
+              {baseIssueCandidates.length === 0 ? (
+                <div style={{ padding: "24px", textAlign: "center", color: "#64748b", fontSize: "0.875rem" }}>
+                  {loadingBaseIssueCandidates ? "Searching issues..." : "No issues found."}
+                </div>
+              ) : null}
+            </div>
           </div>
         </UIModal>
       )}
@@ -1262,12 +3724,8 @@ function Dashboard({
   return (
     <div className="dashboard-grid">
       {/* ABAP Leader Top Metrics */}
-      <h2 className="dashboard-section-title" style={{ gridColumn: "1 / -1", margin: "16px 0 4px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <h2 className="dashboard-section-title" style={{ gridColumn: "1 / -1", margin: "16px 0 4px" }}>
         <span>SAP Transport & CR Overview</span>
-        <div style={{ fontSize: "0.85rem", fontWeight: "normal", background: "var(--color-bg-elevated, #f8fafc)", padding: "4px 12px", borderRadius: "16px", border: "1px solid var(--color-border, #e2e8f0)", display: "flex", alignItems: "center", gap: "6px" }}>
-          <span>Avg. Transport Lead Time:</span>
-          <strong style={{ color: "#0284c7" }}>{leaderInsights?.avgLeadTimeDays || 2.5} Days</strong>
-        </div>
       </h2>
 
       <div className="summary-metrics-bar">
@@ -1727,16 +4185,18 @@ function ResizableHeader<T extends string>({
   label,
   column,
   width,
+  align = "left",
   onResize
 }: {
   label: string;
   column: T;
   width: number;
+  align?: "left" | "center" | "right";
   onResize: (column: T, event: ReactMouseEvent) => void;
 }) {
   return (
-    <th className="resizable-header" style={{ width }}>
-      <span>{label}</span>
+    <th className="resizable-header" style={{ width, textAlign: align }}>
+      <span style={{ display: "block", textAlign: align, width: "100%" }}>{label}</span>
       <button
         className="column-resize-handle"
         type="button"
@@ -1751,6 +4211,7 @@ function Report({
   requests,
   filters,
   pagination,
+  loadingData,
   onFilters,
   onPage,
   onPageSize,
@@ -1765,6 +4226,7 @@ function Report({
   requests: CrRequest[];
   filters: CrFilters;
   pagination: { page: number; pageSize: number; total: number; totalPages: number };
+  loadingData?: boolean;
   onFilters: (filters: CrFilters) => void;
   onPage: (page: number) => void;
   onPageSize: (pageSize: number) => void;
@@ -1801,20 +4263,6 @@ function Report({
   return (
     <>
       <section className="cr-data-workspace">
-      <section className="filterbar report-filterbar cr-workspace-filterbar">
-        <select className="status-filter" value={filters.lifecycleStatus && filters.lifecycleStatus !== "all" ? filters.lifecycleStatus : filters.status || "all"} onChange={(event) => updateStatusFilter(event.target.value)}>
-          <option value="all">All</option>
-          <option value="outstanding">Outstanding</option>
-          <option value="released">Released</option>
-          <option value="pending_qa">Pending to QA</option>
-          <option value="in_qa">In QA</option>
-          <option value="pending_prd">Pending to PRD</option>
-          <option value="in_prd">In PRD</option>
-        </select>
-        <input value={filters.q || ""} onChange={(event) => updateFilter("q", event.target.value)} placeholder="Search CR, description, object" />
-        <input type="date" value={filters.fromDate || ""} onChange={(event) => updateFilter("fromDate", event.target.value)} />
-        <input type="date" value={filters.toDate || ""} onChange={(event) => updateFilter("toDate", event.target.value)} />
-      </section>
 
       <div className="report-layout detail-closed">
         <section className="table-panel report-table-panel cr-table-panel">
@@ -1833,27 +4281,35 @@ function Report({
                 </tr>
               </thead>
               <tbody>
-                {requests.map((request) => (
-                  <tr key={requestKey(request)} className={selected === requestKey(request) ? "selected" : ""} onClick={() => onSelect(requestKey(request))}>
-                    <td>{request.trkorr}</td>
-                    <td>{request.description}</td>
-                    <td><Status value={displayLifecycleStatus(request.lifecycle_status || request.status_group)} /></td>
+                {loadingData ? (
+                  <tr>
+                    <td colSpan={3} style={{ padding: 0 }}>
+                      <TableDataLoader text="Loading CR Transport records..." />
+                    </td>
                   </tr>
-                ))}
+                ) : requests.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} style={{ padding: "40px 0", textAlign: "center", color: "#64748b" }}>
+                      No parent CR found for the current filter.
+                    </td>
+                  </tr>
+                ) : (
+                  requests.map((request) => (
+                    <tr key={requestKey(request)} className={selected === requestKey(request) ? "selected" : ""} onClick={() => onSelect(requestKey(request))}>
+                      <td>{request.trkorr}</td>
+                      <td>{request.description}</td>
+                      <td><Status value={displayLifecycleStatus(request.lifecycle_status || request.status_group)} /></td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
-            {requests.length === 0 ? <div className="table-empty">No parent CR found for the current filter.</div> : null}
           </div>
-          <div className="pagination">
-            <span>{pageText(pagination)}</span>
-            <select value={pagination.pageSize} onChange={(event) => onPageSize(Number(event.target.value))}>
-              {[10, 25, 50, 100].map((size) => <option value={size} key={size}>{size} / page</option>)}
-            </select>
-            <button className="secondary" onClick={() => onPage(1)} disabled={pagination.page <= 1}><ArrowLeft size={14} /> First</button>
-            <button className="secondary" onClick={() => onPage(pagination.page - 1)} disabled={pagination.page <= 1}><ArrowLeft size={14} /> Prev</button>
-            <button className="secondary" onClick={() => onPage(pagination.page + 1)} disabled={pagination.page >= pagination.totalPages}><ArrowRight size={14} /> Next</button>
-            <button className="secondary" onClick={() => onPage(pagination.totalPages)} disabled={pagination.page >= pagination.totalPages}><ArrowRight size={14} /> Last</button>
-          </div>
+          <PaginationControls
+            pagination={pagination}
+            onPage={onPage}
+            onPageSize={onPageSize}
+          />
         </section>
       </div>
 
@@ -1867,10 +4323,7 @@ function Report({
         hideFooter
       >
         {loadingDetail ? (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "260px", gap: "14px", color: "var(--color-text-muted)" }}>
-            <Loader2 className="animate-spin" size={34} color="#0f766e" />
-            <span style={{ fontSize: "0.925rem", fontWeight: "600", color: "#0f766e" }}>Loading CR detail & SAP transport objects...</span>
-          </div>
+          <SkeletonDetailLoader title="Fetching CR Transport Detail & SAP Objects..." />
         ) : (
         <div className="cr-modal-content-animated" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
           {/* 1. Header Banner & Quick Metadata */}
@@ -2073,6 +4526,7 @@ function IssueDisplay({
   issues,
   filters,
   pagination,
+  loadingData,
   selectedId,
   detail,
   loadingDetail,
@@ -2084,11 +4538,13 @@ function IssueDisplay({
   onGenerateCrForm,
   onPage,
   onPageSize,
-  onOpenCr
+  onOpenCr,
+  visibleIssueColumns = [...DEFAULT_ISSUE_COLUMNS]
 }: {
   issues: IssueRow[];
   filters: IssueFilters;
   pagination: { page: number; pageSize: number; total: number; totalPages: number };
+  loadingData?: boolean;
   selectedId: number | null;
   detail: IssueDetail | null;
   loadingDetail?: boolean;
@@ -2101,10 +4557,25 @@ function IssueDisplay({
   onPage: (page: number) => void;
   onPageSize: (pageSize: number) => void;
   onOpenCr: (link: { sap_system_code?: string; trkorr: string }) => void;
+  visibleIssueColumns?: IssueColumnKey[];
 }) {
   const [detailMenuOpen, setDetailMenuOpen] = useState(false);
-  const [columnMenuOpen, setColumnMenuOpen] = useState(false);
-  const [visibleIssueColumns, setVisibleIssueColumns] = useState<IssueColumnKey[]>([...DEFAULT_ISSUE_COLUMNS]);
+  const [rowMenuOpenId, setRowMenuOpenId] = useState<number | null>(null);
+  const [rowMenuPos, setRowMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const [hoveredCompletionId, setHoveredCompletionId] = useState<number | null>(null);
+  const [hoveredCompletionPos, setHoveredCompletionPos] = useState<{ top: number; right: number } | null>(null);
+
+  useEffect(() => {
+    function handleOutsideClick() {
+      if (rowMenuOpenId !== null) {
+        setRowMenuOpenId(null);
+        setRowMenuPos(null);
+      }
+    }
+    window.addEventListener("click", handleOutsideClick);
+    return () => window.removeEventListener("click", handleOutsideClick);
+  }, [rowMenuOpenId]);
+
   const selectedIssue = issues.find((issue) => issue.id === selectedId) || detail?.issue || null;
   const hasDetail = Boolean(selectedId && selectedIssue);
   const canGenerateCrForm = Boolean(detail?.crLinks?.length);
@@ -2113,36 +4584,28 @@ function IssueDisplay({
     ?? selectedIssue?.primary_glpi_ticket;
   const detailIncompleteItems = detail?.issue?.issue_status !== "cancelled" && detail ? getIncompleteItems(detail) : [];
   const detailIncompleteGroups = groupIncompleteItems(detailIncompleteItems);
-  const issueColumns = useResizableColumns("issue-report-columns", {
-    issue: 112,
-    name: 280,
-    abaper: 160,
-    glpi: 110,
-    crHelpdesk: 140,
-    cr: 132,
-    status: 120,
-    completeness: 48
-  }, {
-    issue: 100,
-    name: 220,
-    abaper: 130,
-    glpi: 90,
-    crHelpdesk: 115,
-    cr: 115,
+  const issueColumns = useResizableColumns("issue-report-columns-v4", {
+    issue: 95,
+    name: 340,
+    abaper: 190,
+    glpi: 100,
+    crHelpdesk: 130,
+    cr: 100,
     status: 115,
-    completeness: 44
+    completeness: 110,
+    actions: 90
+  }, {
+    issue: 85,
+    name: 240,
+    abaper: 140,
+    glpi: 85,
+    crHelpdesk: 110,
+    cr: 90,
+    status: 100,
+    completeness: 85,
+    actions: 80
   });
   const issueTableWidth = visibleIssueColumns.reduce((total, column) => total + issueColumns.widths[column], 0);
-
-  function updateFilter(key: keyof IssueFilters, value: string) {
-    onFilters({ ...filters, [key]: value });
-  }
-
-  function toggleIssueColumn(column: IssueColumnKey) {
-    setVisibleIssueColumns((current) => current.includes(column)
-      ? current.filter((item) => item !== column)
-      : [...current, column]);
-  }
 
   function hasIssueColumn(column: IssueColumnKey) {
     return visibleIssueColumns.includes(column);
@@ -2150,28 +4613,6 @@ function IssueDisplay({
 
   return (
     <section className="issue-report-workspace">
-      <section className="filterbar issue-filterbar">
-        <select value={filters.status || "all"} onChange={(event) => updateFilter("status", event.target.value)}>
-          <option value="all">All Status</option>
-          <option value="ok">OK</option>
-          <option value="in_progress">In Progress</option>
-          <option value="open">Open</option>
-          <option value="cancelled">Cancelled</option>
-        </select>
-        <input value={filters.q || ""} onChange={(event) => updateFilter("q", event.target.value)} placeholder="Search issue, requester, CR" />
-        <input value={filters.glpi || ""} onChange={(event) => updateFilter("glpi", event.target.value)} placeholder="GLPI" />
-        <input value={filters.crHelpdesk || ""} onChange={(event) => updateFilter("crHelpdesk", event.target.value)} placeholder="CR Helpdesk" />
-        <input value={filters.cr || ""} onChange={(event) => updateFilter("cr", event.target.value)} placeholder="CR" />
-        <input type="date" value={filters.fromDate || ""} onChange={(event) => updateFilter("fromDate", event.target.value)} />
-        <input type="date" value={filters.toDate || ""} onChange={(event) => updateFilter("toDate", event.target.value)} />
-        <IssueColumnMenu
-          open={columnMenuOpen}
-          visibleColumns={visibleIssueColumns}
-          onOpenChange={setColumnMenuOpen}
-          onToggle={toggleIssueColumn}
-        />
-      </section>
-
       <div className="report-layout issue-layout controlled-dual-pane detail-closed">
         <section className="table-panel report-table-panel issue-table-panel">
           <div className="table-scroll">
@@ -2185,6 +4626,7 @@ function IssueDisplay({
                 <col style={{ width: issueColumns.widths.cr }} />
                 <col style={{ width: issueColumns.widths.status }} />
                 <col style={{ width: issueColumns.widths.completeness }} />
+                {hasIssueColumn("actions") ? <col style={{ width: issueColumns.widths.actions }} /> : null}
               </colgroup>
               <thead>
                 <tr>
@@ -2194,43 +4636,257 @@ function IssueDisplay({
                   {hasIssueColumn("glpi") ? <ResizableHeader label="GLPI" column="glpi" width={issueColumns.widths.glpi} onResize={issueColumns.startResize} /> : null}
                   {hasIssueColumn("crHelpdesk") ? <ResizableHeader label="CR Helpdesk" column="crHelpdesk" width={issueColumns.widths.crHelpdesk} onResize={issueColumns.startResize} /> : null}
                   <ResizableHeader label="CR" column="cr" width={issueColumns.widths.cr} onResize={issueColumns.startResize} />
-                  <ResizableHeader label="Status" column="status" width={issueColumns.widths.status} onResize={issueColumns.startResize} />
-                  <ResizableHeader label="" column="completeness" width={issueColumns.widths.completeness} onResize={issueColumns.startResize} />
+                  <ResizableHeader label="Status" column="status" align="center" width={issueColumns.widths.status} onResize={issueColumns.startResize} />
+                  <ResizableHeader label="Completion" column="completeness" align="center" width={issueColumns.widths.completeness} onResize={issueColumns.startResize} />
+                  {hasIssueColumn("actions") ? <ResizableHeader label="Actions" column="actions" align="center" width={issueColumns.widths.actions} onResize={issueColumns.startResize} /> : null}
                 </tr>
               </thead>
               <tbody>
-                {issues.map((issue) => (
-                  <tr key={issue.id} className={selectedId === issue.id ? "selected" : ""} onClick={() => onSelect(issue.id)}>
-                    <td>{issue.issue_key}</td>
-                    <td>{issue.issue_name}</td>
-                    <td>{issue.abaper_name_snapshot || "-"}</td>
-                    {hasIssueColumn("glpi") ? <td>{formatGlpi(issue.primary_glpi_ticket)}</td> : null}
-                    {hasIssueColumn("crHelpdesk") ? <td>{issue.primary_cr_helpdesk_no || "-"}</td> : null}
-                    <td>{issue.primary_cr || "-"}</td>
-                    <td><Status value={issue.issue_status} /></td>
-                    <td className="completeness-cell">{issue.issue_status === "cancelled" ? (
-                      <span aria-label="Not applicable">-</span>
-                    ) : (issue.missing_data_count || 0) === 0 ? (
-                      <CheckCircle2 size={18} className="complete-icon" aria-label="Complete" />
-                    ) : (
-                      <AlertTriangle size={18} className="warning-icon" aria-label={`${issue.missing_data_count} missing item(s)`} />
-                    )}</td>
+                {loadingData ? (
+                  <tr>
+                    <td colSpan={9} style={{ padding: 0 }}>
+                      <TableDataLoader text="Loading issue records..." />
+                    </td>
                   </tr>
-                ))}
+                ) : issues.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} style={{ padding: "40px 0", textAlign: "center", color: "#64748b" }}>
+                      No issue found for the current filter.
+                    </td>
+                  </tr>
+                ) : (
+                  issues.map((issue) => {
+                    const isMenuOpen = rowMenuOpenId === issue.id;
+                    const rowMissingItems = getIssueRowMissingItems(issue);
+
+                    return (
+                      <tr
+                        key={issue.id}
+                        className={selectedId === issue.id ? "selected" : ""}
+                        onClick={() => onSelect(issue.id)}
+                      >
+                        <td>{issue.issue_key}</td>
+                        <td>{issue.issue_name}</td>
+                        <td>{issue.abaper_name_snapshot || "-"}</td>
+                        {hasIssueColumn("glpi") ? <td>{formatGlpi(issue.primary_glpi_ticket)}</td> : null}
+                        {hasIssueColumn("crHelpdesk") ? <td>{issue.primary_cr_helpdesk_no || "-"}</td> : null}
+                        <td>{issue.primary_cr || "-"}</td>
+                        <td style={{ textAlign: "center" }}><Status value={issue.issue_status} /></td>
+                        <td className="completeness-cell" style={{ textAlign: "center" }}>
+                          {issue.issue_status === "cancelled" ? (
+                            <span aria-label="Not applicable">-</span>
+                          ) : (
+                            <div
+                              className="completion-tooltip-target"
+                              onMouseEnter={(e) => {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                setHoveredCompletionId(issue.id);
+                                setHoveredCompletionPos({
+                                  top: rect.top + rect.height / 2,
+                                  right: window.innerWidth - rect.left + 10
+                                });
+                              }}
+                              onMouseLeave={() => {
+                                setHoveredCompletionId(null);
+                                setHoveredCompletionPos(null);
+                              }}
+                              style={{ display: "inline-flex", cursor: "pointer" }}
+                            >
+                              {(issue.missing_data_count || 0) === 0 ? (
+                                <CheckCircle2 size={18} className="complete-icon" aria-label="Complete" />
+                              ) : (
+                                <AlertTriangle size={18} className="warning-icon" aria-label={`${issue.missing_data_count} missing item(s)`} />
+                              )}
+
+                              {hoveredCompletionId === issue.id && hoveredCompletionPos && (
+                                <div
+                                  style={{
+                                    position: "fixed",
+                                    top: hoveredCompletionPos.top,
+                                    right: hoveredCompletionPos.right,
+                                    transform: "translateY(-50%)",
+                                    zIndex: 999999,
+                                    minWidth: "220px",
+                                    maxWidth: "280px",
+                                    padding: "10px 14px",
+                                    borderRadius: "10px",
+                                    background: "#ffffff",
+                                    border: "1px solid var(--color-border, #cbd5e1)",
+                                    boxShadow: "0 12px 28px -6px rgba(15, 23, 42, 0.25)",
+                                    fontSize: "0.8rem",
+                                    textAlign: "left",
+                                    pointerEvents: "none",
+                                    lineHeight: 1.4,
+                                    color: "#1e293b"
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      position: "absolute",
+                                      left: "100%",
+                                      top: "50%",
+                                      transform: "translateY(-50%)",
+                                      borderWidth: "6px",
+                                      borderStyle: "solid",
+                                      borderColor: "transparent transparent transparent #ffffff"
+                                    }}
+                                  />
+                                  {(issue.missing_data_count || 0) === 0 ? (
+                                    <div style={{ color: "#15803d", fontWeight: "600", display: "flex", alignItems: "center", gap: "6px" }}>
+                                      <CheckCircle2 size={14} /> All required fields complete
+                                    </div>
+                                  ) : (
+                                    <div>
+                                      <div style={{ fontWeight: "700", color: "#b45309", marginBottom: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
+                                        <AlertTriangle size={14} /> Incomplete Items ({issue.missing_data_count}):
+                                      </div>
+                                      <ul style={{ margin: 0, paddingLeft: "16px", display: "flex", flexDirection: "column", gap: "3px", color: "#334155" }}>
+                                        {rowMissingItems.map((itemText, i) => (
+                                          <li key={i}>{itemText}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                        {hasIssueColumn("actions") ? (
+                          <td onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap", textAlign: "center" }}>
+                            <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                              <button
+                                type="button"
+                                onClick={() => onChangeIssue(issue.id)}
+                                title="Edit Issue"
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  width: "30px",
+                                  height: "30px",
+                                  borderRadius: "8px",
+                                  border: "1px solid var(--color-border, #cbd5e1)",
+                                  background: "#ffffff",
+                                  color: "#0f766e",
+                                  cursor: "pointer",
+                                  transition: "all 0.15s ease",
+                                  boxShadow: "0 1px 2px rgba(0,0,0,0.04)"
+                                }}
+                              >
+                                <PencilLine size={15} />
+                              </button>
+
+                              <div style={{ position: "relative" }}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (isMenuOpen) {
+                                      setRowMenuOpenId(null);
+                                      setRowMenuPos(null);
+                                    } else {
+                                      const rect = e.currentTarget.getBoundingClientRect();
+                                      setRowMenuOpenId(issue.id);
+                                      setRowMenuPos({
+                                        top: rect.bottom + 4,
+                                        right: window.innerWidth - rect.right
+                                      });
+                                    }
+                                  }}
+                                  title="More Actions"
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    width: "30px",
+                                    height: "30px",
+                                    borderRadius: "8px",
+                                    border: "none",
+                                    background: "#0f766e",
+                                    color: "#ffffff",
+                                    cursor: "pointer",
+                                    transition: "all 0.15s ease",
+                                    boxShadow: "0 1px 3px rgba(15,118,110,0.2)"
+                                  }}
+                                >
+                                  <MoreVertical size={16} />
+                                </button>
+
+                                {isMenuOpen && rowMenuPos && (
+                                  <div
+                                    className="detail-action-menu-list"
+                                    style={{
+                                      position: "fixed",
+                                      top: rowMenuPos.top,
+                                      right: rowMenuPos.right,
+                                      zIndex: 999999,
+                                      textAlign: "left",
+                                      boxShadow: "0 12px 28px -6px rgba(15, 23, 42, 0.25)",
+                                      border: "1px solid var(--color-border, #cbd5e1)",
+                                      background: "var(--color-bg-elevated, #ffffff)"
+                                    }}
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setRowMenuOpenId(null);
+                                        setRowMenuPos(null);
+                                        onChangeIssue(issue.id);
+                                      }}
+                                    >
+                                      <PencilLine size={14} /> Change Issue
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setRowMenuOpenId(null);
+                                        setRowMenuPos(null);
+                                        onGenerateCrForm(issue.id);
+                                      }}
+                                    >
+                                      <FileSearch size={14} /> Generate CR Form
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={issue.issue_status === "cancelled"}
+                                      onClick={() => {
+                                        setRowMenuOpenId(null);
+                                        setRowMenuPos(null);
+                                        onIssueAction(issue.id, "cancel");
+                                      }}
+                                    >
+                                      <XCircle size={14} /> Cancel Issue
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="danger-menu-item"
+                                      onClick={() => {
+                                        setRowMenuOpenId(null);
+                                        setRowMenuPos(null);
+                                        onIssueAction(issue.id, "delete");
+                                      }}
+                                    >
+                                      <X size={14} /> Delete Issue
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        ) : null}
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
-            {issues.length === 0 ? <div className="table-empty">No issue found for the current filter.</div> : null}
           </div>
-          <div className="pagination">
-            <span>{pageText(pagination)}</span>
-            <select value={pagination.pageSize} onChange={(event) => onPageSize(Number(event.target.value))}>
-              {[10, 25, 50, 100].map((size) => <option value={size} key={size}>{size} / page</option>)}
-            </select>
-            <button className="secondary" onClick={() => onPage(1)} disabled={pagination.page <= 1}><ArrowLeft size={14} /> First</button>
-            <button className="secondary" onClick={() => onPage(pagination.page - 1)} disabled={pagination.page <= 1}><ArrowLeft size={14} /> Prev</button>
-            <button className="secondary" onClick={() => onPage(pagination.page + 1)} disabled={pagination.page >= pagination.totalPages}><ArrowRight size={14} /> Next</button>
-            <button className="secondary" onClick={() => onPage(pagination.totalPages)} disabled={pagination.page >= pagination.totalPages}><ArrowRight size={14} /> Last</button>
-          </div>
+          <PaginationControls
+            pagination={pagination}
+            onPage={onPage}
+            onPageSize={onPageSize}
+          />
         </section>
       </div>
 
@@ -2238,83 +4894,124 @@ function IssueDisplay({
         isOpen={hasDetail}
         onClose={onCloseDetail}
         title={selectedIssue?.issue_key || "Issue Detail"}
+        titleBadge={selectedIssue ? <Status value={selectedIssue.issue_status} /> : null}
         subtitle={selectedIssue?.issue_name}
+        headerActions={
+          selectedIssue ? (
+            <div className="detail-action-menu" style={{ position: "relative" }}>
+              <button
+                className="primary"
+                type="button"
+                onClick={() => setDetailMenuOpen((current) => !current)}
+                style={{ display: "flex", alignItems: "center", gap: "6px", padding: "6px 14px", fontSize: "0.85rem", background: "#0f766e", color: "#ffffff", borderRadius: "8px", border: "none", cursor: "pointer" }}
+              >
+                <span>Actions</span>
+                <ChevronDown size={15} />
+              </button>
+              {detailMenuOpen && (
+                <div className="detail-action-menu-list" style={{ right: 0, top: "100%", marginTop: "4px" }}>
+                  <button type="button" onClick={() => { setDetailMenuOpen(false); onCloseDetail(); onChangeIssue(selectedIssue.id); }}>
+                    <PencilLine size={15} /> Change Issue
+                  </button>
+                  {canGenerateCrForm && (
+                    <button type="button" onClick={() => { setDetailMenuOpen(false); onGenerateCrForm(selectedIssue.id); }}>
+                      <FileSearch size={15} /> Generate CR Form
+                    </button>
+                  )}
+                  <button type="button" disabled={selectedIssue.issue_status === "cancelled"} onClick={() => { setDetailMenuOpen(false); onIssueAction(selectedIssue.id, "cancel"); }}>
+                    <XCircle size={15} /> Cancel Issue
+                  </button>
+                  <button type="button" className="danger-menu-item" onClick={() => { setDetailMenuOpen(false); onIssueAction(selectedIssue.id, "delete"); }}>
+                    <X size={15} /> Delete Issue
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : null
+        }
         type="primary"
         maxWidth="980px"
         hideFooter
       >
         {loadingDetail ? (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "260px", gap: "14px", color: "var(--color-text-muted)" }}>
-            <Loader2 className="animate-spin" size={34} color="#0f766e" />
-            <span style={{ fontSize: "0.925rem", fontWeight: "600", color: "#0f766e" }}>Loading Issue detail & linked CRs...</span>
-          </div>
+          <SkeletonDetailLoader title="Fetching Issue Details & Linked CR Transports..." />
         ) : (
           <div className="cr-modal-content-animated" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-            {/* Header Actions & Summary Strip Banner */}
+            {/* Summary Strip Banner */}
             <div style={{
               display: "flex",
               flexDirection: "column",
-              gap: "0.85rem",
+              gap: "12px",
               background: "var(--color-bg-subtle, #f8fafc)",
-              padding: "1rem 1.25rem",
+              padding: "14px 16px",
               borderRadius: "12px",
               border: "1px solid var(--color-border, #e2e8f0)"
             }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <span style={{ fontSize: "1.1rem", fontWeight: "700", color: "var(--color-text-heading)" }}>
-                    {selectedIssue?.issue_key}
-                  </span>
-                  {selectedIssue && <Status value={selectedIssue.issue_status} />}
+              {/* Row 1: Email Subject (Left) + GLPI & CR Helpdesk badges (Right Aligned) */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" }}>
+                <div style={{ flex: 1, minWidth: "220px" }}>
+                  <div style={{ fontSize: "0.8rem", fontWeight: "400", color: "var(--color-text-muted, #64748b)", marginBottom: "4px" }}>
+                    Email Subject
+                  </div>
+                  <div style={{ fontSize: "0.95rem", fontWeight: "700", color: "var(--color-text-heading, #0f172a)", wordBreak: "break-word", lineHeight: 1.4 }}>
+                    {detail?.issue?.email_subject || "-"}
+                  </div>
                 </div>
 
-                {/* Actions Dropdown */}
-                {selectedIssue && (
-                  <div className="detail-action-menu" style={{ position: "relative" }}>
-                    <button
-                      className="primary"
-                      type="button"
-                      onClick={() => setDetailMenuOpen((current) => !current)}
-                      style={{ display: "flex", alignItems: "center", gap: "6px", padding: "6px 14px", fontSize: "0.85rem", background: "#0f766e", color: "#ffffff", borderRadius: "8px", border: "none", cursor: "pointer" }}
-                    >
-                      <span>Actions</span>
-                      <ChevronDown size={15} />
-                    </button>
-                    {detailMenuOpen && (
-                      <div className="detail-action-menu-list" style={{ right: 0, top: "100%", marginTop: "4px" }}>
-                        <button type="button" onClick={() => { setDetailMenuOpen(false); onCloseDetail(); onChangeIssue(selectedIssue.id); }}>
-                          <PencilLine size={15} /> Change Issue
-                        </button>
-                        {canGenerateCrForm && (
-                          <button type="button" onClick={() => { setDetailMenuOpen(false); onGenerateCrForm(selectedIssue.id); }}>
-                            <FileSearch size={15} /> Generate CR Form
-                          </button>
-                        )}
-                        <button type="button" disabled={selectedIssue.issue_status === "cancelled"} onClick={() => { setDetailMenuOpen(false); onIssueAction(selectedIssue.id, "cancel"); }}>
-                          <XCircle size={15} /> Cancel Issue
-                        </button>
-                        <button type="button" className="danger-menu-item" onClick={() => { setDetailMenuOpen(false); onIssueAction(selectedIssue.id, "delete"); }}>
-                          <X size={15} /> Delete Issue
-                        </button>
-                      </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", flexShrink: 0 }}>
+                  {/* GLPI Ticket Badge */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "#f0fdf4", border: "1px solid #bbf7d0", padding: "4px 10px", borderRadius: "8px" }}>
+                    <span style={{ fontSize: "0.75rem", fontWeight: "600", color: "#166534" }}>GLPI:</span>
+                    {primaryGlpiTicket ? (
+                      <a href={glpiUrl(primaryGlpiTicket)} target="_blank" rel="noreferrer" style={{ fontSize: "0.85rem", fontWeight: "700", color: "#059669", textDecoration: "underline" }}>
+                        #{primaryGlpiTicket}
+                      </a>
+                    ) : (
+                      <span style={{ fontSize: "0.85rem", fontWeight: "600", color: "#64748b" }}>-</span>
                     )}
                   </div>
-                )}
+
+                  {/* CR Helpdesk No. Badge */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "var(--color-bg, #ffffff)", border: "1px solid var(--color-border, #cbd5e1)", padding: "4px 10px", borderRadius: "8px" }}>
+                    <span style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>CR Helpdesk:</span>
+                    <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "var(--color-text, #1e293b)" }}>
+                      {formatCrHelpdeskNumbers(detail) || selectedIssue?.primary_cr_helpdesk_no || "-"}
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              <SummaryStrip items={[
-                { label: "Email Subject", value: detail?.issue?.email_subject || "-", wide: true },
-                { label: "Requester", value: <DisplayNameList value={selectedIssue?.requester_name_snapshot} /> },
-                { label: "ABAPer", value: <DisplayNameList value={selectedIssue?.abaper_name_snapshot} /> },
-                { label: "Created", value: formatIssueTimestamp(selectedIssue?.create_issue_date) },
-                {
-                  label: "GLPI",
-                  value: primaryGlpiTicket
-                    ? <a className="summary-strip-link" href={glpiUrl(primaryGlpiTicket)} target="_blank" rel="noreferrer">{primaryGlpiTicket}</a>
-                    : "-"
-                },
-                { label: "CR Helpdesk No.", value: formatCrHelpdeskNumbers(detail) || selectedIssue?.primary_cr_helpdesk_no || "-" }
-              ]} />
+              {/* Row 2: Requester | ABAPer | Created Date */}
+              <div style={{ borderTop: "1px solid var(--color-border-soft, #e2e8f0)", paddingTop: "10px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px" }}>
+                  <div>
+                    <div style={{ fontSize: "0.8rem", fontWeight: "400", color: "var(--color-text-muted, #64748b)", marginBottom: "4px" }}>
+                      Requester
+                    </div>
+                    <div style={{ fontSize: "0.9rem", fontWeight: "700", color: "var(--color-text, #1e293b)" }}>
+                      <DisplayNameList value={selectedIssue?.requester_name_snapshot} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: "0.8rem", fontWeight: "400", color: "var(--color-text-muted, #64748b)", marginBottom: "4px" }}>
+                      ABAPer
+                    </div>
+                    <div style={{ fontSize: "0.9rem", fontWeight: "700", color: "var(--color-text, #1e293b)" }}>
+                      <DisplayNameList value={selectedIssue?.abaper_name_snapshot} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: "0.8rem", fontWeight: "400", color: "var(--color-text-muted, #64748b)", marginBottom: "4px" }}>
+                      Created
+                    </div>
+                    <div style={{ fontSize: "0.9rem", fontWeight: "700", color: "var(--color-text, #1e293b)" }}>
+                      {formatIssueTimestamp(selectedIssue?.create_issue_date)}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Incomplete Warning if any */}
@@ -2452,12 +5149,216 @@ function IssueDisplay({
     </section>
   );
 }
+function IssueSwitcherTopbar({ onSelectIssue }: { onSelectIssue: (issueId: number) => void }) {
+  const [query, setQuery] = useState("");
+  const [candidates, setCandidates] = useState<IssueRow[]>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (!query.trim()) {
+      setCandidates([]);
+      setOpen(false);
+      return;
+    }
+    const timer = window.setTimeout(async () => {
+      setLoading(true);
+      try {
+        const rows = await fetchIssueCandidates({ q: query.trim() });
+        setCandidates(rows);
+        setOpen(true);
+      } catch {
+        setCandidates([]);
+      } finally {
+        setLoading(false);
+      }
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  return (
+    <div ref={containerRef} style={{ position: "relative", display: "inline-block" }}>
+      <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+        <FileSearch size={15} style={{ position: "absolute", left: "10px", color: "#0f766e", pointerEvents: "none" }} />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => { if (candidates.length) setOpen(true); }}
+          placeholder="Switch Issue (Type Issue #, GLPI, CR...)"
+          style={{
+            padding: "6px 28px 6px 32px",
+            borderRadius: "8px",
+            border: "1px solid var(--color-border, #cbd5e1)",
+            background: "var(--color-bg, #ffffff)",
+            fontSize: "0.85rem",
+            width: "280px",
+            height: "36px",
+            boxSizing: "border-box"
+          }}
+        />
+        {query ? (
+          <button
+            type="button"
+            onClick={() => { setQuery(""); setCandidates([]); setOpen(false); }}
+            style={{ position: "absolute", right: "8px", border: "none", background: "transparent", color: "#64748b", cursor: "pointer", padding: "2px", display: "flex", alignItems: "center" }}
+          >
+            <X size={14} />
+          </button>
+        ) : null}
+      </div>
+
+      {open && (
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 6px)",
+            right: 0,
+            zIndex: 1000,
+            width: "380px",
+            maxHeight: "340px",
+            overflowY: "auto",
+            background: "var(--color-bg-elevated, #ffffff)",
+            border: "1px solid var(--color-border, #cbd5e1)",
+            borderRadius: "12px",
+            boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.2)",
+            padding: "6px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "4px"
+          }}
+        >
+          {loading ? (
+            <div style={{ padding: "12px", textAlign: "center", color: "#64748b", fontSize: "0.825rem" }}>
+              Searching issues...
+            </div>
+          ) : candidates.length === 0 ? (
+            <div style={{ padding: "12px", textAlign: "center", color: "#64748b", fontSize: "0.825rem" }}>
+              No matching issue found.
+            </div>
+          ) : (
+            candidates.map((issue) => (
+              <button
+                key={issue.id}
+                type="button"
+                onClick={() => {
+                  onSelectIssue(issue.id);
+                  setOpen(false);
+                  setQuery("");
+                }}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "2px",
+                  padding: "8px 10px",
+                  borderRadius: "8px",
+                  border: "none",
+                  background: "transparent",
+                  textAlign: "left",
+                  cursor: "pointer",
+                  transition: "background 0.15s ease"
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "#f1f5f9")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+                  <strong style={{ color: "#0f766e", fontSize: "0.85rem" }}>{issue.issue_key}</strong>
+                  <Status value={issue.issue_status} />
+                </div>
+                <span style={{ color: "#1e293b", fontSize: "0.825rem", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {issue.issue_name}
+                </span>
+                <small style={{ color: "#64748b", fontSize: "0.75rem" }}>
+                  {[issue.primary_cr, issue.primary_cr_helpdesk_no, issue.primary_glpi_ticket ? `GLPI:${issue.primary_glpi_ticket}` : ""].filter(Boolean).join(" • ")}
+                </small>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+type FieldBadgeType = "required" | "optional" | "auto-filled" | "ai-powered";
+
+function FieldLabel({
+  label,
+  badge,
+  badges,
+  icon
+}: {
+  label: string;
+  badge?: FieldBadgeType;
+  badges?: FieldBadgeType[];
+  icon?: React.ReactNode;
+}) {
+  const badgeList: FieldBadgeType[] = badges || (badge ? [badge] : []);
+
+  return (
+    <div className="micro-card-field-label" style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "8px", width: "100%", marginBottom: "4px" }}>
+      <span className="micro-card-field-title" style={{ fontSize: "0.825rem", fontWeight: "600", color: "var(--color-text, #1e293b)", display: "inline-flex", alignItems: "center", gap: "5px" }}>
+        {icon}
+        {label}
+      </span>
+      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+        {badgeList.map((b, i) => {
+          if (b === "required") {
+            return (
+              <span key={i} className="field-badge required" style={{ fontSize: "0.68rem", fontWeight: "700", padding: "1px 6px", borderRadius: "999px", background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca" }}>
+                Required *
+              </span>
+            );
+          }
+          if (b === "optional") {
+            return (
+              <span key={i} className="field-badge optional" style={{ fontSize: "0.68rem", fontWeight: "600", padding: "1px 6px", borderRadius: "999px", background: "#f8fafc", color: "#64748b", border: "1px solid #cbd5e1" }}>
+                Optional
+              </span>
+            );
+          }
+          if (b === "auto-filled") {
+            return (
+              <span key={i} className="field-badge auto-filled" style={{ fontSize: "0.68rem", fontWeight: "700", padding: "1px 6px", borderRadius: "999px", background: "#f0fdf4", color: "#0f766e", border: "1px solid #bbf7d0", display: "inline-flex", alignItems: "center", gap: "3px" }}>
+                <CheckCircle2 size={10} color="#0f766e" /> Auto-filled
+              </span>
+            );
+          }
+          if (b === "ai-powered") {
+            return (
+              <span key={i} className="field-badge ai-powered" style={{ fontSize: "0.68rem", fontWeight: "700", padding: "1px 6px", borderRadius: "999px", background: "#f3e8ff", color: "#7c3aed", border: "1px solid #ddd6fe", display: "inline-flex", alignItems: "center", gap: "3px" }}>
+                <Sparkles size={10} color="#7c3aed" /> AI Powered
+              </span>
+            );
+          }
+          return null;
+        })}
+      </div>
+    </div>
+  );
+}
 
 function IssueEditor({
   mode,
   detail,
   initialAction = "",
   navigationRequest,
+  externalCreateMode,
+  onExternalCreateModeChange,
+  selectedBaseIssue,
+  nextSubIssueNo = "01",
+  layoutStyleOverride,
   onNotify,
   onSave,
   onCancel,
@@ -2468,6 +5369,11 @@ function IssueEditor({
   detail: IssueDetail | null;
   initialAction?: "" | "cancel" | "delete";
   navigationRequest?: { sequence: number; item: IncompleteItem } | null;
+  externalCreateMode?: "new" | "sub";
+  onExternalCreateModeChange?: (mode: "new" | "sub") => void;
+  selectedBaseIssue?: IssueRow | null;
+  nextSubIssueNo?: string;
+  layoutStyleOverride?: "tabs" | "quick_toggle" | "classic";
   onNotify?: (type: "success" | "error", message: string) => void;
   onSave: (payload: IssueSavePayload) => Promise<void>;
   onCancel?: (id: number, reason: string) => Promise<void>;
@@ -2482,7 +5388,12 @@ function IssueEditor({
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [actionDialog, setActionDialog] = useState<"" | "cancel" | "delete">("");
   const [nextIssueNo, setNextIssueNo] = useState<number | null>(null);
-  const [createMode, setCreateMode] = useState<"new" | "sub">("new");
+  const [internalCreateMode, setInternalCreateMode] = useState<"new" | "sub">("new");
+  const createMode = externalCreateMode ?? internalCreateMode;
+  const setCreateMode = (m: "new" | "sub") => {
+    setInternalCreateMode(m);
+    onExternalCreateModeChange?.(m);
+  };
   const [baseIssueSearch, setBaseIssueSearch] = useState("");
   const [baseIssueCandidates, setBaseIssueCandidates] = useState<IssueRow[]>([]);
   const [showBaseIssueCandidates, setShowBaseIssueCandidates] = useState(false);
@@ -2491,26 +5402,112 @@ function IssueEditor({
   const [expandedPhases, setExpandedPhases] = useState<ExpandedIssueSections>({ initiation: true, dev: true, qa: true, prd: true });
   const [fetchingEmail, setFetchingEmail] = useState(false);
   const [fetchedEmailContext, setFetchedEmailContext] = useState<string | null>(null);
+  const [fetchingGlpi, setFetchingGlpi] = useState(false);
+  const [fetchedGlpiContext, setFetchedGlpiContext] = useState<GlpiTicketDetail | null>(null);
+  const fetchedGlpiTicketRef = useRef<number | null>(null);
   const [generatingAi, setGeneratingAi] = useState(false);
   const [showAiOverwriteModal, setShowAiOverwriteModal] = useState(false);
-  const [aiOverwriteSelections, setAiOverwriteSelections] = useState<{
-    issueName: boolean;
-    problemAnalysis: boolean;
-    impactAnalysis: boolean;
-  }>({ issueName: true, problemAnalysis: true, impactAnalysis: true });
+  const [aiOverwriteSelections, setAiOverwriteSelections] = useState<Record<string, boolean>>({});
+  const [internalLayoutStyle, setInternalLayoutStyle] = useState<"tabs" | "quick_toggle" | "classic">(() => {
+    try {
+      const storageKey = getActiveAppearanceKey();
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.issue_form_layout) return parsed.issue_form_layout;
+      }
+    } catch {}
+    return "tabs";
+  });
+  const layoutStyle = layoutStyleOverride ?? internalLayoutStyle;
+  const [editorTab, setEditorTab] = useState<"basic" | "team" | "transport" | "timeline">("basic");
+  const [isQuickMode, setIsQuickMode] = useState<boolean>(() => mode === "create");
 
-  async function handleFetchEmailContent() {
-    if (!form.emailSubject?.trim()) {
+  function saveLayoutPref(pref: "tabs" | "quick_toggle" | "classic") {
+    try {
+      const storageKey = getActiveAppearanceKey();
+      const saved = localStorage.getItem(storageKey) || "{}";
+      const parsed = JSON.parse(saved);
+      parsed.issue_form_layout = pref;
+      localStorage.setItem(storageKey, JSON.stringify(parsed));
+    } catch {}
+  }
+
+  useEffect(() => {
+    if (mode === "create" && createMode === "sub" && selectedBaseIssue) {
+      setForm((prev) => ({
+        ...prev,
+        createMode: "sub",
+        issueNo: selectedBaseIssue.issue_no,
+        subIssueNo: nextSubIssueNo
+      }));
+    }
+  }, [mode, createMode, selectedBaseIssue, nextSubIssueNo]);
+
+  async function handleFetchGlpiContent(ticketNoOverride?: number | string) {
+    const firstTicket = (form.glpiTickets || "").split(/[,;\s]+/)[0] || "";
+    const rawNo = ticketNoOverride ?? firstTicket;
+    const ticketNo = Number(String(rawNo || "").replace(/[^\d]/g, ""));
+    if (!ticketNo) {
+      onNotify?.("error", "Please enter a valid GLPI Ticket Number first.");
+      setFetchedGlpiContext(null);
+      return;
+    }
+    setFetchingGlpi(true);
+    try {
+      const res = await fetchGlpiTicketDetail(ticketNo);
+      if (!res.ok || !res.ticket) {
+        setFetchedGlpiContext(null);
+        onNotify?.("error", `GLPI Ticket #${ticketNo} not found in GLPI database.`);
+        return;
+      }
+      setFetchedGlpiContext(res.ticket);
+
+      // Auto fill issue name if empty
+      if (!form.issueName?.trim() && res.ticket.title) {
+        update("issueName", res.ticket.title);
+      }
+
+      onNotify?.("success", `Fetched GLPI Ticket #${ticketNo} details & context successfully! AI Analysis is enabled.`);
+    } catch (err) {
+      setFetchedGlpiContext(null);
+      const msg = err instanceof Error ? err.message : String(err);
+      onNotify?.("error", `Failed to fetch GLPI Ticket #${ticketNo}: ${msg}`);
+    } finally {
+      setFetchingGlpi(false);
+    }
+  }
+
+  // Auto-fetch GLPI ticket detail when GLPI number is present or changed
+  const primaryGlpiNo = (form.glpiTickets || "").split(/[,;\s]+/)[0] || "";
+  useEffect(() => {
+    if (primaryGlpiNo) {
+      const num = Number(String(primaryGlpiNo).replace(/[^\d]/g, ""));
+      if (num && fetchedGlpiTicketRef.current !== num) {
+        fetchedGlpiTicketRef.current = num;
+        handleFetchGlpiContent(num);
+      }
+    } else {
+      fetchedGlpiTicketRef.current = null;
+      setFetchedGlpiContext(null);
+    }
+  }, [primaryGlpiNo]);
+
+  const fetchedEmailSubjectRef = useRef<string | null>(null);
+
+  async function handleFetchEmailContent(subjectOverride?: string) {
+    const targetSubject = subjectOverride ?? form.emailSubject;
+    if (!targetSubject?.trim()) {
       onNotify?.("error", "Please enter an Email Subject first.");
       setFetchedEmailContext(null);
       return;
     }
     setFetchingEmail(true);
     try {
-      const res = await searchOutlookEmail(form.emailSubject);
+      const res = await searchOutlookEmail(targetSubject);
       if (!res.rows || res.rows.length === 0) {
         setFetchedEmailContext(null);
-        onNotify?.("error", `No Outlook email found matching subject "${form.emailSubject}"`);
+        onNotify?.("error", `No Outlook email found matching subject "${targetSubject}"`);
         return;
       }
       
@@ -2530,30 +5527,195 @@ function IssueEditor({
     }
   }
 
-  async function executeAiGeneration(selections: { issueName: boolean; problemAnalysis: boolean; impactAnalysis: boolean }) {
-    if (!fetchedEmailContext) return;
+  // Auto-fetch Outlook email context when editing an existing issue (mode !== "create")
+  useEffect(() => {
+    if (mode !== "create" && form.emailSubject?.trim()) {
+      const subject = form.emailSubject.trim();
+      if (fetchedEmailSubjectRef.current !== subject) {
+        fetchedEmailSubjectRef.current = subject;
+        handleFetchEmailContent(subject);
+      }
+    }
+  }, [mode, form.emailSubject]);
+
+  function getExistingFormFields() {
+    const list: Array<{ key: string; label: string; currentValue: string; category: "Analysis" | "People" | "Timeline" }> = [];
+    
+    if (form.issueName?.trim()) {
+      list.push({ key: "issueName", label: "Issue Name", currentValue: form.issueName.trim(), category: "Analysis" });
+    }
+    if (form.problemAnalysis?.trim()) {
+      list.push({ key: "problemAnalysis", label: "Problem Analysis", currentValue: form.problemAnalysis.trim(), category: "Analysis" });
+    }
+    if (form.impactAnalysis?.trim()) {
+      list.push({ key: "impactAnalysis", label: "Impact Analysis", currentValue: form.impactAnalysis.trim(), category: "Analysis" });
+    }
+
+    const participantLabels: Record<string, string> = {
+      requester: "Requester Name",
+      abaper: "ABAPer Name",
+      dev_tester: "DEV Tester",
+      dev_evaluator: "DEV Evaluator",
+      qa_transporter: "QA Transporter",
+      qa_tester: "QA Tester",
+      qa_evaluator: "QA Evaluator",
+      prd_requester: "PRD Requester",
+      prd_evaluator: "PRD Evaluator",
+      approval: "PRD Approver",
+      executor: "PRD Transporter"
+    };
+
+    if (form.participants) {
+      for (const [role, label] of Object.entries(participantLabels)) {
+        const val = form.participants[role]?.trim();
+        if (val) {
+          list.push({ key: `participant:${role}`, label, currentValue: val, category: "People" });
+        }
+      }
+    }
+
+    const timelineLabels: Record<string, string> = {
+      testing_date: "DEV Testing Date",
+      evaluation_date: "DEV Evaluation Date",
+      qa_transport_date: "QA Transport Date",
+      qa_testing_date: "QA Testing Date",
+      qa_evaluation_date: "QA Evaluation Date",
+      request_date: "PRD Request Date",
+      prd_evaluated_date: "PRD Evaluation Date",
+      approval_date: "PRD Approval Date"
+    };
+
+    if (form.timeline) {
+      for (const [tKey, label] of Object.entries(timelineLabels)) {
+        const val = form.timeline[tKey]?.trim();
+        if (val) {
+          list.push({ key: `timeline:${tKey}`, label, currentValue: val, category: "Timeline" });
+        }
+      }
+    }
+
+    return list;
+  }
+
+  async function executeAiGeneration(selections: Record<string, boolean>) {
+    let combinedContext = "";
+    if (fetchedEmailContext) {
+      combinedContext += `=== OUTLOOK EMAIL CONTEXT ===\n${fetchedEmailContext}\n\n`;
+    }
+    if (fetchedGlpiContext) {
+      combinedContext += `=== GLPI TICKET #${fetchedGlpiContext.ticketNumber} CONTEXT ===\n`;
+      combinedContext += `Title: ${fetchedGlpiContext.title}\nOpened Date: ${fetchedGlpiContext.date}\nDescription:\n${fetchedGlpiContext.content}\n\n`;
+      if (fetchedGlpiContext.technicians?.length) {
+        combinedContext += `Technicians: ${fetchedGlpiContext.technicians.map((t) => t.fullName).join(", ")}\n`;
+      }
+      if (fetchedGlpiContext.requesters?.length) {
+        combinedContext += `Requesters: ${fetchedGlpiContext.requesters.map((r) => r.fullName).join(", ")}\n`;
+      }
+      if (fetchedGlpiContext.followups?.length) {
+        combinedContext += `\nFollowup / Discussion History:\n${fetchedGlpiContext.followups.map((f) => `[${f.date}] ${f.author}: ${f.content}`).join("\n")}\n`;
+      }
+      if (fetchedGlpiContext.solutions?.length) {
+        combinedContext += `\nSolution:\n${fetchedGlpiContext.solutions.map((s) => `[${s.date}] ${s.solver}: ${s.content}`).join("\n")}\n`;
+      }
+    }
+
+    if (!combinedContext.trim()) {
+      onNotify?.("error", "No context available. Please fetch Email or GLPI content first.");
+      return;
+    }
+
+    // Fetch Master Data People directory to include in AI context for accurate name & role matching
+    try {
+      const peopleRes = await fetchAdminPeople();
+      if (peopleRes.rows?.length) {
+        const activePeopleStr = peopleRes.rows
+          .filter((p) => p.is_active)
+          .map((p) => {
+            const name = [p.full_name, p.nickname ? `(${p.nickname})` : null].filter(Boolean).join(" ");
+            const roles = [
+              p.is_requester && "Requester",
+              p.is_abaper && "ABAPer",
+              p.is_tester && "DEV/QA Tester",
+              p.is_evaluator && "DEV/QA/PRD Evaluator",
+              p.is_approver && "PRD Approver",
+              p.is_transporter && "QA/PRD Transporter"
+            ].filter(Boolean).join(", ");
+            return `• Name: "${name}" | Email: ${p.email || "N/A"} | Dept: ${p.department || "N/A"}${roles ? ` | System Roles: [${roles}]` : ""}`;
+          })
+          .join("\n");
+        if (activePeopleStr) {
+          combinedContext = `=== MASTER DATA PEOPLE DIRECTORY (MATCH GLPI/EMAIL PERSONS TO THESE OFFICIAL NAMES & ROLES) ===\n${activePeopleStr}\n\n` + combinedContext;
+        }
+      }
+    } catch (err) {
+      console.warn("Could not fetch admin people for AI context:", err);
+    }
+
     setGeneratingAi(true);
     try {
-      const result = await generateAnalysis(fetchedEmailContext, form.emailSubject, form.issueName);
+      const result = await generateAnalysis(combinedContext, form.emailSubject, form.issueName);
       
       let updatedCount = 0;
-      if (selections.issueName && result.issueName) {
+      
+      const canUpdateName = selections.issueName !== false || !form.issueName?.trim();
+      if (canUpdateName && result.issueName) {
         update("issueName", result.issueName);
         updatedCount++;
       }
-      if (selections.problemAnalysis && result.problemAnalysis) {
+      
+      const canUpdateProblem = selections.problemAnalysis !== false || !form.problemAnalysis?.trim();
+      if (canUpdateProblem && result.problemAnalysis) {
         update("problemAnalysis", result.problemAnalysis);
         updatedCount++;
       }
-      if (selections.impactAnalysis && result.impactAnalysis) {
+      
+      const canUpdateImpact = selections.impactAnalysis !== false || !form.impactAnalysis?.trim();
+      if (canUpdateImpact && result.impactAnalysis) {
         update("impactAnalysis", result.impactAnalysis);
         updatedCount++;
       }
 
+      // Auto-fill participant fields
+      if (result.participants) {
+        const roleAliases: Record<string, string> = {
+          prd_approver: "approval",
+          approver: "approval",
+          prd_transporter: "executor",
+          prd_executor: "executor",
+          transporter: "executor"
+        };
+        for (const [rawRole, nameVal] of Object.entries(result.participants)) {
+          const role = roleAliases[rawRole.toLowerCase()] || rawRole;
+          if (nameVal && nameVal.trim() && nameVal.trim().toUpperCase() !== "N/A") {
+            const existingVal = form.participants?.[role]?.trim();
+            const canOverwrite = !existingVal || selections[`participant:${role}`] !== false;
+            if (canOverwrite) {
+              updateParticipant(role, nameVal.trim());
+              updatedCount++;
+            }
+          }
+        }
+      }
+
+      // Auto-fill timeline date fields
+      if (result.timeline) {
+        for (const [tKey, dateVal] of Object.entries(result.timeline)) {
+          if (dateVal && dateVal.trim() && dateVal.trim().toUpperCase() !== "N/A") {
+            const existingVal = form.timeline?.[tKey]?.trim();
+            const canOverwrite = !existingVal || selections[`timeline:${tKey}`] !== false;
+            if (canOverwrite) {
+              const formattedDate = toDatetimeInput(dateVal.trim()) || dateVal.trim();
+              updateTimeline(tKey, formattedDate);
+              updatedCount++;
+            }
+          }
+        }
+      }
+
       if (updatedCount > 0) {
-        onNotify?.("success", `Generated AI analysis for ${updatedCount} field(s) successfully!`);
+        onNotify?.("success", `Generated & filled AI data for ${updatedCount} field(s) successfully!`);
       } else {
-        onNotify?.("error", "AI generation returned empty results. Please try clicking Generate AI again.");
+        onNotify?.("error", "AI generation completed. No new changes were made to selected fields.");
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -2564,26 +5726,24 @@ function IssueEditor({
   }
 
   async function handleGenerateAiAnalysis() {
-    if (!fetchedEmailContext) {
-      onNotify?.("error", "No email context available. Please fetch email content first.");
+    if (!fetchedEmailContext && !fetchedGlpiContext) {
+      onNotify?.("error", "Please fetch Outlook Email or GLPI Ticket context first before using AI Analysis.");
       return;
     }
     
-    const hasExistingName = Boolean(form.issueName?.trim());
-    const hasExistingProblem = Boolean(form.problemAnalysis?.trim());
-    const hasExistingImpact = Boolean(form.impactAnalysis?.trim());
+    const existingFields = getExistingFormFields();
 
-    if (hasExistingName || hasExistingProblem || hasExistingImpact) {
-      setAiOverwriteSelections({
-        issueName: true,
-        problemAnalysis: true,
-        impactAnalysis: true
-      });
+    if (existingFields.length > 0) {
+      const initialSelections: Record<string, boolean> = {};
+      for (const field of existingFields) {
+        initialSelections[field.key] = true;
+      }
+      setAiOverwriteSelections(initialSelections);
       setShowAiOverwriteModal(true);
       return;
     }
 
-    await executeAiGeneration({ issueName: true, problemAnalysis: true, impactAnalysis: true });
+    await executeAiGeneration({});
   }
 
   const [templatePreview, setTemplatePreview] = useState<{ title: string; body: string; bodyHtml?: string } | null>(null);
@@ -2610,6 +5770,10 @@ function IssueEditor({
     setTemplatePreview(null);
     setGenerateMenuOpen(false);
     setMoreMenuOpen(false);
+    setFetchedGlpiContext(null);
+    setFetchedEmailContext(null);
+    fetchedGlpiTicketRef.current = null;
+    fetchedEmailSubjectRef.current = null;
     onDirtyChange?.(false);
   }, [detail?.issue?.id, mode]);
 
@@ -2879,60 +6043,87 @@ function IssueEditor({
 
   return (
     <form className="issue-editor-panel" onSubmit={submit}>
-      {mode === "create" ? (
-        <section className="panel editor-section issue-editor-title">
-          <div className="panel-heading">
-            <h2>Create Issue</h2>
-          </div>
-          <div className="issue-mode-panel">
-            <div className="issue-mode-options">
-              <button type="button" className={createMode === "new" ? "active" : ""} onClick={() => {
-                setCreateMode("new");
-                setForm((current) => ({ ...current, createMode: "new", issueNo: undefined, subIssueNo: "01" }));
-              }}>
-                <Plus size={15} /> New Issue
-              </button>
-              <button type="button" className={createMode === "sub" ? "active" : ""} onClick={() => {
-                setCreateMode("sub");
-                setForm((current) => ({ ...current, createMode: "sub" }));
-                setShowBaseIssueCandidates(true);
-              }}>
-                <Plus size={15} /> Add Sub Issue
-              </button>
-            </div>
-            {createMode === "new" ? (
-              <p>Next issue preview: <strong>{nextIssueNo || "-"}</strong>-01</p>
-            ) : (
-              <div className="base-issue-picker">
-                <label>Existing Issue
-                  <input
-                    value={baseIssueSearch}
-                    onFocus={() => setShowBaseIssueCandidates(true)}
-                    onChange={(event) => {
-                      setBaseIssueSearch(event.target.value);
-                      setShowBaseIssueCandidates(true);
-                    }}
-                    placeholder="Search issue no, description, requester"
-                  />
-                </label>
-                {showBaseIssueCandidates ? (
-                  <div className="base-issue-results">
-                    {baseIssueCandidates.map((issue) => (
-                      <button type="button" key={issue.id} onMouseDown={(event) => event.preventDefault()} onClick={() => selectBaseIssue(issue)}>
-                        <strong>{issue.issue_key}</strong>
-                        <span>{issue.issue_name}</span>
-                        <small>{[issue.primary_cr, formatGlpi(issue.primary_glpi_ticket), formatStatusLabel(issue.issue_status)].filter(Boolean).join(" - ")}</small>
-                      </button>
-                    ))}
-                    {baseIssueSearch.trim() && baseIssueCandidates.length === 0 ? <span>No issue found</span> : null}
-                  </div>
-                ) : null}
-              </div>
-            )}
-          </div>
-        </section>
-      ) : null}
 
+      {/* Ide B: Quick Create Mode Toggle Switch */}
+      {layoutStyle === "quick_toggle" && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", background: "var(--color-bg-subtle, #f8fafc)", border: "1px solid var(--color-border, #cbd5e1)", borderRadius: "12px", padding: "6px", marginBottom: "16px" }}>
+          <button
+            type="button"
+            onClick={() => setIsQuickMode(true)}
+            style={{
+              flex: 1,
+              padding: "8px 14px",
+              borderRadius: "8px",
+              border: "none",
+              background: isQuickMode ? "#0f766e" : "transparent",
+              color: isQuickMode ? "#ffffff" : "var(--color-text, #475569)",
+              fontWeight: "700",
+              fontSize: "0.85rem",
+              cursor: "pointer",
+              transition: "all 0.15s ease"
+            }}
+          >
+            ⚡ Quick Draft (4 Key Fields)
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsQuickMode(false)}
+            style={{
+              flex: 1,
+              padding: "8px 14px",
+              borderRadius: "8px",
+              border: "none",
+              background: !isQuickMode ? "#0f766e" : "transparent",
+              color: !isQuickMode ? "#ffffff" : "var(--color-text, #475569)",
+              fontWeight: "700",
+              fontSize: "0.85rem",
+              cursor: "pointer",
+              transition: "all 0.15s ease"
+            }}
+          >
+            📄 Full Detailed Form
+          </button>
+        </div>
+      )}
+
+      {/* Ide A: Tab Stepper Navigation Bar */}
+      {layoutStyle === "tabs" && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "8px", marginBottom: "16px" }}>
+          {[
+            { id: "basic", label: "1. Basic & Problem", icon: "📝" },
+            { id: "team", label: "2. Team & Stakeholders", icon: "👥" },
+            { id: "transport", label: "3. SAP Transport & CR", icon: "🔄" },
+            { id: "timeline", label: "4. Timeline & Sign-off", icon: "📅" }
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setEditorTab(tab.id as any)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px",
+                padding: "9px 12px",
+                borderRadius: "10px",
+                border: editorTab === tab.id ? "2px solid #0f766e" : "1px solid var(--color-border, #cbd5e1)",
+                background: editorTab === tab.id ? "#f0fdf4" : "var(--color-bg, #ffffff)",
+                color: editorTab === tab.id ? "#0f766e" : "var(--color-text-muted, #64748b)",
+                fontWeight: editorTab === tab.id ? "700" : "600",
+                fontSize: "0.825rem",
+                cursor: "pointer",
+                transition: "all 0.15s ease"
+              }}
+            >
+              <span>{tab.icon}</span>
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Initiation Section (Shown in Classic, Quick Mode, or Tab 1/Tab 2) */}
+      {(layoutStyle === "classic" || (layoutStyle === "quick_toggle" && !isQuickMode) || (layoutStyle === "tabs" && (editorTab === "basic" || editorTab === "team")) || (layoutStyle === "quick_toggle" && isQuickMode)) && (
       <section className="panel editor-section issue-phase-card">
         <div className="phase-title phase-toggle" style={{ cursor: "default", display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
           <button type="button" onClick={() => togglePhase("initiation")} style={{ display: "flex", alignItems: "flex-start", background: "none", border: "none", padding: 0, margin: 0, textAlign: "left", cursor: "pointer", color: "inherit", font: "inherit" }}>
@@ -2945,35 +6136,39 @@ function IssueEditor({
           <span className="phase-title-actions" style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginLeft: "auto" }}>
             {expandedPhases.initiation && (
               <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); handleFetchEmailContent(); }}
-                  disabled={formDisabled || fetchingEmail || !form.emailSubject?.trim()}
-                  style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.5rem 0.75rem", borderRadius: "6px", background: "var(--color-primary, #2563eb)", color: "white", border: "none", cursor: (formDisabled || fetchingEmail || !form.emailSubject?.trim()) ? "not-allowed" : "pointer", fontSize: "0.8125rem", fontWeight: "600", whiteSpace: "nowrap", transition: "all 0.2s", opacity: (formDisabled || fetchingEmail || !form.emailSubject?.trim()) ? 0.6 : 1 }}
-                  title="Fetch email content from Outlook Desktop"
-                >
-                  {fetchingEmail ? <Loader2 className="spinner" size={14} /> : <Mail size={14} />}
-                  {fetchingEmail ? "Fetching..." : "Fetch Email"}
-                </button>
+                {/* Context Status Pills (Checkmarks) */}
+                <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginRight: "0.25rem" }}>
+                  <span className={`context-status-pill ${fetchedEmailContext ? "active" : "inactive"}`} title={fetchedEmailContext ? "Email context fetched & ready" : "No email context fetched"}>
+                    {fetchedEmailContext ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
+                    {fetchedEmailContext ? "Email Context" : "No Email"}
+                  </span>
+
+                  <span className={`context-status-pill ${fetchedGlpiContext ? "active" : "inactive"}`} title={fetchedGlpiContext ? `GLPI #${fetchedGlpiContext.ticketNumber} context fetched` : "No GLPI context fetched"}>
+                    {fetchedGlpiContext ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
+                    {fetchedGlpiContext ? `GLPI #${fetchedGlpiContext.ticketNumber}` : "No GLPI"}
+                  </span>
+                </div>
+
+                {/* Generate AI Button */}
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); handleGenerateAiAnalysis(); }}
-                  disabled={formDisabled || !fetchedEmailContext || generatingAi}
+                  disabled={formDisabled || !fetchedEmailContext || !fetchedGlpiContext || generatingAi}
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
                     gap: "0.375rem",
                     padding: "0.5rem 0.75rem",
                     borderRadius: "6px",
-                    background: (!fetchedEmailContext || formDisabled || generatingAi) ? "var(--color-bg-subtle, #e5e7eb)" : "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
-                    color: (!fetchedEmailContext || formDisabled || generatingAi) ? "var(--color-text-muted, #9ca3af)" : "#ffffff",
+                    background: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "var(--color-bg-subtle, #e5e7eb)" : "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
+                    color: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "var(--color-text-muted, #9ca3af)" : "#ffffff",
                     border: "none",
-                    cursor: (!fetchedEmailContext || formDisabled || generatingAi) ? "not-allowed" : "pointer",
+                    cursor: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "not-allowed" : "pointer",
                     fontSize: "0.8125rem",
                     fontWeight: "600",
                     transition: "all 0.2s"
                   }}
-                  title={!fetchedEmailContext ? "Fetch email content first to enable AI generation" : "Generate Problem & Impact Analysis using OpenRouter AI"}
+                  title={(!fetchedEmailContext || !fetchedGlpiContext) ? "Both Email context and GLPI context must be active & checked to enable AI generation" : "Generate Problem & Impact Analysis using OpenRouter AI"}
                 >
                   {generatingAi ? <Loader2 className="spinner" size={14} /> : <Sparkles size={14} />}
                   {generatingAi ? "Generating..." : "Generate AI"}
@@ -2988,48 +6183,110 @@ function IssueEditor({
         {expandedPhases.initiation ? (
           <div className="issue-initiation-layout">
           <div className="issue-initiation-column issue-initiation-main">
-            <div className="initiation-section">
-              <h3>Issue Information</h3>
+            <div className="initiation-section micro-card">
+              <h3>
+                <span className="micro-card-icon-badge"><FileText size={16} /></span>
+                Issue Information
+              </h3>
               <div className="initiation-pair">
-                <label>Issue No.<input className="readonly-input" value={displayedIssueNo} onChange={(event) => update("issueNo", event.target.value)} placeholder="Auto" readOnly={mode === "create"} disabled={formDisabled} /></label>
-                <label>Sub Issue<input className={mode === "create" ? "readonly-input" : ""} value={displayedSubIssueNo} onChange={(event) => update("subIssueNo", event.target.value)} readOnly={mode === "create"} disabled={formDisabled} /></label>
+                <label>
+                  <FieldLabel label="Issue No." badge="auto-filled" />
+                  <input className="readonly-input" value={displayedIssueNo} onChange={(event) => update("issueNo", event.target.value)} placeholder="Auto" readOnly={mode === "create"} disabled={formDisabled} />
+                </label>
+                <label>
+                  <FieldLabel label="Sub Issue" badge="auto-filled" />
+                  <input className={mode === "create" ? "readonly-input" : ""} value={displayedSubIssueNo} onChange={(event) => update("subIssueNo", event.target.value)} readOnly={mode === "create"} disabled={formDisabled} />
+                </label>
               </div>
-              <label data-incomplete-target="issue-name">Issue Name<input value={form.issueName || ""} onChange={(event) => update("issueName", event.target.value)} required disabled={formDisabled} /></label>
+              <label data-incomplete-target="issue-name">
+                <FieldLabel label="Issue Name" badges={["required", "ai-powered"]} />
+                <input value={form.issueName || ""} onChange={(event) => update("issueName", event.target.value)} required disabled={formDisabled} />
+              </label>
               <div className="initiation-pair">
-                <label>Status<select value={form.sourceIssueStatus || "open"} onChange={(event) => update("sourceIssueStatus", event.target.value)} disabled={formDisabled}>
-                  <option value="open">Open</option>
-                  <option value="ok">OK</option>
-                  {isCancelled ? <option value="cancelled">Cancelled</option> : null}
-                </select></label>
+                <label>
+                  <FieldLabel label="Status" badge="auto-filled" />
+                  <select value={form.sourceIssueStatus || "open"} onChange={(event) => update("sourceIssueStatus", event.target.value)} disabled={formDisabled}>
+                    <option value="open">Open</option>
+                    <option value="ok">OK</option>
+                    {isCancelled ? <option value="cancelled">Cancelled</option> : null}
+                  </select>
+                </label>
                 <div className="incomplete-target" data-incomplete-target="issue-created-on">
                   <TimestampInput label="Created On" value={form.createIssueDate} onChange={(value) => update("createIssueDate", value)} disabled={formDisabled} />
                 </div>
               </div>
               <label>
-                Email Subject
-                <input value={form.emailSubject || ""} onChange={(event) => update("emailSubject", event.target.value)} placeholder="Email subject" disabled={formDisabled} style={{ width: "100%", marginTop: "0.25rem" }} />
+                <FieldLabel label="Email Subject" badge="required" />
+                <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem", alignItems: "center" }}>
+                  <input
+                    value={form.emailSubject || ""}
+                    onChange={(event) => update("emailSubject", event.target.value)}
+                    placeholder="Email subject"
+                    disabled={formDisabled}
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleFetchEmailContent()}
+                    disabled={formDisabled || fetchingEmail || !form.emailSubject?.trim()}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.375rem",
+                      padding: "0.5rem 0.875rem",
+                      borderRadius: "6px",
+                      background: "#0f766e",
+                      color: "white",
+                      border: "none",
+                      cursor: (formDisabled || fetchingEmail || !form.emailSubject?.trim()) ? "not-allowed" : "pointer",
+                      fontSize: "0.8125rem",
+                      fontWeight: "600",
+                      whiteSpace: "nowrap",
+                      transition: "all 0.2s",
+                      opacity: (formDisabled || fetchingEmail || !form.emailSubject?.trim()) ? 0.6 : 1,
+                      height: "38px"
+                    }}
+                    title="Fetch email content from Outlook Desktop"
+                  >
+                    {fetchingEmail ? <Loader2 className="spinner" size={14} /> : <Mail size={14} />}
+                    {fetchingEmail ? "Fetching..." : "Fetch Email"}
+                  </button>
+                </div>
               </label>
               <a href="/api/outlook/download-agent" style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #6b7280)", marginTop: "0.25rem", display: "inline-block" }}>
                 "Fetch Email" tidak jalan? Download &amp; jalankan Outlook Agent di laptop Anda
               </a>
             </div>
-            <div className="initiation-section">
-              <h3 style={{ margin: "0 0 0.5rem 0" }}>Analysis</h3>
-              <label>Problem Analysis<textarea value={form.problemAnalysis || ""} onChange={(event) => update("problemAnalysis", event.target.value)} rows={6} disabled={formDisabled} /></label>
-              <label>Impact Analysis<textarea value={form.impactAnalysis || ""} onChange={(event) => update("impactAnalysis", event.target.value)} rows={6} disabled={formDisabled} /></label>
+
+            <div className="initiation-section micro-card">
+              <h3>
+                <span className="micro-card-icon-badge" style={{ background: "#f3e8ff", color: "#7c3aed" }}><Sparkles size={16} /></span>
+                Analysis &amp; Problem Statement
+              </h3>
+              <label>
+                <FieldLabel label="Problem Analysis" badge="ai-powered" />
+                <textarea value={form.problemAnalysis || ""} onChange={(event) => update("problemAnalysis", event.target.value)} rows={6} disabled={formDisabled} />
+              </label>
+              <label>
+                <FieldLabel label="Impact Analysis" badge="ai-powered" />
+                <textarea value={form.impactAnalysis || ""} onChange={(event) => update("impactAnalysis", event.target.value)} rows={6} disabled={formDisabled} />
+              </label>
             </div>
           </div>
 
           <div className="issue-initiation-column issue-initiation-reference">
-            <div className="initiation-section">
-              <h3>References</h3>
+            <div className="initiation-section micro-card">
+              <h3>
+                <span className="micro-card-icon-badge" style={{ background: "#eff6ff", color: "#2563eb" }}><LinkIcon size={16} /></span>
+                External References
+              </h3>
               <div className="initiation-pair reference-pair">
                 <div className="reference-field-group" data-incomplete-target="issue-glpi">
-                  <ValueHelpField label="CR Helpdesk No." kind="cr-helpdesk" value={form.crHelpdeskNumbers || ""} onChange={(value) => update("crHelpdeskNumbers", value)} placeholder="CR Helpdesk No." disabled={formDisabled} />
+                  <ValueHelpField label={<FieldLabel label="CR Helpdesk No." badge="optional" />} kind="cr-helpdesk" value={form.crHelpdeskNumbers || ""} onChange={(value) => update("crHelpdeskNumbers", value)} placeholder="CR Helpdesk No." disabled={formDisabled} />
                 </div>
                 <div className="reference-field-group">
                   <ValueHelpField
-                    label="GLPI No."
+                    label={<FieldLabel label="GLPI No." badge="optional" />}
                     kind="glpi"
                     value={form.glpiTickets || ""}
                     onChange={(value) => update("glpiTickets", value)}
@@ -3068,7 +6325,7 @@ function IssueEditor({
               </div>
               <div className="incomplete-target" data-incomplete-target="issue-cr">
                 <ValueHelpField
-                  label="CR SAP No."
+                  label={<FieldLabel label="CR SAP No." badge="optional" />}
                   kind="cr"
                   value={form.crLinks || ""}
                   onChange={(value) => update("crLinks", value.toUpperCase())}
@@ -3106,13 +6363,17 @@ function IssueEditor({
                 </div>
               ) : null}
             </div>
-            <div className="initiation-section">
-              <h3>People</h3>
+
+            <div className="initiation-section micro-card">
+              <h3>
+                <span className="micro-card-icon-badge" style={{ background: "#f0fdf4", color: "#0f766e" }}><Users size={16} /></span>
+                Key Stakeholders &amp; Team
+              </h3>
               <div className="repeatable-row-field" data-incomplete-target="issue-requesters">
-                <MultiValueHelpField label="Requester" kind="people" role="requester" personMode="full_name" value={form.requesterNames || ""} onChange={(value) => update("requesterNames", value)} placeholder="Full name" disabled={formDisabled} />
+                <MultiValueHelpField label={<FieldLabel label="Requester" badges={["required", "ai-powered"]} />} kind="people" role="requester" personMode="full_name" value={form.requesterNames || ""} onChange={(value) => update("requesterNames", value)} placeholder="Full name" disabled={formDisabled} />
               </div>
               <div className="repeatable-row-field" data-incomplete-target="issue-abapers">
-                <MultiValueHelpField label="ABAPer" kind="people" role="abaper" personMode="full_name" value={form.abaperNames || ""} onChange={(value) => update("abaperNames", value)} placeholder="Full name" disabled={formDisabled} />
+                <MultiValueHelpField label={<FieldLabel label="ABAPer / Developer" badges={["required", "ai-powered"]} />} kind="people" role="abaper" personMode="full_name" value={form.abaperNames || ""} onChange={(value) => update("abaperNames", value)} placeholder="Full name" disabled={formDisabled} />
               </div>
               {isCancelled ? (
                 <section className="issue-cancel-card">
@@ -3125,7 +6386,10 @@ function IssueEditor({
           </div>
         ) : null}
       </section>
+      )}
 
+      {/* DEV Processing Section */}
+      {(layoutStyle === "classic" || (layoutStyle === "quick_toggle" && !isQuickMode) || (layoutStyle === "tabs" && editorTab === "transport")) && (
       <section className={`panel editor-section issue-phase-card ${hasCrAssigned ? "" : "phase-muted"}`}>
         <button className="phase-title phase-toggle" type="button" onClick={() => togglePhase("dev")}>
           <ChevronDown size={18} />
@@ -3140,14 +6404,17 @@ function IssueEditor({
         </button>
         {expandedPhases.dev ? (
           <div className="phase-pair-grid">
-            <ValueHelpField label="DEV Tester" kind="people" role="tester" personMode="full_name" value={form.participants?.dev_tester || ""} onChange={(value) => updateParticipant("dev_tester", value)} placeholder="Full name" disabled={devDisabled} incompleteTarget="issue-dev-tester" />
-            <TimestampInput label="Testing Date" value={form.timeline?.dev_tested_date} onChange={(value) => updateTimeline("dev_tested_date", value)} disabled={devDisabled} incompleteTarget="issue-dev-testing-date" />
-            <ValueHelpField label="DEV Evaluator" kind="people" role="evaluator" personMode="full_name" value={form.participants?.dev_evaluator || ""} onChange={(value) => updateParticipant("dev_evaluator", value)} placeholder="Full name" disabled={devDisabled} incompleteTarget="issue-dev-evaluator" />
-            <TimestampInput label="Evaluation Date" value={form.timeline?.dev_evaluated_date} onChange={(value) => updateTimeline("dev_evaluated_date", value)} disabled={devDisabled} incompleteTarget="issue-dev-evaluation-date" />
+            <ValueHelpField label={<FieldLabel label="DEV Tester" badge="ai-powered" />} kind="people" role="tester" personMode="full_name" value={form.participants?.dev_tester || ""} onChange={(value) => updateParticipant("dev_tester", value)} placeholder="Full name" disabled={devDisabled} incompleteTarget="issue-dev-tester" />
+            <TimestampInput label={<FieldLabel label="Testing Date" badge="auto-filled" />} value={form.timeline?.dev_tested_date} onChange={(value) => updateTimeline("dev_tested_date", value)} disabled={devDisabled} incompleteTarget="issue-dev-testing-date" />
+            <ValueHelpField label={<FieldLabel label="DEV Evaluator" badge="ai-powered" />} kind="people" role="evaluator" personMode="full_name" value={form.participants?.dev_evaluator || ""} onChange={(value) => updateParticipant("dev_evaluator", value)} placeholder="Full name" disabled={devDisabled} incompleteTarget="issue-dev-evaluator" />
+            <TimestampInput label={<FieldLabel label="Evaluation Date" badge="auto-filled" />} value={form.timeline?.dev_evaluated_date} onChange={(value) => updateTimeline("dev_evaluated_date", value)} disabled={devDisabled} incompleteTarget="issue-dev-evaluation-date" />
           </div>
         ) : null}
       </section>
+      )}
 
+      {/* QA Processing Section */}
+      {(layoutStyle === "classic" || (layoutStyle === "quick_toggle" && !isQuickMode) || (layoutStyle === "tabs" && editorTab === "timeline")) && (
       <section className={`panel editor-section issue-phase-card ${qaReady ? "" : "phase-muted"}`}>
         <button className="phase-title phase-toggle" type="button" onClick={() => togglePhase("qa")}>
           <ChevronDown size={18} />
@@ -3162,16 +6429,19 @@ function IssueEditor({
         </button>
         {expandedPhases.qa ? (
           <div className="phase-pair-grid">
-            <ValueHelpField label="QA Transporter" kind="people" role="transporter" personMode="full_name" value={form.participants?.qa_transporter || ""} onChange={(value) => updateParticipant("qa_transporter", value)} placeholder="Full name" disabled={qaDisabled} incompleteTarget="issue-qa-transporter" />
-            <label>Transport Date<input className="readonly-input" value={formatIssueTimestamp(primaryCr?.qa_import_date, primaryCr?.qa_import_time)} readOnly /></label>
-            <ValueHelpField label="QA Tester" kind="people" role="tester" personMode="full_name" value={form.participants?.qa_tester || ""} onChange={(value) => updateParticipant("qa_tester", value)} placeholder="Full name" disabled={qaDisabled} incompleteTarget="issue-qa-tester" />
-            <TimestampInput label="Testing Date" value={form.timeline?.qa_tested_date} onChange={(value) => updateTimeline("qa_tested_date", value)} disabled={qaDisabled} incompleteTarget="issue-qa-testing-date" />
-            <ValueHelpField label="QA Evaluator" kind="people" role="evaluator" personMode="full_name" value={form.participants?.qa_evaluator || ""} onChange={(value) => updateParticipant("qa_evaluator", value)} placeholder="Full name" disabled={qaDisabled} incompleteTarget="issue-qa-evaluator" />
-            <TimestampInput label="Evaluation Date" value={form.timeline?.qa_evaluated_date} onChange={(value) => updateTimeline("qa_evaluated_date", value)} disabled={qaDisabled} incompleteTarget="issue-qa-evaluation-date" />
+            <ValueHelpField label={<FieldLabel label="QA Transporter" badge="ai-powered" />} kind="people" role="transporter" personMode="full_name" value={form.participants?.qa_transporter || ""} onChange={(value) => updateParticipant("qa_transporter", value)} placeholder="Full name" disabled={qaDisabled} incompleteTarget="issue-qa-transporter" />
+            <label><FieldLabel label="Transport Date" badge="auto-filled" /><input className="readonly-input" value={formatIssueTimestamp(primaryCr?.qa_import_date, primaryCr?.qa_import_time)} readOnly /></label>
+            <ValueHelpField label={<FieldLabel label="QA Tester" badge="ai-powered" />} kind="people" role="tester" personMode="full_name" value={form.participants?.qa_tester || ""} onChange={(value) => updateParticipant("qa_tester", value)} placeholder="Full name" disabled={qaDisabled} incompleteTarget="issue-qa-tester" />
+            <TimestampInput label={<FieldLabel label="Testing Date" badge="auto-filled" />} value={form.timeline?.qa_tested_date} onChange={(value) => updateTimeline("qa_tested_date", value)} disabled={qaDisabled} incompleteTarget="issue-qa-testing-date" />
+            <ValueHelpField label={<FieldLabel label="QA Evaluator" badge="ai-powered" />} kind="people" role="evaluator" personMode="full_name" value={form.participants?.qa_evaluator || ""} onChange={(value) => updateParticipant("qa_evaluator", value)} placeholder="Full name" disabled={qaDisabled} incompleteTarget="issue-qa-evaluator" />
+            <TimestampInput label={<FieldLabel label="Evaluation Date" badge="auto-filled" />} value={form.timeline?.qa_evaluated_date} onChange={(value) => updateTimeline("qa_evaluated_date", value)} disabled={qaDisabled} incompleteTarget="issue-qa-evaluation-date" />
           </div>
         ) : null}
       </section>
+      )}
 
+      {/* PRD Processing Section */}
+      {(layoutStyle === "classic" || (layoutStyle === "quick_toggle" && !isQuickMode) || (layoutStyle === "tabs" && editorTab === "timeline")) && (
       <section className={`panel editor-section issue-phase-card ${prdReady ? "" : "phase-muted"}`}>
         <button className="phase-title phase-toggle" type="button" onClick={() => togglePhase("prd")}>
           <ChevronDown size={18} />
@@ -3186,20 +6456,65 @@ function IssueEditor({
         </button>
         {expandedPhases.prd ? (
           <div className="phase-pair-grid">
-            <ValueHelpField label="PRD Requester" kind="people" role="requester" personMode="full_name" value={form.participants?.prd_requester || ""} onChange={(value) => updateParticipant("prd_requester", value)} placeholder="Full name" disabled={prdRequestDisabled} incompleteTarget="issue-prd-requester" />
-            <TimestampInput label="Request Date" value={form.timeline?.prd_requested_date} onChange={(value) => updateTimeline("prd_requested_date", value)} disabled={prdRequestDisabled} incompleteTarget="issue-prd-request-date" />
-            <ValueHelpField label="PRD Evaluator" kind="people" role="evaluator" personMode="full_name" value={form.participants?.prd_evaluator || ""} onChange={(value) => updateParticipant("prd_evaluator", value)} placeholder="Full name" disabled={prdRequestDisabled} incompleteTarget="issue-prd-evaluator" />
-            <TimestampInput label="Evaluation Date" value={form.timeline?.prd_evaluated_date} onChange={(value) => updateTimeline("prd_evaluated_date", value)} disabled={prdRequestDisabled} incompleteTarget="issue-prd-evaluation-date" />
-            <ValueHelpField label="Approver" kind="people" role="approver" personMode="full_name" value={form.participants?.approval || ""} onChange={(value) => updateParticipant("approval", value)} placeholder="Full name" disabled={prdRequestDisabled} incompleteTarget="issue-approver" />
-            <TimestampInput label="Approval Date" value={form.timeline?.approval_date} onChange={(value) => updateTimeline("approval_date", value)} disabled={prdRequestDisabled} incompleteTarget="issue-approval-date" />
-            <ValueHelpField label="PRD Transporter" kind="people" role="transporter" personMode="full_name" value={form.participants?.executor || ""} onChange={(value) => updateParticipant("executor", value)} placeholder="Full name" disabled={prdTransportDisabled} incompleteTarget="issue-prd-transporter" />
-            <label>Transport Date<input className="readonly-input" value={formatIssueTimestamp(primaryCr?.prd_import_date, primaryCr?.prd_import_time)} readOnly /></label>
+            <ValueHelpField label={<FieldLabel label="PRD Requester" badge="ai-powered" />} kind="people" role="requester" personMode="full_name" value={form.participants?.prd_requester || ""} onChange={(value) => updateParticipant("prd_requester", value)} placeholder="Full name" disabled={prdRequestDisabled} incompleteTarget="issue-prd-requester" />
+            <TimestampInput label={<FieldLabel label="Request Date" badge="auto-filled" />} value={form.timeline?.prd_requested_date} onChange={(value) => updateTimeline("prd_requested_date", value)} disabled={prdRequestDisabled} incompleteTarget="issue-prd-request-date" />
+            <ValueHelpField label={<FieldLabel label="PRD Evaluator" badge="ai-powered" />} kind="people" role="evaluator" personMode="full_name" value={form.participants?.prd_evaluator || ""} onChange={(value) => updateParticipant("prd_evaluator", value)} placeholder="Full name" disabled={prdRequestDisabled} incompleteTarget="issue-prd-evaluator" />
+            <TimestampInput label={<FieldLabel label="Evaluation Date" badge="auto-filled" />} value={form.timeline?.prd_evaluated_date} onChange={(value) => updateTimeline("prd_evaluated_date", value)} disabled={prdRequestDisabled} incompleteTarget="issue-prd-evaluation-date" />
+            <ValueHelpField label={<FieldLabel label="Approver" badge="ai-powered" />} kind="people" role="approver" personMode="full_name" value={form.participants?.approval || ""} onChange={(value) => updateParticipant("approval", value)} placeholder="Full name" disabled={prdRequestDisabled} incompleteTarget="issue-approver" />
+            <TimestampInput label={<FieldLabel label="Approval Date" badge="auto-filled" />} value={form.timeline?.approval_date} onChange={(value) => updateTimeline("approval_date", value)} disabled={prdRequestDisabled} incompleteTarget="issue-approval-date" />
+            <ValueHelpField label={<FieldLabel label="PRD Transporter" badge="ai-powered" />} kind="people" role="transporter" personMode="full_name" value={form.participants?.executor || ""} onChange={(value) => updateParticipant("executor", value)} placeholder="Full name" disabled={prdTransportDisabled} incompleteTarget="issue-prd-transporter" />
+            <label><FieldLabel label="Transport Date" badge="auto-filled" /><input className="readonly-input" value={formatIssueTimestamp(primaryCr?.prd_import_date, primaryCr?.prd_import_time)} readOnly /></label>
           </div>
         ) : null}
       </section>
+      )}
+
+      {/* Tab Stepper Footer Controls */}
+      {layoutStyle === "tabs" && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "16px 0 24px 0", padding: "14px 18px", background: "var(--color-bg-elevated, #ffffff)", border: "1px solid var(--color-border, #cbd5e1)", borderRadius: "12px" }}>
+          <button
+            type="button"
+            className="secondary"
+            disabled={editorTab === "basic"}
+            onClick={() => {
+              const tabs: ("basic" | "team" | "transport" | "timeline")[] = ["basic", "team", "transport", "timeline"];
+              const idx = tabs.indexOf(editorTab);
+              if (idx > 0) setEditorTab(tabs[idx - 1]);
+            }}
+            style={{ display: "flex", alignItems: "center", gap: "6px" }}
+          >
+            <ArrowLeft size={16} /> Previous Step
+          </button>
+
+          <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "#0f766e" }}>
+            Step {["basic", "team", "transport", "timeline"].indexOf(editorTab) + 1} of 4: {[
+              "Basic Info & Problem",
+              "Team & Stakeholders",
+              "SAP Transport & CR Links",
+              "Timeline & Sign-off Dates"
+            ][["basic", "team", "transport", "timeline"].indexOf(editorTab)]}
+          </span>
+
+          {editorTab !== "timeline" ? (
+            <button
+              type="button"
+              className="primary"
+              onClick={() => {
+                const tabs: ("basic" | "team" | "transport" | "timeline")[] = ["basic", "team", "transport", "timeline"];
+                const idx = tabs.indexOf(editorTab);
+                if (idx < tabs.length - 1) setEditorTab(tabs[idx + 1]);
+              }}
+              style={{ display: "flex", alignItems: "center", gap: "6px" }}
+            >
+              Next Step <ArrowRight size={16} />
+            </button>
+          ) : (
+            <span style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", fontWeight: "600" }}>Final Step</span>
+          )}
+        </div>
+      )}
       <div className="editor-safe-space" aria-hidden="true" />
       <div className="issue-save-bar">
-        <span>Actions</span>
         <div className="sticky-actions">
           {mode === "change" ? (
             <>
@@ -3208,7 +6523,7 @@ function IssueEditor({
                   setGenerateMenuOpen((current) => !current);
                   setMoreMenuOpen(false);
                 }} disabled={templateBusy !== "" || !detail?.issue?.id}>
-                  <FileOutput size={16} /> {templateBusy ? "Generating" : "Generate"} <ChevronDown size={14} />
+                  <FileOutput size={16} /> {templateBusy ? "Generating..." : "Generate"} <ChevronDown size={14} />
                 </button>
                 {generateMenuOpen ? (
                   <div className="sticky-action-menu-list">
@@ -3253,10 +6568,33 @@ function IssueEditor({
                   }}><Trash2 size={15} /> Delete Issue</button>
                 </div>
               ) : null}
-              {isCancelled ? <span className="readonly-note">Cancelled issue is read-only.</span> : null}
+              {isCancelled ? <span className="readonly-note">Read-Only</span> : null}
             </div>
           ) : null}
-          {!isCancelled ? <button className="primary" type="submit" disabled={saving}><Save size={16} /> {saving ? "Saving" : "Save"}</button> : null}
+          {!isCancelled ? (
+            <button
+              className="primary"
+              type="submit"
+              disabled={saving}
+              style={{
+                height: "36px",
+                padding: "0 18px",
+                borderRadius: "8px",
+                fontWeight: "600",
+                fontSize: "0.875rem",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                background: "#0f766e",
+                color: "#ffffff",
+                border: "none",
+                cursor: saving ? "not-allowed" : "pointer"
+              }}
+            >
+              <Save size={16} className={saving ? "spinner" : ""} />
+              <span>{saving ? "Saving..." : "Save Issue"}</span>
+            </button>
+          ) : null}
         </div>
       </div>
       {templatePreview ? (
@@ -3348,68 +6686,130 @@ function IssueEditor({
         isOpen={showAiOverwriteModal}
         onClose={() => setShowAiOverwriteModal(false)}
         title="Replace Existing Content?"
-        subtitle="Some fields already contain text. Check the fields you want AI to replace:"
+        subtitle="The following fields already contain data. Uncheck any field you want AI to KEEP without replacing:"
         type="purple"
         confirmText="Generate AI"
         cancelText="Cancel"
-        confirmDisabled={!aiOverwriteSelections.issueName && !aiOverwriteSelections.problemAnalysis && !aiOverwriteSelections.impactAnalysis}
+        confirmDisabled={generatingAi}
         onConfirm={async () => {
           setShowAiOverwriteModal(false);
           await executeAiGeneration(aiOverwriteSelections);
         }}
       >
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", background: "var(--color-bg-subtle, #f8fafc)", padding: "1rem", borderRadius: "10px", border: "1px solid var(--color-border, #e2e8f0)" }}>
-          {Boolean(form.issueName?.trim()) && (
-            <label style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem", cursor: "pointer", fontSize: "0.875rem", color: "var(--color-text, #1f2937)", padding: "0.375rem 0" }}>
-              <input
-                type="checkbox"
-                checked={aiOverwriteSelections.issueName}
-                onChange={(e) => setAiOverwriteSelections(prev => ({ ...prev, issueName: e.target.checked }))}
-                style={{ marginTop: "0.2rem", width: "1.1rem", height: "1.1rem", accentColor: "#6366f1" }}
-              />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600 }}>Replace Issue Name</div>
-                <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #6b7280)", fontStyle: "italic", marginTop: "0.125rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "380px" }}>
-                  Current: "{form.issueName}"
-                </div>
-              </div>
-            </label>
-          )}
+        {(() => {
+          const fields = getExistingFormFields();
+          const selectedCount = fields.filter((f) => aiOverwriteSelections[f.key] !== false).length;
 
-          {Boolean(form.problemAnalysis?.trim()) && (
-            <label style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem", cursor: "pointer", fontSize: "0.875rem", color: "var(--color-text, #1f2937)", padding: "0.375rem 0" }}>
-              <input
-                type="checkbox"
-                checked={aiOverwriteSelections.problemAnalysis}
-                onChange={(e) => setAiOverwriteSelections(prev => ({ ...prev, problemAnalysis: e.target.checked }))}
-                style={{ marginTop: "0.2rem", width: "1.1rem", height: "1.1rem", accentColor: "#6366f1" }}
-              />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600 }}>Replace Problem Analysis</div>
-                <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #6b7280)", fontStyle: "italic", marginTop: "0.125rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "380px" }}>
-                  Current: "{form.problemAnalysis?.slice(0, 60)}..."
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  borderBottom: "1px solid var(--color-border, #e2e8f0)",
+                  paddingBottom: "8px",
+                  position: "sticky",
+                  top: "-20px",
+                  background: "var(--color-bg-elevated, #ffffff)",
+                  zIndex: 10,
+                  paddingTop: "4px",
+                  marginTop: "-4px"
+                }}
+              >
+                <span style={{ fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)" }}>
+                  Fields to Replace ({selectedCount} of {fields.length} selected)
+                </span>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const all: Record<string, boolean> = {};
+                      fields.forEach((f) => { all[f.key] = true; });
+                      setAiOverwriteSelections(all);
+                    }}
+                    style={{ border: "none", background: "none", color: "#0f766e", fontSize: "0.75rem", fontWeight: "600", cursor: "pointer", padding: 0 }}
+                  >
+                    Select All
+                  </button>
+                  <span style={{ color: "var(--color-border, #cbd5e1)", fontSize: "0.75rem" }}>|</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const none: Record<string, boolean> = {};
+                      fields.forEach((f) => { none[f.key] = false; });
+                      setAiOverwriteSelections(none);
+                    }}
+                    style={{ border: "none", background: "none", color: "#dc2626", fontSize: "0.75rem", fontWeight: "600", cursor: "pointer", padding: 0 }}
+                  >
+                    Deselect All
+                  </button>
                 </div>
               </div>
-            </label>
-          )}
 
-          {Boolean(form.impactAnalysis?.trim()) && (
-            <label style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem", cursor: "pointer", fontSize: "0.875rem", color: "var(--color-text, #1f2937)", padding: "0.375rem 0" }}>
-              <input
-                type="checkbox"
-                checked={aiOverwriteSelections.impactAnalysis}
-                onChange={(e) => setAiOverwriteSelections(prev => ({ ...prev, impactAnalysis: e.target.checked }))}
-                style={{ marginTop: "0.2rem", width: "1.1rem", height: "1.1rem", accentColor: "#6366f1" }}
-              />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600 }}>Replace Impact Analysis</div>
-                <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #6b7280)", fontStyle: "italic", marginTop: "0.125rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "380px" }}>
-                  Current: "{form.impactAnalysis?.slice(0, 60)}..."
-                </div>
-              </div>
-            </label>
-          )}
-        </div>
+              {fields.map((field) => {
+                const isChecked = aiOverwriteSelections[field.key] !== false;
+                const categoryColor = field.category === "Analysis" ? "#6366f1" : field.category === "People" ? "#0f766e" : "#d97706";
+
+                return (
+                  <label
+                    key={field.key}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.85rem",
+                      cursor: "pointer",
+                      fontSize: "0.85rem",
+                      color: "var(--color-text, #1f2937)",
+                      background: isChecked ? "var(--color-bg-subtle, #f8fafc)" : "var(--color-bg, #ffffff)",
+                      padding: "10px 14px",
+                      borderRadius: "10px",
+                      border: isChecked ? "1px solid #c7d2fe" : "1px solid var(--color-border, #e2e8f0)",
+                      transition: "all 0.15s ease"
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={(e) => setAiOverwriteSelections((prev) => ({ ...prev, [field.key]: e.target.checked }))}
+                      style={{ margin: 0, width: "1.1rem", height: "1.1rem", accentColor: "#6366f1", flexShrink: 0 }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ fontWeight: 600 }}>Replace {field.label}</span>
+                        <span
+                          style={{
+                            fontSize: "0.7rem",
+                            padding: "1px 6px",
+                            borderRadius: "4px",
+                            background: `${categoryColor}15`,
+                            color: categoryColor,
+                            fontWeight: 600
+                          }}
+                        >
+                          {field.category}
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "0.75rem",
+                          color: "var(--color-text-muted, #6b7280)",
+                          fontStyle: "italic",
+                          marginTop: "2px",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis"
+                        }}
+                      >
+                        Current: "{field.currentValue.length > 55 ? `${field.currentValue.slice(0, 55)}...` : field.currentValue}"
+                      </div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          );
+        })()}
       </UIModal>
     </form>
   );
@@ -3420,6 +6820,7 @@ function ChangeIssue({
   initialAction = "",
   initialIncompleteItem = null,
   refreshToken = 0,
+  layoutStyleOverride,
   onSave,
   onCancel,
   onDelete,
@@ -3430,6 +6831,7 @@ function ChangeIssue({
   initialAction?: "" | "cancel" | "delete";
   initialIncompleteItem?: IncompleteItem | null;
   refreshToken?: number;
+  layoutStyleOverride?: "tabs" | "quick_toggle" | "classic";
   onSave: (payload: IssueSavePayload) => Promise<void>;
   onCancel: (id: number, reason: string) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
@@ -3538,37 +6940,6 @@ function ChangeIssue({
 
   return (
     <div className="issue-change-layout">
-      <form className="panel issue-selection-panel" onSubmit={search}>
-        <div className="panel-heading">
-          <h2>Selection Parameter</h2>
-        </div>
-        <div className="issue-selection-grid">
-          <label>Issue / Description / Requester
-            <input value={selection.q} onChange={(event) => updateSelection("q", event.target.value)} placeholder="Issue no, description, requester" />
-          </label>
-          <label>GLPI
-            <input value={selection.glpi} onChange={(event) => updateSelection("glpi", event.target.value)} placeholder="15293" />
-          </label>
-          <label>CR Helpdesk No.
-            <input value={selection.crHelpdesk} onChange={(event) => updateSelection("crHelpdesk", event.target.value)} placeholder="CR Helpdesk No." />
-          </label>
-          <label>CR
-            <input value={selection.cr} onChange={(event) => updateSelection("cr", event.target.value)} placeholder="TRDK..." />
-          </label>
-        </div>
-        {showCandidates ? (
-          <div className="issue-candidate-list">
-            {candidates.map((issue) => (
-              <button type="button" key={issue.id} className={changeDetail?.issue?.id === issue.id ? "selected" : ""} onClick={() => openIssue(issue).catch((err) => onNotify("error", err instanceof Error ? err.message : String(err)))}>
-                <strong>{issue.issue_key}</strong>
-                <span>{issue.issue_name}</span>
-                <small>{[issue.primary_cr, issue.primary_cr_helpdesk_no, formatGlpi(issue.primary_glpi_ticket), formatStatusLabel(issue.issue_status)].filter(Boolean).join(" - ")}</small>
-              </button>
-            ))}
-            {searched && !searching && candidates.length === 0 ? <span className="empty">No issue found.</span> : null}
-          </div>
-        ) : null}
-      </form>
 
       {changeDetail?.issue ? (
         <section className="panel issue-change-summary">
@@ -3580,7 +6951,7 @@ function ChangeIssue({
             <Status value={changeDetail.issue.issue_status} />
           </div>
           {missing.length ? (
-            <details className="change-summary-details" open>
+            <details className="change-summary-details">
               <summary>{missing.length} incomplete item(s)</summary>
               <IncompleteGroupCards groups={missingGroups} onItemClick={navigateToIncompleteItem} />
             </details>
@@ -3588,7 +6959,7 @@ function ChangeIssue({
         </section>
       ) : null}
 
-      {changeDetail ? <IssueEditor mode="change" detail={changeDetail} initialAction={initialAction} navigationRequest={navigationRequest} onNotify={onNotify} onSave={onSave} onCancel={onCancel} onDelete={onDelete} onDirtyChange={onDirtyChange} /> : null}
+      {changeDetail ? <IssueEditor mode="change" detail={changeDetail} layoutStyleOverride={layoutStyleOverride} initialAction={initialAction} navigationRequest={navigationRequest} onNotify={onNotify} onSave={onSave} onCancel={onCancel} onDelete={onDelete} onDirtyChange={onDirtyChange} /> : null}
     </div>
   );
 }
@@ -3605,7 +6976,7 @@ function ValueHelpField({
   incompleteTarget,
   role
 }: {
-  label: string;
+  label: React.ReactNode | string;
   kind: ValueHelpKind;
   personMode?: "full_name" | "nickname";
   value: string;
@@ -3691,7 +7062,7 @@ function TimestampInput({
   disabled = false,
   incompleteTarget
 }: {
-  label: string;
+  label: React.ReactNode | string;
   value?: string;
   onChange: (value: string) => void;
   disabled?: boolean;
@@ -3739,7 +7110,7 @@ function MultiValueHelpField({
   disabled = false,
   role
 }: {
-  label: string;
+  label: React.ReactNode | string;
   kind: ValueHelpKind;
   personMode?: "full_name" | "nickname";
   value: string;
@@ -3776,9 +7147,9 @@ function MultiValueHelpField({
         <button type="button" className="mini-action" onClick={addRow} disabled={disabled}><Plus size={14} /> Add</button>
       </div>
       {visibleRows.map((rowValue, index) => (
-        <div className="multi-value-row" key={`${label}-${index}`}>
+        <div className="multi-value-row" key={`multi-row-${index}`}>
           <ValueHelpField
-            label={`${label} ${index + 1}`}
+            label={index === 0 ? "" : `Person #${index + 1}`}
             kind={kind}
             role={role}
             personMode={personMode}

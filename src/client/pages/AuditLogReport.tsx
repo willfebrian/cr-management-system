@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Search, RefreshCw, Filter, ShieldCheck, User, Cpu, FileCode2, FolderGit2, Database, Settings, KeyRound } from "lucide-react";
 import { fetchAuditLogs, ActivityLogItem, ActivityLogSummary, ActivityLogFilters } from "../api";
+import { TableDataLoader } from "../components/InteractiveLoaders";
 
 export function AuditLogReport() {
   const [logs, setLogs] = useState<ActivityLogItem[]>([]);
@@ -100,26 +101,17 @@ export function AuditLogReport() {
       day: "2-digit",
       hour: "2-digit",
       minute: "2-digit",
-      second: "2-digit"
     });
   };
 
+  useEffect(() => {
+    const handleRefresh = () => loadData(activeFilters, page);
+    window.addEventListener("trigger-refresh-audit-log", handleRefresh);
+    return () => window.removeEventListener("trigger-refresh-audit-log", handleRefresh);
+  }, [activeFilters, page]);
+
   return (
     <div className="report-container" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-      {/* Header Title */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div>
-          <h1 style={{ fontSize: "24px", fontWeight: "700", display: "flex", alignItems: "center", gap: "10px", margin: 0 }}>
-            <ShieldCheck size={26} color="#0f766e" /> Audit Log & Activity Report
-          </h1>
-          <p style={{ color: "#64748b", margin: "4px 0 0", fontSize: "14px" }}>
-            Comprehensive audit trail of all user and system activities (automatically retained for 1 year).
-          </p>
-        </div>
-        <button className="secondary" onClick={() => loadData(activeFilters, page)} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-          <RefreshCw size={14} className={loading ? "animate-spin" : ""} /> Refresh
-        </button>
-      </div>
 
       {/* Metric Collages */}
       <div className="summary-metrics-bar summary-metrics-bar-6">
@@ -239,9 +231,8 @@ export function AuditLogReport() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} style={{ padding: "40px 0", textAlign: "center", color: "#0f766e" }}>
-                    <RefreshCw className="animate-spin" size={22} style={{ margin: "0 auto 8px" }} />
-                    <div>Loading activity logs...</div>
+                  <td colSpan={6} style={{ padding: 0 }}>
+                    <TableDataLoader text="Loading activity logs..." />
                   </td>
                 </tr>
               ) : logs.length === 0 ? (

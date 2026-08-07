@@ -5,6 +5,7 @@ import { fetchProjectDetail, fetchProjects } from "../../api/projectApi.js";
 import { ProjectDetail } from "./ProjectDetail.js";
 import { ProjectActions } from "./ProjectActions.js";
 import type { IncompleteItem } from "../../issueIncomplete.js";
+import { TableDataLoader } from "../InteractiveLoaders.js";
 
 export type ProjectReportState =
   | { kind: "loading" }
@@ -19,6 +20,8 @@ export type ProjectReportState =
     };
 
 type ProjectReportProps = {
+  q?: string;
+  status?: ProjectStatus | "all";
   onCreate?: () => void;
   onChange?: (projectId: number) => void;
   onOpenIssue?: (issueId: number) => void;
@@ -28,11 +31,14 @@ type ProjectReportProps = {
 };
 
 export function ProjectReport(props: ProjectReportProps) {
-  const [q, setQ] = useState("");
-  const [status, setStatus] = useState<ProjectStatus | "all">("all");
+  const [internalQ, setInternalQ] = useState("");
+  const [internalStatus, setInternalStatus] = useState<ProjectStatus | "all">("all");
   const [page, setPage] = useState(1);
   const [refreshToken, setRefreshToken] = useState(0);
   const [state, setState] = useState<ProjectReportState>({ kind: "loading" });
+
+  const q = props.q !== undefined ? props.q : internalQ;
+  const status = props.status !== undefined ? props.status : internalStatus;
 
   useEffect(() => {
     let active = true;
@@ -69,26 +75,6 @@ export function ProjectReport(props: ProjectReportProps) {
   }
 
   return <div className="project-report-shell">
-    <header className="project-report-toolbar">
-      <div>
-        <p className="project-eyebrow">Portfolio</p>
-        <h1>Projects</h1>
-      </div>
-      {props.onCreate && <button className="project-button project-button--primary" type="button" onClick={props.onCreate}>
-        <Plus size={16} aria-hidden="true" /> Create Project
-      </button>}
-    </header>
-    <div className="project-report-filters">
-      <label className="project-field"><span>Search</span><input value={q} onChange={(event) => { setQ(event.currentTarget.value); setPage(1); }} /></label>
-      <label className="project-field"><span>Status</span><select value={status} onChange={(event) => { setStatus(event.currentTarget.value as ProjectStatus | "all"); setPage(1); }}>
-        <option value="all">All statuses</option>
-        <option value="planned">Planned</option>
-        <option value="in_progress">In Progress</option>
-        <option value="on_hold">On Hold</option>
-        <option value="completed">Completed</option>
-        <option value="cancelled">Cancelled</option>
-      </select></label>
-    </div>
     <ProjectReportView
       state={state}
       onSelect={select}
@@ -119,7 +105,7 @@ type ProjectReportViewProps = {
 };
 
 export function ProjectReportView({ state, onSelect, onChange, onOpenIssue, onOpenIncompleteItem, userRole, onDeleted, onPrevious, onNext }: ProjectReportViewProps) {
-  if (state.kind === "loading") return <p className="project-state">Loading Projects…</p>;
+  if (state.kind === "loading") return <TableDataLoader text="Loading project records..." />;
   if (state.kind === "empty") return <p className="project-state">No Projects found.</p>;
   if (state.kind === "error") return <p className="project-error" role="alert">{state.message}</p>;
   return <div className="project-report-workspace">

@@ -236,7 +236,7 @@ export type CrRequestFilters = {
 };
 
 export async function listCrRequests(filters: CrRequestFilters = {}) {
-  const where: string[] = ["parent_request IS NULL", "upper(owner) = 'TRSTDEV'"];
+  const where: string[] = ["cr_requests.parent_request IS NULL", "upper(cr_requests.owner) = 'TRSTDEV'"];
   const params: unknown[] = [];
   const page = Math.max(Number(filters.page || 1), 1);
   const pageSize = Math.min(Math.max(Number(filters.pageSize || 10), 1), 100);
@@ -244,18 +244,18 @@ export async function listCrRequests(filters: CrRequestFilters = {}) {
 
   if (filters.sapSystemCode && filters.sapSystemCode !== "all") {
     params.push(filters.sapSystemCode.toUpperCase());
-    where.push(`sap_system_code = $${params.length}`);
+    where.push(`cr_requests.sap_system_code = $${params.length}`);
   }
   if (filters.status && filters.status !== "all") {
     params.push(filters.status);
-    where.push(`status_group = $${params.length}`);
+    where.push(`cr_requests.status_group = $${params.length}`);
   }
   if (filters.agingDays) {
-    where.push(`changed_date < current_date - interval '${Number(filters.agingDays)} days'`);
+    where.push(`cr_requests.changed_date < current_date - interval '${Number(filters.agingDays)} days'`);
   }
   if (filters.lifecycleStatus && filters.lifecycleStatus !== "all") {
     if (filters.lifecycleStatus === "pending_qa") {
-      where.push(`sap_system_code = 'DEV' AND status_group = 'released' AND NOT EXISTS (
+      where.push(`cr_requests.sap_system_code = 'DEV' AND cr_requests.status_group = 'released' AND NOT EXISTS (
         SELECT 1 FROM cr_transport_lifecycle qa
         WHERE qa.source_system_code = 'DEV'
           AND qa.target_system_code = 'QA'
@@ -264,7 +264,7 @@ export async function listCrRequests(filters: CrRequestFilters = {}) {
       )`);
     }
     if (filters.lifecycleStatus === "in_qa") {
-      where.push(`sap_system_code = 'DEV' AND EXISTS (
+      where.push(`cr_requests.sap_system_code = 'DEV' AND EXISTS (
         SELECT 1 FROM cr_transport_lifecycle qa
         WHERE qa.source_system_code = 'DEV'
           AND qa.target_system_code = 'QA'
@@ -273,7 +273,7 @@ export async function listCrRequests(filters: CrRequestFilters = {}) {
       )`);
     }
     if (filters.lifecycleStatus === "pending_prd") {
-      where.push(`sap_system_code = 'DEV' AND EXISTS (
+      where.push(`cr_requests.sap_system_code = 'DEV' AND EXISTS (
         SELECT 1 FROM cr_transport_lifecycle qa
         WHERE qa.source_system_code = 'DEV'
           AND qa.target_system_code = 'QA'
@@ -288,7 +288,7 @@ export async function listCrRequests(filters: CrRequestFilters = {}) {
       )`);
     }
     if (filters.lifecycleStatus === "in_prd") {
-      where.push(`sap_system_code = 'DEV' AND EXISTS (
+      where.push(`cr_requests.sap_system_code = 'DEV' AND EXISTS (
         SELECT 1 FROM cr_transport_lifecycle prd
         WHERE prd.source_system_code = 'DEV'
           AND prd.target_system_code = 'PRD'
@@ -299,15 +299,15 @@ export async function listCrRequests(filters: CrRequestFilters = {}) {
   }
   if (filters.owner) {
     params.push(filters.owner.toUpperCase());
-    where.push(`owner = $${params.length}`);
+    where.push(`cr_requests.owner = $${params.length}`);
   }
   if (filters.fromDate) {
     params.push(filters.fromDate);
-    where.push(`changed_date >= $${params.length}::date`);
+    where.push(`cr_requests.changed_date >= $${params.length}::date`);
   }
   if (filters.toDate) {
     params.push(filters.toDate);
-    where.push(`changed_date <= $${params.length}::date`);
+    where.push(`cr_requests.changed_date <= $${params.length}::date`);
   }
   const query = filters.q?.trim();
   if (query) {
@@ -346,10 +346,13 @@ export async function listCrRequests(filters: CrRequestFilters = {}) {
   const total = Number(countResult.rows[0]?.total || 0);
   params.push(pageSize, offset);
   const { rows } = await pool.query(`
-    SELECT sap_system_code, trkorr, parent_request, description, function_code, status_code, status_group,
-           target_system, category, owner, changed_date, changed_time, updated_at,
+    SELECT cr_requests.sap_system_code, cr_requests.trkorr, cr_requests.parent_request, cr_requests.description, cr_requests.function_code, cr_requests.status_code, cr_requests.status_group,
+           cr_requests.target_system, cr_requests.category, cr_requests.owner, cr_requests.changed_date, cr_requests.changed_time, cr_requests.updated_at,
+           icl.issue_id AS linked_issue_id,
+           CASE WHEN ih.id IS NOT NULL THEN ih.issue_no || '-' || ih.sub_issue_no ELSE NULL END AS linked_issue_key,
+           ih.issue_name AS linked_issue_name,
            CASE
-             WHEN status_group <> 'released' THEN status_group
+             WHEN cr_requests.status_group <> 'released' THEN cr_requests.status_group
              WHEN EXISTS (
                SELECT 1 FROM cr_transport_lifecycle prd
                WHERE prd.source_system_code = 'DEV'
@@ -364,12 +367,14 @@ export async function listCrRequests(filters: CrRequestFilters = {}) {
                  AND qa.trkorr = cr_requests.trkorr
                  AND qa.transport_status = 'imported'
              ) THEN 'pending_prd'
-             WHEN sap_system_code = 'DEV' AND status_group = 'released' THEN 'pending_qa'
+             WHEN cr_requests.sap_system_code = 'DEV' AND cr_requests.status_group = 'released' THEN 'pending_qa'
              ELSE 'unknown'
            END AS lifecycle_status
     FROM cr_requests
+    LEFT JOIN issue_cr_links icl ON icl.trkorr = cr_requests.trkorr
+    LEFT JOIN issue_headers ih ON ih.id = icl.issue_id
     ${whereSql}
-    ORDER BY trkorr DESC
+    ORDER BY cr_requests.trkorr DESC
     LIMIT $${params.length - 1} OFFSET $${params.length}
   `, params);
   return {

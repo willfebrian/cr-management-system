@@ -344,8 +344,8 @@ export async function getIssueDashboardInsights() {
         h.create_issue_date,
         CASE
           WHEN lower(coalesce(h.issue_status, '')) = 'cancelled' THEN 'cancelled'
+          WHEN primary_cr.lifecycle_status = 'in_prd' OR lower(coalesce(h.issue_status, '')) = 'ok' THEN 'ok'
           WHEN primary_cr.trkorr IS NULL THEN 'open'
-          WHEN primary_cr.lifecycle_status = 'in_prd' THEN 'ok'
           ELSE 'in_progress'
         END AS issue_status,
         CASE

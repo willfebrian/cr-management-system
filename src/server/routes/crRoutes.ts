@@ -7,7 +7,7 @@ import {
   listCrRequests,
 } from "../db/crRepository.js";
 import { cancelIssue, deleteIssue, getIssueDashboardInsights, getIssueDetail, getIssueStatusOptions, getLeaderDashboardInsights, getNextIssueNumber, getNextSubIssueNumber, listIssues, registerIssuePeople, saveIssue, searchIssueCrHelpdesk, searchIssueCrLinks, searchIssuePeople, validateIssuePeople } from "../db/issueRepository.js";
-import { searchGlpiTicketsFromMaria } from "../db/glpiMariaRepository.js";
+import { getGlpiTicketDetailFromMaria, searchGlpiTicketsFromMaria } from "../db/glpiMariaRepository.js";
 import { getSapCrSystem, listSapCrSystems } from "../config.js";
 import { normalizeLookbackDays, normalizeSyncMode, normalizeSystemCodes, runCrSync } from "../sync/crSyncRunner.js";
 import { buildCrTransportDocument } from "../templates/crTransportTemplateService.js";
@@ -163,6 +163,20 @@ crRoutes.get("/value-help/glpi", async (req, res, next) => {
   try {
     const q = stringQuery(req.query.q) || "";
     res.json({ rows: await searchGlpiTicketsFromMaria(q) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+crRoutes.get("/value-help/glpi/:id", async (req, res, next) => {
+  try {
+    const id = numberQuery(req.params.id, 0);
+    const detail = await getGlpiTicketDetailFromMaria(id);
+    if (!detail) {
+      res.status(404).json({ ok: false, message: `GLPI Ticket #${id} not found.` });
+      return;
+    }
+    res.json({ ok: true, ticket: detail });
   } catch (error) {
     next(error);
   }

@@ -198,6 +198,29 @@ export async function fetchValueHelp(kind: ValueHelpKind, q = "", options?: { ro
   return fetchJson(`/api/value-help/${kind}${params.toString() ? `?${params}` : ""}`);
 }
 
+export type GlpiTicketParticipant = { userId: number; username: string; fullName: string };
+export type GlpiTicketFollowup = { id: number; date: string; author: string; content: string };
+export type GlpiTicketSolution = { id: number; date: string; solver: string; content: string };
+
+export type GlpiTicketDetail = {
+  ticketNumber: number;
+  title: string;
+  content: string;
+  date: string;
+  status: number | string;
+  solvedate?: string | null;
+  closedate?: string | null;
+  requesters: GlpiTicketParticipant[];
+  technicians: GlpiTicketParticipant[];
+  observers: GlpiTicketParticipant[];
+  followups: GlpiTicketFollowup[];
+  solutions: GlpiTicketSolution[];
+};
+
+export async function fetchGlpiTicketDetail(ticketId: number): Promise<{ ok: boolean; ticket: GlpiTicketDetail }> {
+  return fetchJson<{ ok: boolean; ticket: GlpiTicketDetail }>(`/api/value-help/glpi/${ticketId}`);
+}
+
 export type AdminPersonRow = {
   id: number;
   full_name: string | null;
@@ -338,6 +361,8 @@ export type AiAnalysisResult = {
   issueName: string;
   problemAnalysis: string;
   impactAnalysis: string;
+  participants?: Record<string, string>;
+  timeline?: Record<string, string>;
 };
 
 export async function generateAnalysis(emailContext: string, emailSubject?: string, issueName?: string): Promise<AiAnalysisResult> {
