@@ -3714,6 +3714,9 @@ export function App() {
             onExternalCreateModeChange={setIssueCreateMode}
             selectedBaseIssue={selectedBaseIssue}
             nextSubIssueNo={nextSubIssueNo}
+            crTargetSystem={crTargetSystem}
+            onTargetSystemChange={setCrTargetSystem}
+            sapSystems={sapSystems}
             onNotify={showToast}
             onDirtyChange={setIssueFormDirty}
             onSave={async (payload) => {
@@ -3794,6 +3797,9 @@ export function App() {
             initialAction={changeIssueInitialAction}
             initialIncompleteItem={changeIssueInitialItem}
             refreshToken={syncRefreshToken}
+            crTargetSystem={crTargetSystem}
+            onTargetSystemChange={setCrTargetSystem}
+            sapSystems={sapSystems}
             onNotify={showToast}
             onDirtyChange={setIssueFormDirty}
             onSave={async (payload) => {
@@ -5860,6 +5866,9 @@ function IssueEditor({
   selectedBaseIssue,
   nextSubIssueNo = "01",
   layoutStyleOverride,
+  crTargetSystem: externalCrTargetSystem,
+  onTargetSystemChange,
+  sapSystems,
   onNotify,
   onSave,
   onCancel,
@@ -5875,6 +5884,9 @@ function IssueEditor({
   selectedBaseIssue?: IssueRow | null;
   nextSubIssueNo?: string;
   layoutStyleOverride?: "tabs" | "quick_toggle" | "classic";
+  crTargetSystem?: string;
+  onTargetSystemChange?: (val: string) => void;
+  sapSystems?: SapSystemRow[];
   onNotify?: (type: "success" | "error", message: string) => void;
   onSave: (payload: IssueSavePayload) => Promise<void>;
   onCancel?: (id: number, reason: string) => Promise<void>;
@@ -5908,6 +5920,16 @@ function IssueEditor({
   const fetchedGlpiTicketRef = useRef<number | null>(null);
   const [generatingAi, setGeneratingAi] = useState(false);
   const [showAiOverwriteModal, setShowAiOverwriteModal] = useState(false);
+  const [crTargetSystemState, setCrTargetSystemState] = useState<string>(() => {
+    try { return localStorage.getItem("cr_transport_target_system") || "DEV_NC"; } catch { return "DEV_NC"; }
+  });
+  const crTargetSystem = externalCrTargetSystem ?? crTargetSystemState;
+  const setCrTargetSystem = (val: string) => {
+    onTargetSystemChange?.(val);
+    setCrTargetSystemState(val);
+    try { localStorage.setItem("cr_transport_target_system", val); } catch {}
+  };
+  const [createCrModalOpen, setCreateCrModalOpen] = useState(false);
   const [aiOverwriteSelections, setAiOverwriteSelections] = useState<Record<string, boolean>>({});
   const [internalLayoutStyle, setInternalLayoutStyle] = useState<"tabs" | "quick_toggle" | "classic">(() => {
     try {
@@ -6961,26 +6983,56 @@ function IssueEditor({
                 </div>
               </div>
               <div className="incomplete-target" data-incomplete-target="issue-cr">
-                <ValueHelpField
-                  label={<FieldLabel label="CR SAP No." badge="optional" />}
-                  kind="cr"
-                  value={form.crLinks || ""}
-                  onChange={(value) => update("crLinks", value.toUpperCase())}
-                  onSelectRow={(row) => {
-                    const trkorr = String(row.trkorr || "");
-                    if (!trkorr) return;
-                    setCrPreview((current) => ({
-                      ...current,
-                      [trkorr]: {
-                        description: String(row.description || ""),
-                        status: String(row.status_group || ""),
-                        system: String(row.sap_system_code || "")
-                      }
-                    }));
-                  }}
-                  placeholder="TRDK..."
-                  disabled={formDisabled}
-                />
+                <div style={{ display: "flex", alignItems: "flex-end", gap: "8px" }}>
+                  <div style={{ flex: 1 }}>
+                    <ValueHelpField
+                      label={<FieldLabel label="CR SAP No." badge="optional" />}
+                      kind="cr"
+                      value={form.crLinks || ""}
+                      onChange={(value) => update("crLinks", value.toUpperCase())}
+                      onSelectRow={(row) => {
+                        const trkorr = String(row.trkorr || "");
+                        if (!trkorr) return;
+                        setCrPreview((current) => ({
+                          ...current,
+                          [trkorr]: {
+                            description: String(row.description || ""),
+                            status: String(row.status_group || ""),
+                            system: String(row.sap_system_code || "")
+                          }
+                        }));
+                      }}
+                      placeholder="TRDK..."
+                      disabled={formDisabled}
+                    />
+                  </div>
+                  {!form.crLinks?.trim() && !formDisabled ? (
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={() => setCreateCrModalOpen(true)}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        height: "38px",
+                        padding: "0 14px",
+                        borderRadius: "8px",
+                        background: "#0f766e",
+                        color: "#ffffff",
+                        border: "none",
+                        fontWeight: "600",
+                        fontSize: "0.825rem",
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                        marginBottom: "1px"
+                      }}
+                    >
+                      <Plus size={15} />
+                      <span>+ Create CR</span>
+                    </button>
+                  ) : null}
+                </div>
               </div>
               {crTokens.length ? (
                 <div className="reference-hints">
@@ -7385,6 +7437,25 @@ function IssueEditor({
           );
         })()}
       </UIModal>
+      <UIModal
+        isOpen={createCrModalOpen}
+        onClose={() => setCreateCrModalOpen(false)}
+        title="Create CR Transport"
+        subtitle="Resolve SAP repository objects and create a controlled Workbench request."
+        maxWidth="920px"
+        hideFooter={true}
+      >
+        <CrTransportCreate
+          targetSystem={crTargetSystem}
+          onTargetSystemChange={setCrTargetSystem}
+          availableSystems={sapSystems}
+          onRequestCreated={(requestNo) => {
+            update("crLinks", requestNo);
+            setCreateCrModalOpen(false);
+            onNotify?.("success", `Created and linked CR Transport ${requestNo}`);
+          }}
+        />
+      </UIModal>
     </form>
   );
 }
@@ -7395,6 +7466,9 @@ function ChangeIssue({
   initialIncompleteItem = null,
   refreshToken = 0,
   layoutStyleOverride,
+  crTargetSystem,
+  onTargetSystemChange,
+  sapSystems,
   onSave,
   onCancel,
   onDelete,
@@ -7406,6 +7480,9 @@ function ChangeIssue({
   initialIncompleteItem?: IncompleteItem | null;
   refreshToken?: number;
   layoutStyleOverride?: "tabs" | "quick_toggle" | "classic";
+  crTargetSystem?: string;
+  onTargetSystemChange?: (val: string) => void;
+  sapSystems?: SapSystemRow[];
   onSave: (payload: IssueSavePayload) => Promise<void>;
   onCancel: (id: number, reason: string) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
@@ -7478,7 +7555,7 @@ function ChangeIssue({
     setSearched(true);
     setShowCandidates(true);
     if (!selection.q.trim() && !selection.glpi.trim() && !selection.crHelpdesk.trim() && !selection.cr.trim()) {
-      onNotify("error", "Isi minimal Issue, CR Helpdesk, CR SAP, GLPI, atau deskripsi sebelum Search.");
+      onNotify("error", "Please enter at least Issue key, CR Helpdesk, CR SAP, GLPI, or description before searching.");
       setCandidates([]);
       return;
     }
@@ -7487,11 +7564,11 @@ function ChangeIssue({
       const rows = await fetchIssueCandidates(selection);
       setCandidates(rows);
       if (!rows.length) {
-        onNotify("error", "Issue tidak ditemukan.");
+        onNotify("error", "No matching issue found.");
         return;
       }
       await openIssue(rows[0]);
-      if (rows.length > 1) onNotify("success", `${rows.length} issue ditemukan. Issue pertama ditampilkan, pilih kandidat lain jika perlu.`);
+      if (rows.length > 1) onNotify("success", `${rows.length} issues found. First issue displayed; select another candidate if needed.`);
     } catch (err) {
       onNotify("error", err instanceof Error ? err.message : String(err));
     } finally {
@@ -7513,9 +7590,198 @@ function ChangeIssue({
   }
 
   return (
-    <div className="issue-change-layout">
+    <div className="issue-change-layout" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "20px" }}>
+      {/* Search & Select Issue Panel */}
+      <section className="card issue-search-panel" style={{ padding: "20px", background: "white", borderRadius: "12px", border: "1px solid var(--color-border)", boxShadow: "var(--shadow-sm)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <FileSearch size={20} color="var(--color-primary)" />
+            <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 600 }}>Select & Search Issue to Edit</h2>
+          </div>
+          {changeDetail && (
+            <span style={{ fontSize: "13px", color: "var(--color-text-muted)", background: "var(--surface-subtle)", padding: "4px 10px", borderRadius: "6px", fontWeight: 500 }}>
+              Currently Editing: <strong style={{ color: "var(--color-primary)" }}>{changeDetail.issue?.issue_key}</strong> {changeDetail.issue?.issue_name ? `(${changeDetail.issue.issue_name})` : ""}
+            </span>
+          )}
+        </div>
 
-      {changeDetail ? <IssueEditor mode="change" detail={changeDetail} layoutStyleOverride={layoutStyleOverride} initialAction={initialAction} navigationRequest={navigationRequest} onNotify={onNotify} onSave={onSave} onCancel={onCancel} onDelete={onDelete} onDirtyChange={onDirtyChange} /> : null}
+        <form onSubmit={search} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px", alignItems: "end" }}>
+          <div>
+            <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--color-text-muted)", marginBottom: "4px" }}>Issue Key / Search</label>
+            <input
+              type="text"
+              value={selection.q}
+              onChange={(e) => updateSelection("q", e.target.value)}
+              placeholder="e.g. ISSUE-2026-001 or name"
+              style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--color-border)", fontSize: "14px", boxSizing: "border-box" }}
+            />
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--color-text-muted)", marginBottom: "4px" }}>GLPI Ticket</label>
+            <input
+              type="text"
+              value={selection.glpi}
+              onChange={(e) => updateSelection("glpi", e.target.value)}
+              placeholder="e.g. 104523"
+              style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--color-border)", fontSize: "14px", boxSizing: "border-box" }}
+            />
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--color-text-muted)", marginBottom: "4px" }}>CR Helpdesk</label>
+            <input
+              type="text"
+              value={selection.crHelpdesk}
+              onChange={(e) => updateSelection("crHelpdesk", e.target.value)}
+              placeholder="e.g. HD-9921"
+              style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--color-border)", fontSize: "14px", boxSizing: "border-box" }}
+            />
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--color-text-muted)", marginBottom: "4px" }}>CR SAP</label>
+            <input
+              type="text"
+              value={selection.cr}
+              onChange={(e) => updateSelection("cr", e.target.value)}
+              placeholder="e.g. DEVK900123"
+              style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--color-border)", fontSize: "14px", boxSizing: "border-box" }}
+            />
+          </div>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button
+              type="submit"
+              disabled={searching}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "8px 16px",
+                background: "var(--color-primary)",
+                color: "white",
+                border: "none",
+                borderRadius: "8px",
+                fontWeight: 600,
+                fontSize: "14px",
+                cursor: searching ? "not-allowed" : "pointer"
+              }}
+            >
+              {searching ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+              Search
+            </button>
+            {(selection.q || selection.glpi || selection.crHelpdesk || selection.cr) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelection({ q: "", glpi: "", crHelpdesk: "", cr: "" });
+                  setCandidates([]);
+                  setShowCandidates(false);
+                  setSearched(false);
+                }}
+                style={{
+                  padding: "8px 12px",
+                  background: "var(--surface-subtle)",
+                  color: "var(--color-text-muted)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "8px",
+                  fontSize: "14px",
+                  cursor: "pointer"
+                }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </form>
+
+        {/* Candidate Search Results Grid */}
+        {searching && (
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "16px", color: "var(--color-text-muted)", fontSize: "14px" }}>
+            <Loader2 size={16} className="animate-spin" /> Searching issues...
+          </div>
+        )}
+
+        {!searching && showCandidates && candidates.length > 0 && (
+          <div style={{ marginTop: "16px", borderTop: "1px solid var(--color-border)", paddingTop: "14px" }}>
+            <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-muted)", marginBottom: "10px" }}>
+              Matching Candidates ({candidates.length}) — Click to load:
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "10px" }}>
+              {candidates.map((cand) => (
+                <div
+                  key={cand.id}
+                  onClick={() => openIssue(cand)}
+                  style={{
+                    padding: "12px",
+                    borderRadius: "8px",
+                    border: changeDetail?.issue?.id === cand.id ? "2px solid var(--color-primary)" : "1px solid var(--color-border)",
+                    background: changeDetail?.issue?.id === cand.id ? "var(--surface-selected)" : "#f8fafc",
+                    cursor: "pointer",
+                    transition: "all 0.15s ease"
+                  }}
+                  className="issue-candidate-card"
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
+                    <strong style={{ fontSize: "14px", color: "var(--color-primary)" }}>{cand.issue_key}</strong>
+                    <Status value={cand.issue_status} />
+                  </div>
+                  <div style={{ fontSize: "13px", fontWeight: 500, color: "var(--color-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {cand.issue_name || "Untitled Issue"}
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "8px", fontSize: "11px", color: "var(--color-text-muted)" }}>
+                    {cand.primary_glpi_ticket ? <span>GLPI: {cand.primary_glpi_ticket}</span> : null}
+                    {cand.primary_cr_helpdesk_no ? <span>CR Helpdesk: {cand.primary_cr_helpdesk_no}</span> : null}
+                    {cand.primary_cr ? <span>CR SAP: {cand.primary_cr}</span> : null}
+                    {cand.requester_name_snapshot ? <span>Req: {cand.requester_name_snapshot}</span> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!searching && searched && candidates.length === 0 && (
+          <div style={{ marginTop: "14px", color: "#dc2626", fontSize: "13px" }}>
+            No Issue found matching your search criteria.
+          </div>
+        )}
+      </section>
+
+      {/* Main Issue Editor or Empty Selection State */}
+      {changeDetail ? (
+        <IssueEditor
+          mode="change"
+          detail={changeDetail}
+          layoutStyleOverride={layoutStyleOverride}
+          initialAction={initialAction}
+          navigationRequest={navigationRequest}
+          crTargetSystem={crTargetSystem}
+          onTargetSystemChange={onTargetSystemChange}
+          sapSystems={sapSystems}
+          onNotify={onNotify}
+          onSave={onSave}
+          onCancel={onCancel}
+          onDelete={onDelete}
+          onDirtyChange={onDirtyChange}
+        />
+      ) : !searching ? (
+        <div style={{
+          padding: "48px 24px",
+          textAlign: "center",
+          background: "white",
+          borderRadius: "12px",
+          border: "1px dashed var(--color-border)",
+          color: "var(--color-text-muted)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: "12px"
+        }}>
+          <FileSearch size={40} color="var(--color-text-muted)" style={{ opacity: 0.6 }} />
+          <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 600, color: "var(--color-text)" }}>No Issue Selected</h3>
+          <p style={{ margin: 0, maxWidth: "450px", fontSize: "14px", lineHeight: "1.5" }}>
+            Use the search bar above to find an Issue by key, GLPI ticket, CR Helpdesk number, or CR SAP code. Select a candidate to edit its details.
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }

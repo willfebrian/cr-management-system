@@ -43,12 +43,14 @@ interface CrTransportCreateProps {
   targetSystem?: string;
   onTargetSystemChange?: (val: string) => void;
   availableSystems?: SapSystemRow[];
+  onRequestCreated?: (requestNo: string, taskNo?: string) => void;
 }
 
 export function CrTransportCreate({
   targetSystem: externalTargetSystem,
   onTargetSystemChange,
-  availableSystems: externalAvailableSystems
+  availableSystems: externalAvailableSystems,
+  onRequestCreated
 }: CrTransportCreateProps = {}) {
   const [internalTargetSystem, setInternalTargetSystem] = useState<string>(() => {
     try {
@@ -154,6 +156,9 @@ export function CrTransportCreate({
     try {
       const response = await createTransportRequest(fullDescription, objects, targetSystem);
       setCreated(response); setPreflight(null); setConfirmOpen(false);
+      if (response.ok && response.request && onRequestCreated) {
+        onRequestCreated(response.request, response.task);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message); setConfirmError(message);
