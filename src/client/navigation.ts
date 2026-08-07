@@ -1,4 +1,4 @@
-export type SidebarGroup = "issue" | "project";
+export type SidebarGroup = "cr-transport" | "issue" | "project";
 
 export function nextExpandedSidebarGroup(
   current: SidebarGroup | null,

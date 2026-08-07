@@ -13,6 +13,7 @@ import { outlookRoutes, outlookPublicRoutes } from "./routes/outlookRoutes.js";
 import { aiRoutes } from "./routes/aiRoutes.js";
 import { auditRoutes } from "./routes/auditRoutes.js";
 import { ProjectRepositoryError } from "./db/projectRepository.js";
+import { transportRequestRoutes } from "./routes/transportRequestRoutes.js";
 
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -40,6 +41,7 @@ app.use("/api/outlook", requireAuth, outlookRoutes);
 app.use("/api/ai", requireAuth, aiRoutes);
 app.use("/api", requireAuth, auditRoutes);
 app.use("/api", requireAuth, crRoutes);
+app.use("/api/cr-transports", requireAuth, transportRequestRoutes);
 app.use(express.static(clientDist));
 
 app.get("*", (_req, res, next) => {

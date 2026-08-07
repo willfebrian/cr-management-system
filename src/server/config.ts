@@ -73,6 +73,8 @@ export const config = {
     connectorMode: sapConnectorMode(process.env.SAP_CONNECTOR_MODE),
     discoveryScript: process.env.SAP_DISCOVERY_SCRIPT || "scripts/sap-discovery.mjs",
     externalPlatformDir: process.env.SAP_AGENT_PLATFORM_DIR || "",
+    transportRequestPlatformDir: process.env.SAP_CR_CREATE_PLATFORM_DIR || "",
+    transportRequestTimeoutMs: Math.max(Number(process.env.SAP_CR_CREATE_TIMEOUT_MS || 60000), 5000),
     systems,
     defaultSystem: (process.env.SAP_CR_DEFAULT_SYSTEM || "DEV").toUpperCase()
   },

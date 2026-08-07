@@ -13,6 +13,7 @@ import { ProjectReport } from "../components/projects/ProjectReport";
 import { UserManagementWorkspace } from "../components/users/UserManagementWorkspace";
 import { MasterDataWorkspace } from "./MasterDataWorkspace";
 import { AuditLogReport } from "./AuditLogReport";
+import { CrTransportCreate } from "../components/crTransport/CrTransportCreate";
 import { UIModal, type ModalType } from "../components/common/UIModal";
 import { fetchProjectDetail } from "../api/projectApi";
 import { afterIncompleteSectionRender, expandSection, getIncompleteItems, groupIncompleteItems, markIncompleteTarget, type ExpandedIssueSections, type IncompleteItem, type IssueSection } from "../issueIncomplete";
@@ -20,10 +21,11 @@ import { nextExpandedSidebarGroup, type SidebarGroup } from "../navigation";
 import type { CrDetail, CrRequest, DashboardData, IssueDetail, IssueRow, SapSystemConfig, StatusTrendData } from "../../shared/types";
 import type { ProjectDetail as ProjectDetailModel } from "../../shared/projectTypes";
 
-type View = "dashboard" | "report" | "issue-display" | "issue-create" | "issue-change" | "user-management" | "project-report" | "project-create" | "project-change" | "master-data" | "settings" | "audit-log";
+type View = "dashboard" | "report" | "cr-transport-create" | "issue-display" | "issue-create" | "issue-change" | "user-management" | "project-report" | "project-create" | "project-change" | "master-data" | "settings" | "audit-log";
 const VIEW_META: Record<View, { title: string; description: string }> = {
   dashboard: { title: "Dashboard", description: "Monitor CR and Issue activity across connected source systems." },
   report: { title: "CR Transport", description: "Review SAP change requests ordered from the latest CR number." },
+  "cr-transport-create": { title: "Create CR Transport", description: "Resolve SAP repository objects and create a controlled Workbench request in DEV NC." },
   "issue-display": { title: "Issue Report", description: "Search Issues and inspect their linked CR transports." },
   "issue-create": { title: "Create Issue", description: "Register a new Issue and its delivery information." },
   "issue-change": { title: "Change Issue", description: "Maintain Issue details, lifecycle, and linked CR transports." },
@@ -597,9 +599,15 @@ export function App() {
         <button className={view === "dashboard" ? "active" : ""} onClick={() => navigateTo("dashboard")}>
           <BarChart3 size={18} /> Dashboard
         </button>
-        <button className={view === "report" ? "active" : ""} onClick={() => navigateTo("report")}>
-          <FileSearch size={18} /> CR Transport
-        </button>
+        <div className={`sidebar-group ${view === "report" || view === "cr-transport-create" ? "active" : ""}`}>
+          <button className={view === "report" || view === "cr-transport-create" ? "active" : ""} onClick={() => setExpandedSidebarGroup((current) => nextExpandedSidebarGroup(current, "cr-transport"))}>
+            <FileSearch size={18} /> CR Transport
+          </button>
+          {expandedSidebarGroup === "cr-transport" ? <div className="sidebar-submenu">
+            <button className={view === "report" ? "active" : ""} onClick={() => navigateTo("report")}><FileSearch size={15} /> Report</button>
+            {authUser.role === "ADMIN" ? <button className={view === "cr-transport-create" ? "active" : ""} onClick={() => navigateTo("cr-transport-create")}><Plus size={15} /> Create</button> : null}
+          </div> : null}
+        </div>
         <div className={`sidebar-group ${view.startsWith("issue-") ? "active" : ""}`}>
           <button className={view.startsWith("issue-") ? "active" : ""} onClick={() => {
             setExpandedSidebarGroup((current) => nextExpandedSidebarGroup(current, "issue"));
@@ -784,6 +792,8 @@ export function App() {
             onMetricClick={openMetricPopup}
             onNavigateView={(v) => setView(v)}
           />
+        ) : view === "cr-transport-create" ? (
+          <CrTransportCreate />
         ) : view === "report" ? (
           <Report
             requests={requests}
