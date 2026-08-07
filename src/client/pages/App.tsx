@@ -3672,10 +3672,10 @@ export function App() {
             onFilters={setDraftIssueFilters}
             onSelect={setSelectedIssueId}
             onCloseDetail={() => setSelectedIssueId(null)}
-            onChangeIssue={(issueId) => {
+            onChangeIssue={(issueId, item) => {
               setChangeIssueInitialId(issueId);
               setChangeIssueInitialAction("");
-              setChangeIssueInitialItem(null);
+              setChangeIssueInitialItem(item || null);
               navigateTo("issue-change");
             }}
             onIssueAction={(issueId, action) => {
@@ -5058,7 +5058,7 @@ function IssueDisplay({
   onFilters: (filters: IssueFilters) => void;
   onSelect: (value: number) => void;
   onCloseDetail: () => void;
-  onChangeIssue: (id: number) => void;
+  onChangeIssue: (id: number, item?: IncompleteItem | null) => void;
   onIssueAction: (id: number, action: "cancel" | "delete") => void;
   onGenerateCrForm: (id: number) => void;
   onPage: (page: number) => void;
@@ -5525,7 +5525,15 @@ function IssueDisplay({
             {detailIncompleteItems.length ? (
               <section className="issue-missing-box" style={{ margin: 0, borderRadius: "10px" }}>
                 <strong>Incomplete items</strong>
-                <IncompleteGroupCards groups={detailIncompleteGroups} />
+                <IncompleteGroupCards
+                  groups={detailIncompleteGroups}
+                  onItemClick={(item) => {
+                    if (selectedIssue) {
+                      onCloseDetail();
+                      onChangeIssue(selectedIssue.id, item);
+                    }
+                  }}
+                />
               </section>
             ) : null}
 
@@ -5944,6 +5952,8 @@ function IssueEditor({
   });
   const layoutStyle = layoutStyleOverride ?? internalLayoutStyle;
   const [editorTab, setEditorTab] = useState<"basic" | "team" | "timeline">("basic");
+  const [internalNav, setInternalNav] = useState<{ sequence: number; item: IncompleteItem } | null>(null);
+  const effectiveNav = navigationRequest || internalNav;
   const [isQuickMode, setIsQuickMode] = useState<boolean>(() => mode === "create");
   const incompleteItems = detail?.issue && detail.issue.issue_status !== "cancelled" ? getIncompleteItems(detail) : [];
   const incompleteGroups = groupIncompleteItems(incompleteItems);
@@ -6498,10 +6508,23 @@ function IssueEditor({
   }, [detail?.issue?.id, hasCrAssigned, qaReady, prdReady]);
 
   useEffect(() => {
-    if (!navigationRequest) return;
-    setExpandedPhases((current) => expandSection(current, navigationRequest.item.section));
+    if (!effectiveNav) return;
+    setExpandedPhases((current) => expandSection(current, effectiveNav.item.section));
+
+    const section = effectiveNav.item.section;
+    const targetId = effectiveNav.item.targetId;
+    if (layoutStyle === "tabs") {
+      if (["dev", "qa", "prd"].includes(section)) {
+        setEditorTab("timeline");
+      } else if (["issue-requesters", "issue-abapers"].includes(targetId)) {
+        setEditorTab("team");
+      } else {
+        setEditorTab("basic");
+      }
+    }
+
     return afterIncompleteSectionRender(() => {
-      const target = document.querySelector<HTMLElement>(`[data-incomplete-target="${navigationRequest.item.targetId}"]`);
+      const target = document.querySelector<HTMLElement>(`[data-incomplete-target="${effectiveNav.item.targetId}"]`);
       if (!target) return;
       target.scrollIntoView({ behavior: "smooth", block: "center" });
       markIncompleteTarget(target);
@@ -6510,7 +6533,7 @@ function IssueEditor({
         : target.querySelector<HTMLElement>("input:not(:disabled), select:not(:disabled), textarea:not(:disabled), button:not(:disabled)");
       focusTarget?.focus({ preventScroll: true });
     });
-  }, [navigationRequest]);
+  }, [effectiveNav, layoutStyle]);
 
   function togglePhase(phase: IssueSection) {
     setExpandedPhases((current) => ({ ...current, [phase]: !current[phase] }));
@@ -6657,14 +6680,7 @@ function IssueEditor({
             <details className="change-summary-details">
               <summary>{incompleteItems.length} incomplete item(s)</summary>
               <IncompleteGroupCards groups={incompleteGroups} onItemClick={(item) => {
-                setExpandedPhases((current) => expandSection(current, item.section));
-                setTimeout(() => {
-                  const target = document.querySelector<HTMLElement>(`[data-incomplete-target="${item.targetId}"]`);
-                  if (target) {
-                    target.scrollIntoView({ behavior: "smooth", block: "center" });
-                    target.focus();
-                  }
-                }, 100);
+                setInternalNav((prev) => ({ sequence: (prev?.sequence || 0) + 1, item }));
               }} />
             </details>
           ) : null}
