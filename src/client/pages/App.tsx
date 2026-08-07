@@ -347,6 +347,30 @@ export function App() {
       localStorage.setItem(storageKey, JSON.stringify(parsed));
     } catch {}
   }
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Node;
+      if (formLayoutPopoverOpen) {
+        const layoutWrappers = document.querySelectorAll(".form-layout-popover-wrapper");
+        let inside = false;
+        layoutWrappers.forEach((el) => {
+          if (el.contains(target)) inside = true;
+        });
+        if (!inside) setFormLayoutPopoverOpen(false);
+      }
+      if (syncPopoverOpen) {
+        const syncWrappers = document.querySelectorAll(".sync-cr-popover-wrapper");
+        let inside = false;
+        syncWrappers.forEach((el) => {
+          if (el.contains(target)) inside = true;
+        });
+        if (!inside) setSyncPopoverOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [formLayoutPopoverOpen, syncPopoverOpen]);
+
   const [periodPopoverOpen, setPeriodPopoverOpen] = useState(false);
   const [statusPopoverOpen, setStatusPopoverOpen] = useState(false);
   const [issuePeriodPopoverOpen, setIssuePeriodPopoverOpen] = useState(false);
@@ -1887,8 +1911,6 @@ export function App() {
               <div
                 className="form-layout-popover-wrapper"
                 style={{ position: "relative", display: "inline-block" }}
-                onMouseEnter={() => setFormLayoutPopoverOpen(true)}
-                onMouseLeave={() => setFormLayoutPopoverOpen(false)}
               >
                 <button
                   type="button"
@@ -1979,8 +2001,6 @@ export function App() {
               <div
                 className="sync-cr-popover-wrapper"
                 style={{ position: "relative", display: "inline-block" }}
-                onMouseEnter={() => setSyncPopoverOpen(true)}
-                onMouseLeave={() => setSyncPopoverOpen(false)}
               >
                 <button
                   type="button"
@@ -2187,8 +2207,6 @@ export function App() {
               <div
                 className="form-layout-popover-wrapper"
                 style={{ position: "relative", display: "inline-block" }}
-                onMouseEnter={() => setFormLayoutPopoverOpen(true)}
-                onMouseLeave={() => setFormLayoutPopoverOpen(false)}
               >
                 <button
                   type="button"
@@ -2279,8 +2297,6 @@ export function App() {
               <div
                 className="sync-cr-popover-wrapper"
                 style={{ position: "relative", display: "inline-block" }}
-                onMouseEnter={() => setSyncPopoverOpen(true)}
-                onMouseLeave={() => setSyncPopoverOpen(false)}
               >
                 <button
                   type="button"
