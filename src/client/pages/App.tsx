@@ -15,7 +15,7 @@ import { UserManagementWorkspace } from "../components/users/UserManagementWorks
 import { MasterDataWorkspace } from "./MasterDataWorkspace";
 import { AuditLogReport } from "./AuditLogReport";
 import { CrTransportCreate } from "../components/crTransport/CrTransportCreate";
-import { TRANSPORT_TARGETS } from "../components/crTransport/transportTarget";
+import { TRANSPORT_TARGETS, transportTargetLabel } from "../components/crTransport/transportTarget";
 import { UIModal, type ModalType } from "../components/common/UIModal";
 import { fetchProjectDetail } from "../api/projectApi";
 import { afterIncompleteSectionRender, expandSection, getIncompleteItems, getIssueRowMissingItems, groupIncompleteItems, markIncompleteTarget, type ExpandedIssueSections, type IncompleteItem, type IssueSection } from "../issueIncomplete";
@@ -7478,12 +7478,33 @@ function IssueEditor({
         subtitle="Resolve SAP repository objects and create a controlled Workbench request."
         maxWidth="920px"
         hideFooter={true}
+        headerActions={
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "4px 10px",
+              borderRadius: "6px",
+              background: "#ecfdf5",
+              color: "#0f766e",
+              border: "1px solid #a7f3d0",
+              fontWeight: "600",
+              fontSize: "0.8rem",
+              marginRight: "4px"
+            }}
+          >
+            <Database size={13} />
+            <span>{sapSystems?.find((s) => s.code === crTargetSystem)?.description || sapSystems?.find((s) => s.code === crTargetSystem)?.code || transportTargetLabel(crTargetSystem)}</span>
+          </span>
+        }
       >
         <CrTransportCreate
           initialDescription={form.requestDescription}
           targetSystem={crTargetSystem}
           onTargetSystemChange={setCrTargetSystem}
           availableSystems={sapSystems}
+          isModal={true}
           onRequestCreated={(requestNo) => {
             update("crLinks", requestNo);
             setCreateCrModalOpen(false);

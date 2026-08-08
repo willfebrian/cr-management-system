@@ -48,6 +48,7 @@ interface CrTransportCreateProps {
   targetSystem?: string;
   onTargetSystemChange?: (val: string) => void;
   availableSystems?: SapSystemRow[];
+  isModal?: boolean;
   onRequestCreated?: (requestNo: string, taskNo?: string) => void;
 }
 
@@ -56,6 +57,7 @@ export function CrTransportCreate({
   targetSystem: externalTargetSystem,
   onTargetSystemChange,
   availableSystems: externalAvailableSystems,
+  isModal = false,
   onRequestCreated
 }: CrTransportCreateProps = {}) {
   const [internalTargetSystem, setInternalTargetSystem] = useState<string>(() => {
@@ -189,50 +191,6 @@ export function CrTransportCreate({
 
   return <div className="cr-create-workspace">
     {created?.ok ? <section className="cr-create-success card"><CheckCircle2 size={24} /><div><span className="eyebrow">REQUEST CREATED</span><h3>{created.request}</h3><p>Task {created.task} was created in {transportTargetLabel(targetSystem)} and the selected objects were registered.{created.syncQueued ? " CR sync has been queued." : ""}</p></div><button type="button" className="secondary cr-start-new-request" onClick={startNewRequest}><Plus size={16} /> Start New Request</button></section> : null}
-
-    {/* Target System Selector Card */}
-    <section className="card cr-create-card" style={{ marginBottom: "16px" }}>
-      <div className="cr-create-section-heading">
-        <div>
-          <span className="cr-create-step">0</span>
-          <h3>Target System</h3>
-          <p>Select the SAP environment to resolve repository objects and create transport requests.</p>
-        </div>
-        <span className="cr-create-count" style={{ background: "var(--surface-selected, #ecfdf5)", color: "var(--color-primary, #0f766e)" }}>
-          Active: {transportTargetLabel(targetSystem)}
-        </span>
-      </div>
-      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "12px" }}>
-        {systemOptions.map((sys) => {
-          const isSelected = targetSystem === sys.code;
-          return (
-            <button
-              key={sys.code}
-              type="button"
-              onClick={() => changeTarget(sys.code)}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "8px",
-                padding: "8px 14px",
-                borderRadius: "8px",
-                border: isSelected ? "2px solid var(--color-primary, #0f766e)" : "1px solid var(--color-border, #cbd5e1)",
-                background: isSelected ? "var(--surface-selected, #ecfdf5)" : "#ffffff",
-                color: isSelected ? "var(--color-primary, #0f766e)" : "var(--color-text, #0f172a)",
-                fontWeight: isSelected ? "700" : "500",
-                fontSize: "14px",
-                cursor: "pointer",
-                transition: "all 0.15s ease"
-              }}
-            >
-              <Database size={15} />
-              <span>{sys.label}</span>
-              {isSelected ? <Check size={15} color="var(--color-primary, #0f766e)" /> : null}
-            </button>
-          );
-        })}
-      </div>
-    </section>
 
     <section className="card cr-create-card">
       <div className="cr-create-section-heading"><div><span className="cr-create-step">1</span><h3>SAP Objects</h3><p>Search by TCode, program, class, function module, table, or another repository object.</p></div><span className="cr-create-count">{objects.length} selected</span></div>
