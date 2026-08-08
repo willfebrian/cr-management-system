@@ -1,7 +1,7 @@
 import { applyCustomStatusColors } from "../utils/tagColors";
 import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
-import { AlertTriangle, BarChart3, Ban, Calendar, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Database, FileOutput, FileSearch, FileText, FolderKanban, GitPullRequest, KeyRound, LayoutGrid, Link as LinkIcon, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Tag, Trash2, User, Users, X, XCircle } from "lucide-react";
+import { AlertTriangle, BarChart3, Ban, Calendar, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Copy, Database, ExternalLink, FileOutput, FileSearch, FileText, FolderKanban, GitPullRequest, KeyRound, LayoutGrid, Link as LinkIcon, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Tag, Trash2, User, Users, X, XCircle } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchAdminSettings, fetchAdminPeople, fetchCrDetail, fetchCrList, fetchDashboard, fetchGlpiTicketDetail, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchSapSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind, type GlpiTicketDetail, type AdminPersonRow, type SapSystemRow } from "../api";
 import { IncompleteGroupCards } from "../components/IncompleteGroupCards";
@@ -6300,6 +6300,39 @@ function IssueEditor({
   }
 
   const [templatePreview, setTemplatePreview] = useState<{ title: string; body: string; bodyHtml?: string } | null>(null);
+  const [copiedTemplate, setCopiedTemplate] = useState(false);
+
+  async function copyTemplateToClipboard(notify = true) {
+    if (!templatePreview) return;
+    try {
+      if (templatePreview.bodyHtml) {
+        const blobHtml = new Blob([templatePreview.bodyHtml], { type: "text/html" });
+        const blobText = new Blob([templatePreview.body], { type: "text/plain" });
+        const item = new ClipboardItem({ "text/html": blobHtml, "text/plain": blobText });
+        await navigator.clipboard.write([item]);
+      } else {
+        await navigator.clipboard.writeText(templatePreview.body);
+      }
+      setCopiedTemplate(true);
+      if (notify) onNotify?.("success", "Template copied to clipboard!");
+      setTimeout(() => setCopiedTemplate(false), 2500);
+    } catch {
+      try {
+        await navigator.clipboard.writeText(templatePreview.body);
+        setCopiedTemplate(true);
+        if (notify) onNotify?.("success", "Template text copied to clipboard!");
+        setTimeout(() => setCopiedTemplate(false), 2500);
+      } catch {
+        if (notify) onNotify?.("error", "Could not copy automatically. Please copy manually.");
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (templatePreview) {
+      void copyTemplateToClipboard(false);
+    }
+  }, [templatePreview]);
   const [templateBusy, setTemplateBusy] = useState<"" | "email" | "ticket" | "cr-transport">("");
   const [generateMenuOpen, setGenerateMenuOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -7275,16 +7308,46 @@ function IssueEditor({
         </div>
       </div>
       {templatePreview ? (
-        <div className="modal-backdrop" role="presentation">
-          <section className="modal-card template-preview-modal" role="dialog" aria-modal="true" aria-labelledby="template-preview-title">
-            <h2 id="template-preview-title">{templatePreview.title}</h2>
+        <div className="modal-backdrop" role="presentation" onClick={(e) => { if (e.target === e.currentTarget) setTemplatePreview(null); }}>
+          <section className="modal-card template-preview-modal" role="dialog" aria-modal="true" aria-labelledby="template-preview-title" style={{ width: "90%", maxWidth: "680px", padding: "24px", borderRadius: "16px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+              <h2 id="template-preview-title" style={{ margin: 0, fontSize: "1.25rem", fontWeight: 700 }}>{templatePreview.title}</h2>
+              <button type="button" onClick={() => setTemplatePreview(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)" }}>
+                <X size={18} />
+              </button>
+            </div>
+
             {templatePreview.bodyHtml ? (
               <div className="template-preview-body" dangerouslySetInnerHTML={{ __html: templatePreview.bodyHtml }} />
             ) : (
-              <pre>{templatePreview.body}</pre>
+              <pre className="template-preview-body" style={{ whiteSpace: "pre-wrap", fontFamily: "inherit" }}>{templatePreview.body}</pre>
             )}
-            <div className="modal-actions">
-              <button type="button" className="secondary" onClick={() => setTemplatePreview(null)}><X size={15} /> Close</button>
+
+            <div className="modal-actions" style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "10px", marginTop: "20px", flexWrap: "wrap" }}>
+              <button type="button" className="secondary" onClick={() => void copyTemplateToClipboard(true)} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                {copiedTemplate ? <CheckCircle2 size={15} color="#10b981" /> : <Copy size={15} />}
+                <span>{copiedTemplate ? "Copied!" : "Copy Template"}</span>
+              </button>
+
+              {templatePreview.title.includes("GLPI") && (
+                <button
+                  type="button"
+                  className="primary"
+                  style={{ display: "inline-flex", alignItems: "center", gap: "8px", background: "#0f766e", color: "white", padding: "8px 16px", borderRadius: "8px", fontWeight: 600, border: "none", cursor: "pointer" }}
+                  onClick={async () => {
+                    await copyTemplateToClipboard(false);
+                    onNotify?.("success", "Template copied! Paste (Ctrl+V) in GLPI Ticket form.");
+                    window.open("https://itsm.trst.co.id/front/ticket.form.php", "_blank");
+                  }}
+                >
+                  <ExternalLink size={15} />
+                  <span>Create Ticket in GLPI</span>
+                </button>
+              )}
+
+              <button type="button" className="secondary" onClick={() => setTemplatePreview(null)}>
+                <X size={15} /> Close
+              </button>
             </div>
           </section>
         </div>
