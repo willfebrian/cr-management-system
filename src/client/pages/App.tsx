@@ -1245,16 +1245,15 @@ export function App() {
                 {systems.map((system) => (
                   <label
                     key={system.code}
+                    className={`system-check-label ${syncSystems.includes(system.code) ? "is-checked" : ""}`}
                     style={{
                       display: "inline-flex",
                       alignItems: "center",
                       gap: "4px",
                       padding: "3px 8px",
                       borderRadius: "6px",
-                      background: syncSystems.includes(system.code) ? "#f0fdf4" : "transparent",
                       fontSize: "0.78rem",
                       fontWeight: "600",
-                      color: syncSystems.includes(system.code) ? "#0f766e" : "var(--color-text, #334155)",
                       cursor: system.enabled ? "pointer" : "not-allowed",
                       opacity: system.enabled ? 1 : 0.5
                     }}
@@ -4575,13 +4574,14 @@ function Dashboard({
               return (
                 <div
                   key={log.id}
+                  className="activity-stream-row"
                   style={{
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "space-between",
                     padding: "0.75rem 1rem",
                     borderRadius: "8px",
-                    background: "var(--color-bg-subtle, #f8fafc)",
+                    background: "var(--surface-subtle, #f8fafc)",
                     border: "1px solid var(--color-border, #e2e8f0)",
                     gap: "1rem"
                   }}
@@ -6778,6 +6778,7 @@ function IssueEditor({
             <button
               key={idx}
               type="button"
+              className={`editor-nav-button ${modeItem.active ? "is-active" : ""}`}
               onClick={modeItem.onClick}
               style={{
                 display: "flex",
@@ -6786,9 +6787,6 @@ function IssueEditor({
                 gap: "8px",
                 padding: "10px 14px",
                 borderRadius: "10px",
-                border: modeItem.active ? "2px solid #0f766e" : "1px solid var(--color-border, #cbd5e1)",
-                background: modeItem.active ? "#f0fdf4" : "var(--color-bg, #ffffff)",
-                color: modeItem.active ? "#0f766e" : "var(--color-text-muted, #64748b)",
                 fontWeight: modeItem.active ? "700" : "600",
                 fontSize: "0.85rem",
                 cursor: "pointer",
@@ -6813,6 +6811,7 @@ function IssueEditor({
             <button
               key={tab.id}
               type="button"
+              className={`editor-nav-button ${editorTab === tab.id ? "is-active" : ""}`}
               onClick={() => setEditorTab(tab.id as any)}
               style={{
                 display: "flex",
@@ -6821,9 +6820,6 @@ function IssueEditor({
                 gap: "8px",
                 padding: "10px 14px",
                 borderRadius: "10px",
-                border: editorTab === tab.id ? "2px solid #0f766e" : "1px solid var(--color-border, #cbd5e1)",
-                background: editorTab === tab.id ? "#f0fdf4" : "var(--color-bg, #ffffff)",
-                color: editorTab === tab.id ? "#0f766e" : "var(--color-text-muted, #64748b)",
                 fontWeight: editorTab === tab.id ? "700" : "600",
                 fontSize: "0.85rem",
                 cursor: "pointer",
