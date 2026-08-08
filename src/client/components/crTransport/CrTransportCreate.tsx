@@ -145,8 +145,9 @@ export function CrTransportCreate({
     setPreflight(null); setCreated(null); setError(""); setConfirmError(""); setConfirmOpen(false);
   }
 
-  async function runResolve(event?: FormEvent) {
+  async function runResolve(event?: FormEvent | React.SyntheticEvent) {
     event?.preventDefault();
+    event?.stopPropagation();
     const value = query.trim();
     if (!value) { setResults([]); setResolvedQuery(""); return; }
     setBusy("resolve"); setError(""); setResults([]);
@@ -194,7 +195,47 @@ export function CrTransportCreate({
 
     <section className="card cr-create-card">
       <div className="cr-create-section-heading"><div><span className="cr-create-step">1</span><h3>SAP Objects</h3><p>Search by TCode, program, class, function module, table, or another repository object.</p></div><span className="cr-create-count">{objects.length} selected</span></div>
-      <form className="cr-object-search" onSubmit={runResolve}><label><span>SAP Object</span><div className="cr-search-input"><Search size={17} /><input value={query} onChange={(event) => updateQuery(event.target.value)} placeholder="Search by technical name or TCode" /></div></label><button className="secondary cr-resolve-button" disabled={!query.trim() || busy === "resolve"}>{busy === "resolve" ? <Loader2 className="spin" size={17} /> : <Search size={17} />} Resolve</button></form>
+      <div
+        className="cr-object-search"
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.stopPropagation();
+            void runResolve(e);
+          }
+        }}
+      >
+        <label>
+          <span>SAP Object</span>
+          <div className="cr-search-input">
+            <Search size={17} />
+            <input
+              value={query}
+              onChange={(event) => updateQuery(event.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  void runResolve(e);
+                }
+              }}
+              placeholder="Search by technical name or TCode"
+            />
+          </div>
+        </label>
+        <button
+          type="button"
+          className="secondary cr-resolve-button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            void runResolve(e);
+          }}
+          disabled={!query.trim() || busy === "resolve"}
+        >
+          {busy === "resolve" ? <Loader2 className="spin" size={17} /> : <Search size={17} />} Resolve
+        </button>
+      </div>
       {error ? <div className="cr-search-error-state"><div className="cr-search-error-icon"><SearchX size={20} /></div><div><strong>SAP Object Not Found</strong><p>{friendlyMessage(error)}</p></div></div> : null}
       {results.length ? <div className="cr-resolve-results"><div className="cr-result-caption"><span>Resolved from <strong>{resolvedQuery}</strong> ({results.length} objects)</span><button type="button" className="cr-close-results-btn" onClick={() => setResults([])} title="Close results"><X size={14} /> Close</button></div>{results.map((item) => { const selected = selectedKeys.has(objectKey(item)); const state = getTransportCreateState({ created, selected, locked: item.locked, lockOrder: item.lockOrder }); const typeMeta = getSapObjectTypeMeta(item.objectType); return <div className="cr-result-row" key={objectKey(item)}><div className="cr-object-icon"><PackageCheck size={18} /></div><div className="cr-object-main"><strong>{item.objectName}</strong><div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "2px" }}><span className="cr-object-type-badge" style={{ background: typeMeta.bg, color: typeMeta.color }}>{typeMeta.label}</span><span style={{ fontSize: "0.725rem", color: "var(--color-text-muted, #64748b)" }}>{item.pgmid} · {item.objectType}</span></div></div><div className="cr-object-package"><span>Package</span><strong>{item.sourcePackage} → ZTRD</strong></div><div className="cr-result-status-action">{state.assigned ? <span className="cr-assigned-badge"><Check size={14} /> Assigned · {state.request}</span> : item.locked ? <span className="cr-lock-warning">Locked: {item.lockOrder}</span> : <button type="button" className={`secondary cr-row-action ${selected ? "is-added" : ""}`} disabled={selected} onClick={() => addObject(item)}>{selected ? <Check size={15} /> : <Plus size={15} />} {selected ? "Added" : "Add"}</button>}</div></div>; })}</div> : null}
       {objects.length ? <div className="cr-selected-list"><h4>Selected transport roots</h4>{objects.map((item) => { const state = getTransportCreateState({ created, selected: true, locked: item.locked, lockOrder: item.lockOrder }); return <div className="cr-selected-row" key={objectKey(item)}><span className="cr-object-type">{item.objectType}</span><div><strong>{item.objectName}</strong><small>{item.pgmid} · {item.sourcePackage} → ZTRD{state.assigned ? ` · Assigned to ${state.request}` : ""}</small></div>{state.assigned ? <span className="cr-assigned-badge">Assigned</span> : <button type="button" aria-label={`Remove ${item.objectName}`} onClick={() => { setObjects((current) => current.filter((row) => objectKey(row) !== objectKey(item))); invalidatePreflight(); }}><Trash2 size={16} /></button>}</div>; })}</div> : <div className="cr-empty-selection">No SAP objects selected.</div>}

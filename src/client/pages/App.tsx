@@ -6610,7 +6610,8 @@ function IssueEditor({
   }
 
   return (
-    <form className="issue-editor-panel" onSubmit={submit}>
+    <>
+      <form className="issue-editor-panel" onSubmit={submit}>
 
       {/* Change Issue Top Summary Bar with AI Context Controls beside Status */}
       {mode === "change" && detail?.issue ? (
@@ -7342,6 +7343,7 @@ function IssueEditor({
           </section>
         </div>
       ) : null}
+      </form>
       <UIModal
         isOpen={showAiOverwriteModal}
         onClose={() => setShowAiOverwriteModal(false)}
@@ -7358,29 +7360,13 @@ function IssueEditor({
       >
         {(() => {
           const fields = getExistingFormFields();
-          const selectedCount = fields.filter((f) => aiOverwriteSelections[f.key] !== false).length;
-
           return (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  borderBottom: "1px solid var(--color-border, #e2e8f0)",
-                  paddingBottom: "8px",
-                  position: "sticky",
-                  top: "-20px",
-                  background: "var(--color-bg-elevated, #ffffff)",
-                  zIndex: 10,
-                  paddingTop: "4px",
-                  marginTop: "-4px"
-                }}
-              >
-                <span style={{ fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)" }}>
-                  Fields to Replace ({selectedCount} of {fields.length} selected)
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", maxHeight: "360px", overflowY: "auto", paddingRight: "4px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #64748b)" }}>
+                  Select fields to replace with AI suggestions:
                 </span>
-                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <div style={{ display: "flex", gap: "10px" }}>
                   <button
                     type="button"
                     onClick={() => {
@@ -7388,11 +7374,10 @@ function IssueEditor({
                       fields.forEach((f) => { all[f.key] = true; });
                       setAiOverwriteSelections(all);
                     }}
-                    style={{ border: "none", background: "none", color: "#0f766e", fontSize: "0.75rem", fontWeight: "600", cursor: "pointer", padding: 0 }}
+                    style={{ border: "none", background: "none", color: "#6366f1", fontSize: "0.75rem", fontWeight: "600", cursor: "pointer", padding: 0 }}
                   >
                     Select All
                   </button>
-                  <span style={{ color: "var(--color-border, #cbd5e1)", fontSize: "0.75rem" }}>|</span>
                   <button
                     type="button"
                     onClick={() => {
@@ -7512,7 +7497,7 @@ function IssueEditor({
           }}
         />
       </UIModal>
-    </form>
+    </>
   );
 }
 
