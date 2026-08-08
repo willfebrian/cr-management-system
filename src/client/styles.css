@@ -1307,10 +1307,11 @@ body.dark-theme .popup-table-row:hover {
 }
 
 [data-incomplete-active="true"] {
-  outline: 3px solid rgb(249 115 22 / 45%);
+  outline: 3px solid #f97316 !important;
   outline-offset: 4px;
-  background: #fff7ed;
-  transition: background-color 180ms ease, outline-color 180ms ease;
+  background: #fff7ed !important;
+  box-shadow: 0 0 0 5px rgba(249, 115, 22, 0.25) !important;
+  transition: all 200ms ease;
 }
 
 .issue-selection-grid {

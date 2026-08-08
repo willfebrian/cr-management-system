@@ -6516,23 +6516,43 @@ function IssueEditor({
     if (layoutStyle === "tabs") {
       if (["dev", "qa", "prd"].includes(section)) {
         setEditorTab("timeline");
-      } else if (["issue-requesters", "issue-abapers"].includes(targetId)) {
+      } else if (["issue-requesters", "issue-abapers", "issue-glpi", "issue-cr"].includes(targetId)) {
         setEditorTab("team");
       } else {
         setEditorTab("basic");
       }
     }
 
-    return afterIncompleteSectionRender(() => {
-      const target = document.querySelector<HTMLElement>(`[data-incomplete-target="${effectiveNav.item.targetId}"]`);
-      if (!target) return;
-      target.scrollIntoView({ behavior: "smooth", block: "center" });
-      markIncompleteTarget(target);
-      const focusTarget = target.matches("input, select, textarea, button")
-        ? target
-        : target.querySelector<HTMLElement>("input:not(:disabled), select:not(:disabled), textarea:not(:disabled), button:not(:disabled)");
-      focusTarget?.focus({ preventScroll: true });
-    });
+    let cancelled = false;
+    let attempts = 0;
+
+    const tryNavigate = () => {
+      if (cancelled) return;
+      const target = document.querySelector<HTMLElement>(`[data-incomplete-target="${targetId}"]`);
+      if (target) {
+        markIncompleteTarget(target);
+        target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+        const focusTarget = target.matches("input, select, textarea, button")
+          ? target
+          : target.querySelector<HTMLElement>("input:not(:disabled), select:not(:disabled), textarea:not(:disabled), button:not(:disabled)");
+        if (focusTarget) {
+          setTimeout(() => {
+            if (!cancelled) {
+              focusTarget.focus({ preventScroll: true });
+            }
+          }, 250);
+        }
+      } else if (attempts < 15) {
+        attempts++;
+        setTimeout(tryNavigate, 60);
+      }
+    };
+
+    const timer = setTimeout(tryNavigate, 60);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [effectiveNav, layoutStyle]);
 
   function togglePhase(phase: IssueSection) {
@@ -7631,162 +7651,7 @@ function ChangeIssue({
   }
 
   return (
-    <div className="issue-change-layout" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "20px" }}>
-      {/* Search & Select Issue Panel */}
-      <section className="card issue-search-panel" style={{ padding: "20px", background: "white", borderRadius: "12px", border: "1px solid var(--color-border)", boxShadow: "var(--shadow-sm)" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <FileSearch size={20} color="var(--color-primary)" />
-            <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 600 }}>Select & Search Issue to Edit</h2>
-          </div>
-          {changeDetail && (
-            <span style={{ fontSize: "13px", color: "var(--color-text-muted)", background: "var(--surface-subtle)", padding: "4px 10px", borderRadius: "6px", fontWeight: 500 }}>
-              Currently Editing: <strong style={{ color: "var(--color-primary)" }}>{changeDetail.issue?.issue_key}</strong> {changeDetail.issue?.issue_name ? `(${changeDetail.issue.issue_name})` : ""}
-            </span>
-          )}
-        </div>
-
-        <form onSubmit={search} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px", alignItems: "end" }}>
-          <div>
-            <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--color-text-muted)", marginBottom: "4px" }}>Issue Key / Search</label>
-            <input
-              type="text"
-              value={selection.q}
-              onChange={(e) => updateSelection("q", e.target.value)}
-              placeholder="e.g. ISSUE-2026-001 or name"
-              style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--color-border)", fontSize: "14px", boxSizing: "border-box" }}
-            />
-          </div>
-          <div>
-            <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--color-text-muted)", marginBottom: "4px" }}>GLPI Ticket</label>
-            <input
-              type="text"
-              value={selection.glpi}
-              onChange={(e) => updateSelection("glpi", e.target.value)}
-              placeholder="e.g. 104523"
-              style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--color-border)", fontSize: "14px", boxSizing: "border-box" }}
-            />
-          </div>
-          <div>
-            <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--color-text-muted)", marginBottom: "4px" }}>CR Helpdesk</label>
-            <input
-              type="text"
-              value={selection.crHelpdesk}
-              onChange={(e) => updateSelection("crHelpdesk", e.target.value)}
-              placeholder="e.g. HD-9921"
-              style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--color-border)", fontSize: "14px", boxSizing: "border-box" }}
-            />
-          </div>
-          <div>
-            <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--color-text-muted)", marginBottom: "4px" }}>CR SAP</label>
-            <input
-              type="text"
-              value={selection.cr}
-              onChange={(e) => updateSelection("cr", e.target.value)}
-              placeholder="e.g. DEVK900123"
-              style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--color-border)", fontSize: "14px", boxSizing: "border-box" }}
-            />
-          </div>
-          <div style={{ display: "flex", gap: "8px" }}>
-            <button
-              type="submit"
-              disabled={searching}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "8px",
-                padding: "8px 16px",
-                background: "var(--color-primary)",
-                color: "white",
-                border: "none",
-                borderRadius: "8px",
-                fontWeight: 600,
-                fontSize: "14px",
-                cursor: searching ? "not-allowed" : "pointer"
-              }}
-            >
-              {searching ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
-              Search
-            </button>
-            {(selection.q || selection.glpi || selection.crHelpdesk || selection.cr) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSelection({ q: "", glpi: "", crHelpdesk: "", cr: "" });
-                  setCandidates([]);
-                  setShowCandidates(false);
-                  setSearched(false);
-                }}
-                style={{
-                  padding: "8px 12px",
-                  background: "var(--surface-subtle)",
-                  color: "var(--color-text-muted)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: "8px",
-                  fontSize: "14px",
-                  cursor: "pointer"
-                }}
-              >
-                Clear
-              </button>
-            )}
-          </div>
-        </form>
-
-        {/* Candidate Search Results Grid */}
-        {searching && (
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "16px", color: "var(--color-text-muted)", fontSize: "14px" }}>
-            <Loader2 size={16} className="animate-spin" /> Searching issues...
-          </div>
-        )}
-
-        {!searching && showCandidates && candidates.length > 0 && (
-          <div style={{ marginTop: "16px", borderTop: "1px solid var(--color-border)", paddingTop: "14px" }}>
-            <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-muted)", marginBottom: "10px" }}>
-              Matching Candidates ({candidates.length}) — Click to load:
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "10px" }}>
-              {candidates.map((cand) => (
-                <div
-                  key={cand.id}
-                  onClick={() => openIssue(cand)}
-                  style={{
-                    padding: "12px",
-                    borderRadius: "8px",
-                    border: changeDetail?.issue?.id === cand.id ? "2px solid var(--color-primary)" : "1px solid var(--color-border)",
-                    background: changeDetail?.issue?.id === cand.id ? "var(--surface-selected)" : "#f8fafc",
-                    cursor: "pointer",
-                    transition: "all 0.15s ease"
-                  }}
-                  className="issue-candidate-card"
-                >
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
-                    <strong style={{ fontSize: "14px", color: "var(--color-primary)" }}>{cand.issue_key}</strong>
-                    <Status value={cand.issue_status} />
-                  </div>
-                  <div style={{ fontSize: "13px", fontWeight: 500, color: "var(--color-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {cand.issue_name || "Untitled Issue"}
-                  </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "8px", fontSize: "11px", color: "var(--color-text-muted)" }}>
-                    {cand.primary_glpi_ticket ? <span>GLPI: {cand.primary_glpi_ticket}</span> : null}
-                    {cand.primary_cr_helpdesk_no ? <span>CR Helpdesk: {cand.primary_cr_helpdesk_no}</span> : null}
-                    {cand.primary_cr ? <span>CR SAP: {cand.primary_cr}</span> : null}
-                    {cand.requester_name_snapshot ? <span>Req: {cand.requester_name_snapshot}</span> : null}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {!searching && searched && candidates.length === 0 && (
-          <div style={{ marginTop: "14px", color: "#dc2626", fontSize: "13px" }}>
-            No Issue found matching your search criteria.
-          </div>
-        )}
-      </section>
-
-      {/* Main Issue Editor or Empty Selection State */}
+    <div className="issue-change-layout">
       {changeDetail ? (
         <IssueEditor
           mode="change"
@@ -7803,26 +7668,17 @@ function ChangeIssue({
           onDelete={onDelete}
           onDirtyChange={onDirtyChange}
         />
-      ) : !searching ? (
-        <div style={{
-          padding: "48px 24px",
-          textAlign: "center",
-          background: "white",
-          borderRadius: "12px",
-          border: "1px dashed var(--color-border)",
-          color: "var(--color-text-muted)",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: "12px"
-        }}>
-          <FileSearch size={40} color="var(--color-text-muted)" style={{ opacity: 0.6 }} />
-          <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 600, color: "var(--color-text)" }}>No Issue Selected</h3>
-          <p style={{ margin: 0, maxWidth: "450px", fontSize: "14px", lineHeight: "1.5" }}>
-            Use the search bar above to find an Issue by key, GLPI ticket, CR Helpdesk number, or CR SAP code. Select a candidate to edit its details.
-          </p>
-        </div>
-      ) : null}
+      ) : searching ? (
+        <section className="panel issue-editor-panel" style={{ display: "flex", alignItems: "center", gap: "10px", padding: "30px" }}>
+          <Loader2 className="spinner" size={20} color="var(--color-primary)" />
+          <span>Loading issue details...</span>
+        </section>
+      ) : (
+        <section className="panel issue-editor-panel" style={{ padding: "30px" }}>
+          <h2>Change Issue</h2>
+          <p className="empty">Pilih issue dari menu Report terlebih dahulu.</p>
+        </section>
+      )}
     </div>
   );
 }
