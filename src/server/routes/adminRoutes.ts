@@ -244,18 +244,30 @@ const uploadsTemplatesDir = path.join(projectRootAdmin, "uploads", "templates");
 
 function getDocxPaths(type: string) {
   const isSingle = type === "single";
-  const defaultPath = isSingle
-    ? path.join(projectRootAdmin, "templates", "cr_transport", "cr_transport.docx")
-    : path.join(projectRootAdmin, "templates", "cr_transport_project", "cr_transport_project.docx");
-  const customFileName = isSingle ? "cr_transport_custom.docx" : "project_cr_transport_custom.docx";
+  const isUser = type === "user";
+  let defaultPath = path.join(projectRootAdmin, "templates", "cr_transport_project", "cr_transport_project.docx");
+  let customFileName = "project_cr_transport_custom.docx";
+  let filename = "cr_transport_project.docx";
+
+  if (isSingle) {
+    defaultPath = path.join(projectRootAdmin, "templates", "cr_transport", "cr_transport.docx");
+    customFileName = "cr_transport_custom.docx";
+    filename = "cr_transport.docx";
+  } else if (isUser) {
+    defaultPath = path.join(projectRootAdmin, "templates", "cr_user", "cr_user.docx");
+    customFileName = "cr_user_custom.docx";
+    filename = "cr_user.docx";
+  }
+
   const customPath = path.join(uploadsTemplatesDir, customFileName);
-  return { isSingle, defaultPath, customPath, filename: isSingle ? "cr_transport.docx" : "cr_transport_project.docx" };
+  return { isSingle, isUser, defaultPath, customPath, filename };
 }
 
 adminRoutes.get("/docx-templates/info", async (_req, res, next) => {
   try {
     const single = getDocxPaths("single");
     const project = getDocxPaths("project");
+    const user = getDocxPaths("user");
 
     const getMeta = (paths: ReturnType<typeof getDocxPaths>) => {
       const isCustom = fs.existsSync(paths.customPath);
@@ -274,7 +286,8 @@ adminRoutes.get("/docx-templates/info", async (_req, res, next) => {
 
     res.json({
       single: getMeta(single),
-      project: getMeta(project)
+      project: getMeta(project),
+      user: getMeta(user)
     });
   } catch (error) {
     next(error);

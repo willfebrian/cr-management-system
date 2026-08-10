@@ -10,7 +10,7 @@ import { cancelIssue, deleteIssue, getIssueDashboardInsights, getIssueDetail, ge
 import { getGlpiTicketDetailFromMaria, searchGlpiTicketsFromMaria } from "../db/glpiMariaRepository.js";
 import { getSapCrSystem, listSapCrSystems } from "../config.js";
 import { normalizeLookbackDays, normalizeSyncMode, normalizeSystemCodes, runCrSync } from "../sync/crSyncRunner.js";
-import { buildCrTransportDocument } from "../templates/crTransportTemplateService.js";
+import { buildCrTransportDocument, buildUserCrDocument } from "../templates/crTransportTemplateService.js";
 import { buildIssueTemplatePreview, type IssueTemplateKind } from "../templates/issueTemplateService.js";
 
 export const crRoutes = Router();
@@ -213,6 +213,21 @@ crRoutes.get("/issues/:id/templates/cr-transport", async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     const document = await buildCrTransportDocument(numberQuery(req.params.id, 0));
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${document.filename.replace(/"/g, "")}"; filename*=UTF-8''${encodeURIComponent(document.filename)}`
+    );
+    res.send(document.buffer);
+  } catch (error) {
+    next(error);
+  }
+});
+
+crRoutes.get("/issues/:id/templates/cr-user", async (req, res, next) => {
+  try {
+    await assertDatabaseConfigured();
+    const document = await buildUserCrDocument(numberQuery(req.params.id, 0));
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
     res.setHeader(
       "Content-Disposition",

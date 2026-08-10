@@ -3,7 +3,7 @@ import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { AlertTriangle, BarChart3, Ban, Calendar, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Copy, Database, ExternalLink, FileOutput, FileSearch, FileText, FolderKanban, GitPullRequest, KeyRound, LayoutGrid, Link as LinkIcon, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Tag, Trash2, User, Users, X, XCircle } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchAdminSettings, fetchAdminPeople, fetchCrDetail, fetchCrList, fetchDashboard, fetchGlpiTicketDetail, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchSapSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind, type GlpiTicketDetail, type AdminPersonRow, type SapSystemRow } from "../api";
+import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, downloadUserCrTemplate, fetchAdminSettings, fetchAdminPeople, fetchCrDetail, fetchCrList, fetchDashboard, fetchGlpiTicketDetail, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchSapSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind, type GlpiTicketDetail, type AdminPersonRow, type SapSystemRow } from "../api";
 import { IncompleteGroupCards } from "../components/IncompleteGroupCards";
 import { DisplayNameList } from "../components/DisplayNameList";
 import { DEFAULT_ISSUE_COLUMNS, IssueColumnMenu, type IssueColumnKey } from "../components/IssueColumnMenu";
@@ -3691,6 +3691,14 @@ export function App() {
                 setError(err instanceof Error ? err.message : String(err));
               }
             }}
+            onGenerateUserCrForm={async (issueId) => {
+              setError("");
+              try {
+                await downloadUserCrTemplate(issueId);
+              } catch (err) {
+                setError(err instanceof Error ? err.message : String(err));
+              }
+            }}
             onPage={(page) => {
               const nextFilters = { ...issueFilters, page };
               setIssueFilters(nextFilters);
@@ -5043,6 +5051,7 @@ function IssueDisplay({
   onChangeIssue,
   onIssueAction,
   onGenerateCrForm,
+  onGenerateUserCrForm,
   onPage,
   onPageSize,
   onOpenCr,
@@ -5061,6 +5070,7 @@ function IssueDisplay({
   onChangeIssue: (id: number, item?: IncompleteItem | null) => void;
   onIssueAction: (id: number, action: "cancel" | "delete") => void;
   onGenerateCrForm: (id: number) => void;
+  onGenerateUserCrForm?: (id: number) => void;
   onPage: (page: number) => void;
   onPageSize: (pageSize: number) => void;
   onOpenCr: (link: { sap_system_code?: string; trkorr: string }) => void;
@@ -5329,6 +5339,8 @@ function IssueDisplay({
                                       right: rowMenuPos.right,
                                       zIndex: 999999,
                                       textAlign: "left",
+                                      minWidth: "240px",
+                                      width: "max-content",
                                       boxShadow: "0 12px 28px -6px rgba(15, 23, 42, 0.25)",
                                       border: "1px solid var(--color-border, #cbd5e1)",
                                       background: "var(--color-bg-elevated, #ffffff)"
@@ -5352,7 +5364,21 @@ function IssueDisplay({
                                         onGenerateCrForm(issue.id);
                                       }}
                                     >
-                                      <FileSearch size={14} /> Generate CR Form
+                                      <FileSearch size={14} /> Generate CR Transport Form
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setRowMenuOpenId(null);
+                                        setRowMenuPos(null);
+                                        if (onGenerateUserCrForm) {
+                                          onGenerateUserCrForm(issue.id);
+                                        } else {
+                                          onGenerateCrForm(issue.id);
+                                        }
+                                      }}
+                                    >
+                                      <FileOutput size={14} /> Generate CR User Form
                                     </button>
                                     <button
                                       type="button"
@@ -5421,9 +5447,14 @@ function IssueDisplay({
                     <PencilLine size={15} /> Change Issue
                   </button>
                   {canGenerateCrForm && (
-                    <button type="button" onClick={() => { setDetailMenuOpen(false); onGenerateCrForm(selectedIssue.id); }}>
-                      <FileSearch size={15} /> Generate CR Form
-                    </button>
+                    <>
+                      <button type="button" onClick={() => { setDetailMenuOpen(false); onGenerateCrForm(selectedIssue.id); }}>
+                        <FileSearch size={15} /> Generate CR Transport Form
+                      </button>
+                      <button type="button" onClick={() => { setDetailMenuOpen(false); if (onGenerateUserCrForm) onGenerateUserCrForm(selectedIssue.id); else onGenerateCrForm(selectedIssue.id); }}>
+                        <FileOutput size={15} /> Generate CR User Form
+                      </button>
+                    </>
                   )}
                   <button type="button" disabled={selectedIssue.issue_status === "cancelled"} onClick={() => { setDetailMenuOpen(false); onIssueAction(selectedIssue.id, "cancel"); }}>
                     <XCircle size={15} /> Cancel Issue
@@ -6333,7 +6364,7 @@ function IssueEditor({
       void copyTemplateToClipboard(false);
     }
   }, [templatePreview]);
-  const [templateBusy, setTemplateBusy] = useState<"" | "email" | "ticket" | "cr-transport">("");
+  const [templateBusy, setTemplateBusy] = useState<"" | "email" | "ticket" | "cr-transport" | "cr-user">("");
   const [generateMenuOpen, setGenerateMenuOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [missingPeople, setMissingPeople] = useState<IssuePersonCheck[]>([]);
@@ -6640,8 +6671,8 @@ function IssueEditor({
   async function generateCrTransportTemplate() {
     if (!detail?.issue?.id) {
       setTemplatePreview({
-        title: "Generate CR Form",
-        body: "Save issue terlebih dahulu sebelum generate CR Form."
+        title: "Generate CR Transport Form",
+        body: "Save issue terlebih dahulu sebelum generate CR Transport Form."
       });
       return;
     }
@@ -6650,7 +6681,28 @@ function IssueEditor({
       await downloadCrTransportTemplate(detail.issue.id);
     } catch (err) {
       setTemplatePreview({
-        title: "Generate CR Form",
+        title: "Generate CR Transport Form",
+        body: err instanceof Error ? err.message : String(err)
+      });
+    } finally {
+      setTemplateBusy("");
+    }
+  }
+
+  async function generateUserCrTemplate() {
+    if (!detail?.issue?.id) {
+      setTemplatePreview({
+        title: "Generate CR User Form",
+        body: "Save issue terlebih dahulu sebelum generate CR User Form."
+      });
+      return;
+    }
+    setTemplateBusy("cr-user");
+    try {
+      await downloadUserCrTemplate(detail.issue.id);
+    } catch (err) {
+      setTemplatePreview({
+        title: "Generate CR User Form",
         body: err instanceof Error ? err.message : String(err)
       });
     } finally {
@@ -7248,10 +7300,16 @@ function IssueEditor({
                       }}><FileOutput size={15} /> Email Template</button>
                     ) : null}
                     {hasSavedCrLink ? (
-                      <button type="button" onClick={() => {
-                        setGenerateMenuOpen(false);
-                        generateCrTransportTemplate();
-                      }}><FileOutput size={15} /> CR Form</button>
+                      <>
+                        <button type="button" onClick={() => {
+                          setGenerateMenuOpen(false);
+                          generateCrTransportTemplate();
+                        }}><FileOutput size={15} /> CR Transport Form</button>
+                        <button type="button" onClick={() => {
+                          setGenerateMenuOpen(false);
+                          generateUserCrTemplate();
+                        }}><FileOutput size={15} /> CR User Form</button>
+                      </>
                     ) : null}
                   </div>
                 ) : null}
@@ -7620,7 +7678,8 @@ function ChangeIssue({
   const searchKey = `${selection.q.trim()}|${selection.glpi.trim()}|${selection.crHelpdesk.trim()}|${selection.cr.trim()}`;
 
   useEffect(() => {
-    if (!initialIssueId || loadedInitialIssueId.current === initialIssueId) return;
+    if (!initialIssueId) return;
+    if (loadedInitialIssueId.current === initialIssueId && changeDetail?.issue?.id === initialIssueId) return;
     loadedInitialIssueId.current = initialIssueId;
     setSearching(true);
     fetchIssueDetail(initialIssueId)
@@ -7641,7 +7700,11 @@ function ChangeIssue({
   }, [initialIssueId, onNotify]);
 
   useEffect(() => {
-    if (!initialIncompleteItem || !initialIssueId || changeDetail?.issue?.id !== initialIssueId) return;
+    if (!initialIncompleteItem) {
+      setNavigationRequest(null);
+      return;
+    }
+    if (!initialIssueId || changeDetail?.issue?.id !== initialIssueId) return;
     setNavigationRequest((current) => ({ sequence: (current?.sequence || 0) + 1, item: initialIncompleteItem }));
   }, [changeDetail?.issue?.id, initialIncompleteItem, initialIssueId]);
 
