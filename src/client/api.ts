@@ -560,3 +560,32 @@ export async function fetchAuditLogs(filters: ActivityLogFilters = {}): Promise<
 }
 
 export * from "./api/projectApi.js";
+
+export type DocxTemplateMeta = { isCustom: boolean; exists: boolean; sizeBytes: number; updatedAt: string | null };
+export type DocxTemplatesInfo = { single: DocxTemplateMeta; project: DocxTemplateMeta };
+
+export async function fetchDocxTemplatesInfo(): Promise<DocxTemplatesInfo> {
+  return fetchJson("/api/admin/docx-templates/info");
+}
+
+export function downloadDocxTemplateUrl(type: "single" | "project"): string {
+  return `/api/admin/docx-templates/${type}/download`;
+}
+
+export async function uploadDocxTemplate(type: "single" | "project", file: File): Promise<{ ok: boolean; message: string }> {
+  const reader = new FileReader();
+  const base64: string = await new Promise((resolve, reject) => {
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  return fetchJson(`/api/admin/docx-templates/${type}/upload`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contentBase64: base64, filename: file.name })
+  });
+}
+
+export async function resetDocxTemplate(type: "single" | "project"): Promise<{ ok: boolean; message: string }> {
+  return fetchJson(`/api/admin/docx-templates/${type}/reset`, { method: "POST" });
+}

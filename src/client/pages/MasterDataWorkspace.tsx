@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
-import { fetchAdminPeople, fetchAdminSettings, updateAdminPerson, updateAdminSettings, createAdminPerson, deleteAdminPerson, fetchGroupEmails, createGroupEmail, updateGroupEmail, deleteGroupEmail, fetchSapSystems, createSapSystem, updateSapSystem, deleteSapSystem, testSapSystemConnection, type AdminPersonRow, type GroupEmailRow, type SapSystemRow } from "../api";
-import { Check, Loader2, Save, X, Trash2, CheckCircle2, XCircle, AlertTriangle, Mail, Palette, Type, Sliders, User, Database, LayoutGrid, Server, Eye, EyeOff, Plus, Edit2, Activity, ShieldCheck, Radio, FileCode2, FileText } from "lucide-react";
+import { fetchAdminPeople, fetchAdminSettings, updateAdminPerson, updateAdminSettings, createAdminPerson, deleteAdminPerson, fetchGroupEmails, createGroupEmail, updateGroupEmail, deleteGroupEmail, fetchSapSystems, createSapSystem, updateSapSystem, deleteSapSystem, testSapSystemConnection, fetchDocxTemplatesInfo, uploadDocxTemplate, resetDocxTemplate, downloadDocxTemplateUrl, type AdminPersonRow, type GroupEmailRow, type SapSystemRow, type DocxTemplatesInfo } from "../api";
+import { Check, Loader2, Save, X, Trash2, CheckCircle2, XCircle, AlertTriangle, Mail, Palette, Type, Sliders, User, Database, LayoutGrid, Server, Eye, EyeOff, Plus, Edit2, Activity, ShieldCheck, Radio, FileCode2, FileText, Upload, Download, RotateCcw, FileCheck } from "lucide-react";
 import { STATUS_COLOR_CONFIGS, applyCustomStatusColors } from "../utils/tagColors";
 import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
 import { TableDataLoader } from "../components/InteractiveLoaders";
@@ -173,6 +173,47 @@ Regards,
   const [deleteConfirmGroup, setDeleteConfirmGroup] = useState<GroupEmailRow | null>(null);
 
   const [activePatternField, setActivePatternField] = useState<"single" | "project">("single");
+  const [docxInfo, setDocxInfo] = useState<DocxTemplatesInfo | null>(null);
+  const [docxUploading, setDocxUploading] = useState<"" | "single" | "project">("");
+
+  function loadDocxInfo() {
+    fetchDocxTemplatesInfo()
+      .then(setDocxInfo)
+      .catch(() => setDocxInfo(null));
+  }
+
+  async function handleUploadDocx(type: "single" | "project", file: File) {
+    if (!file.name.toLowerCase().endsWith(".docx")) {
+      showToast("error", "Only Microsoft Word .docx template files are supported!");
+      return;
+    }
+    try {
+      setDocxUploading(type);
+      const res = await uploadDocxTemplate(type, file);
+      showToast("success", res.message || "Word template uploaded successfully!");
+      loadDocxInfo();
+    } catch (err) {
+      showToast("error", err instanceof Error ? err.message : String(err));
+    } finally {
+      setDocxUploading("");
+    }
+  }
+
+  async function handleResetDocx(type: "single" | "project") {
+    if (!window.confirm(`Are you sure you want to reset the ${type === "single" ? "Single Issue" : "Project Group"} Word template to default?`)) {
+      return;
+    }
+    try {
+      setDocxUploading(type);
+      const res = await resetDocxTemplate(type);
+      showToast("success", res.message || "Template reset to default!");
+      loadDocxInfo();
+    } catch (err) {
+      showToast("error", err instanceof Error ? err.message : String(err));
+    } finally {
+      setDocxUploading("");
+    }
+  }
 
   function renderPatternPreview(pattern: string, isProject = false) {
     if (!pattern || !pattern.trim()) return "(empty pattern)";
@@ -267,6 +308,12 @@ Regards,
       })
       .finally(() => setLoading(false));
   }, [isAdmin]);
+
+  useEffect(() => {
+    if (activeTab === "general_settings") {
+      loadDocxInfo();
+    }
+  }, [activeTab]);
 
   async function handleSaveServer(e?: React.FormEvent) {
     if (e) e.preventDefault();
@@ -1278,6 +1325,156 @@ Regards,
                       <strong style={{ color: "var(--color-primary, #0f766e)" }}>👁️ Live Preview: </strong>
                       <span style={{ fontFamily: "monospace", fontWeight: "600" }}>{renderPatternPreview(settings.filename_pattern_project_cr_transport || "", true)}</span>
                     </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Word Document Template Management (.docx) */}
+              <div style={{ marginTop: "1.5rem", paddingTop: "1.5rem", borderTop: "1px solid var(--color-border, #e5e7eb)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "1rem" }}>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: "1rem", color: "var(--color-text-heading, #111827)", display: "flex", alignItems: "center", gap: "8px" }}>
+                      <FileCheck size={18} style={{ color: "var(--color-primary, #0f766e)" }} /> Word Document Template Management (.docx)
+                    </h4>
+                    <p style={{ color: "var(--color-text-muted, #6b7280)", margin: "4px 0 0 0", fontSize: "0.85rem" }}>
+                      Upload or download custom Microsoft Word (.docx) templates for CR Transport single issue forms and project group forms.
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "1rem" }}>
+                  {/* Single Issue Template */}
+                  <div style={{ background: "var(--color-bg-subtle, #f8fafc)", padding: "1.25rem", borderRadius: "8px", border: "1px solid var(--color-border, #e2e8f0)", display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "1rem" }}>
+                    <div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+                        <strong style={{ fontSize: "0.9rem", color: "var(--color-text-heading, #1e293b)" }}>Single Issue CR Transport Form</strong>
+                        <span style={{ fontSize: "0.75rem", padding: "2px 8px", borderRadius: "12px", background: docxInfo?.single?.isCustom ? "#fef3c7" : "#e0f2fe", color: docxInfo?.single?.isCustom ? "#92400e" : "#0369a1", fontWeight: "600" }}>
+                          {docxInfo?.single?.isCustom ? "★ Custom Upload" : "● System Default"}
+                        </span>
+                      </div>
+                      <p style={{ fontSize: "0.8rem", color: "var(--color-text-muted, #64748b)", margin: "0 0 0.5rem 0" }}>
+                        Template file: <code>cr_transport.docx</code> ({docxInfo?.single?.sizeBytes ? `${Math.round(docxInfo.single.sizeBytes / 1024)} KB` : "45 KB"})
+                      </p>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                      <a
+                        href={downloadDocxTemplateUrl("single")}
+                        download="cr_transport.docx"
+                        style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", background: "var(--color-bg-elevated, #ffffff)", color: "var(--color-text, #334155)", fontSize: "0.8rem", fontWeight: "600", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                      >
+                        <Download size={14} /> Download (.docx)
+                      </a>
+
+                      <label style={{ padding: "6px 12px", borderRadius: "6px", border: "none", background: "var(--color-primary, #0f766e)", color: "#ffffff", fontSize: "0.8rem", fontWeight: "600", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                        <Upload size={14} /> {docxUploading === "single" ? "Uploading..." : "Upload New (.docx)"}
+                        <input
+                          type="file"
+                          accept=".docx"
+                          disabled={!!docxUploading}
+                          style={{ display: "none" }}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleUploadDocx("single", file);
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
+
+                      {docxInfo?.single?.isCustom ? (
+                        <button
+                          type="button"
+                          onClick={() => handleResetDocx("single")}
+                          disabled={!!docxUploading}
+                          style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid #fca5a5", background: "#fef2f2", color: "#991b1b", fontSize: "0.8rem", fontWeight: "600", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                        >
+                          <RotateCcw size={14} /> Reset
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {/* Project Group Template */}
+                  <div style={{ background: "var(--color-bg-subtle, #f8fafc)", padding: "1.25rem", borderRadius: "8px", border: "1px solid var(--color-border, #e2e8f0)", display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "1rem" }}>
+                    <div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+                        <strong style={{ fontSize: "0.9rem", color: "var(--color-text-heading, #1e293b)" }}>Project Group CR Transport Form</strong>
+                        <span style={{ fontSize: "0.75rem", padding: "2px 8px", borderRadius: "12px", background: docxInfo?.project?.isCustom ? "#fef3c7" : "#e0f2fe", color: docxInfo?.project?.isCustom ? "#92400e" : "#0369a1", fontWeight: "600" }}>
+                          {docxInfo?.project?.isCustom ? "★ Custom Upload" : "● System Default"}
+                        </span>
+                      </div>
+                      <p style={{ fontSize: "0.8rem", color: "var(--color-text-muted, #64748b)", margin: "0 0 0.5rem 0" }}>
+                        Template file: <code>cr_transport_project.docx</code> ({docxInfo?.project?.sizeBytes ? `${Math.round(docxInfo.project.sizeBytes / 1024)} KB` : "44 KB"})
+                      </p>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                      <a
+                        href={downloadDocxTemplateUrl("project")}
+                        download="cr_transport_project.docx"
+                        style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", background: "var(--color-bg-elevated, #ffffff)", color: "var(--color-text, #334155)", fontSize: "0.8rem", fontWeight: "600", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                      >
+                        <Download size={14} /> Download (.docx)
+                      </a>
+
+                      <label style={{ padding: "6px 12px", borderRadius: "6px", border: "none", background: "var(--color-primary, #0f766e)", color: "#ffffff", fontSize: "0.8rem", fontWeight: "600", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                        <Upload size={14} /> {docxUploading === "project" ? "Uploading..." : "Upload New (.docx)"}
+                        <input
+                          type="file"
+                          accept=".docx"
+                          disabled={!!docxUploading}
+                          style={{ display: "none" }}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleUploadDocx("project", file);
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
+
+                      {docxInfo?.project?.isCustom ? (
+                        <button
+                          type="button"
+                          onClick={() => handleResetDocx("project")}
+                          disabled={!!docxUploading}
+                          style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid #fca5a5", background: "#fef2f2", color: "#991b1b", fontSize: "0.8rem", fontWeight: "600", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                        >
+                          <RotateCcw size={14} /> Reset
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Supported Word Tag Cheat Sheet */}
+                <div style={{ marginTop: "1rem", padding: "0.875rem 1rem", background: "var(--color-bg-subtle, #f8fafc)", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.8rem" }}>
+                  <strong style={{ color: "var(--color-primary, #0f766e)", display: "block", marginBottom: "4px" }}>💡 Supported Word Document Tags / Placeholders (Square Brackets):</strong>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "6px" }}>
+                    {[
+                      "[Fullname Requester]",
+                      "[CR Helpdesk]",
+                      "[Fullname ABAPer]",
+                      "[CR SAP]",
+                      "[CR SAP Description]",
+                      "[Problem]",
+                      "[Impact]",
+                      "[PRD Requested Date (DD.MM.YYYY)]",
+                      "[Classification 1]",
+                      "[Classification 2]",
+                      "[Classification n]",
+                      "[Nickname QA Transporter]",
+                      "[QA Transported Date (DD.MM.YYYY)]",
+                      "[Nickname QA Tester]",
+                      "[QA Tested Date (DD.MM.YYYY)]",
+                      "[Nickname QA Evaluator]",
+                      "[QA Evaluated Date (DD.MM.YYYY)]",
+                      "[Nickname Approval]",
+                      "[Approval Date (DD.MM.YYYY)]",
+                      "[Nickname PRD Transporter]",
+                      "[PRD Transported Date (DD.MM.YYYY)]"
+                    ].map((tag) => (
+                      <code key={tag} style={{ background: "var(--color-bg-elevated, #ffffff)", padding: "3px 8px", borderRadius: "4px", color: "var(--color-primary, #0f766e)", fontWeight: "600", border: "1px solid var(--color-border, #cbd5e1)" }}>{tag}</code>
+                    ))}
                   </div>
                 </div>
               </div>

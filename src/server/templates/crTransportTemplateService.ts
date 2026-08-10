@@ -63,6 +63,10 @@ export async function buildCrTransportDocument(issueId: number) {
 }
 
 function crTransportTemplatePath() {
+  const customPath = path.join(projectRoot, "uploads", "templates", "cr_transport_custom.docx");
+  if (fs.existsSync(customPath)) {
+    return customPath;
+  }
   const filePath = path.join(projectRoot, "templates", "cr_transport", "cr_transport.docx");
   if (!fs.existsSync(filePath)) throw new Error(`Template file was not found: ${filePath}`);
   return filePath;
