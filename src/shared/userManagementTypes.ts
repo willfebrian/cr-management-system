@@ -8,6 +8,22 @@ export type ManagementActor = {
   role: UserRole;
 };
 
+export type ManagedUserPerson = {
+  id: number;
+  fullName: string | null;
+  nickname: string | null;
+  email: string | null;
+  isActive: boolean;
+};
+
+export type ManagedUserPersonOption = ManagedUserPerson & {
+  assignedUser: {
+    id: number;
+    username: string;
+    deletedAt: string | null;
+  } | null;
+};
+
 export type ManagedUser = {
   id: number;
   username: string;
@@ -20,6 +36,7 @@ export type ManagedUser = {
   deletedAt: string | null;
   deletedBySnapshot: string | null;
   deleteReason: string | null;
+  person: ManagedUserPerson | null;
 };
 
 export type ManagedUserListFilters = {
@@ -47,7 +64,10 @@ export type UserAuditAction =
   | "PASSWORD_RESET"
   | "SESSIONS_REVOKED"
   | "USER_ARCHIVED"
-  | "USER_RESTORED";
+  | "USER_RESTORED"
+  | "PERSON_ASSIGNED"
+  | "PERSON_REASSIGNED"
+  | "PERSON_UNASSIGNED";
 
 export type UserAuditEntry = {
   id: number;

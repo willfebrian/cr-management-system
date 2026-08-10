@@ -5,6 +5,8 @@ import type {
   ManagedUser,
   ManagedUserListFilters,
   ManagedUserListResult,
+  ManagedUserPerson,
+  ManagedUserPersonOption,
   ManagementActor,
   RestoreManagedUserPayload,
   UpdateManagedUserProfilePayload,
@@ -44,6 +46,17 @@ function nullableIso(value: unknown): string | null {
   return value == null ? null : toIso(value);
 }
 
+function toManagedUserPerson(row: any): ManagedUserPerson | null {
+  if (row.person_id == null) return null;
+  return {
+    id: Number(row.person_id),
+    fullName: row.person_full_name ?? null,
+    nickname: row.person_nickname ?? null,
+    email: row.person_email ?? null,
+    isActive: Boolean(row.person_is_active)
+  };
+}
+
 function toManagedUser(row: any): ManagedUser {
   return {
     id: Number(row.id),
@@ -56,7 +69,8 @@ function toManagedUser(row: any): ManagedUser {
     updatedAt: toIso(row.updated_at),
     deletedAt: nullableIso(row.deleted_at),
     deletedBySnapshot: row.deleted_by_snapshot ?? null,
-    deleteReason: row.delete_reason ?? null
+    deleteReason: row.delete_reason ?? null,
+    person: toManagedUserPerson(row)
   };
 }
 
@@ -153,8 +167,12 @@ export function createUserManagementService(
     ];
     const values: unknown[] = [];
     if (filters.q?.trim()) {
-      values.push(`%${normalizeManagedUsername(filters.q)}%`);
-      clauses.push(`u.username ILIKE $${values.length}`);
+      values.push(`%${filters.q.trim()}%`);
+      clauses.push(`(
+        u.username ILIKE $${values.length}
+        OR p.full_name ILIKE $${values.length}
+        OR p.nickname ILIKE $${values.length}
+      )`);
     }
     if (filters.role) {
       values.push(filters.role);
@@ -166,15 +184,23 @@ export function createUserManagementService(
     }
     const where = clauses.join(" AND ");
     const countResult = await database.query(
-      `SELECT count(*)::text AS total FROM app_users u WHERE ${where}`,
+      `SELECT count(*)::text AS total
+         FROM app_users u
+         LEFT JOIN issue_people p ON p.id = u.person_id
+        WHERE ${where}`,
       values
     );
     const pageValues = [...values, pageSize, (page - 1) * pageSize];
     const rows = await database.query(
       `SELECT u.id, u.username, u.role, u.is_active, u.must_change_password,
               u.last_login_at, u.created_at, u.updated_at, u.deleted_at,
-              u.deleted_by_snapshot, u.delete_reason
+              u.deleted_by_snapshot, u.delete_reason, u.person_id,
+              p.full_name AS person_full_name,
+              p.nickname AS person_nickname,
+              p.email AS person_email,
+              p.is_active AS person_is_active
          FROM app_users u
+         LEFT JOIN issue_people p ON p.id = u.person_id
         WHERE ${where}
         ORDER BY u.username
         LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
@@ -186,6 +212,38 @@ export function createUserManagementService(
       pageSize,
       total: Number(countResult.rows[0]?.total ?? 0)
     };
+  }
+
+  async function listManagedUserPersonOptions(
+    query: string,
+    actor: ManagementActor
+  ): Promise<ManagedUserPersonOption[]> {
+    assertAdmin(actor);
+    const value = `%${String(query ?? "").trim()}%`;
+    const result = await database.query(
+      `SELECT p.id, p.full_name, p.nickname, p.email, p.is_active,
+              u.id AS assigned_user_id,
+              u.username AS assigned_username,
+              u.deleted_at AS assigned_user_deleted_at
+         FROM issue_people p
+         LEFT JOIN app_users u ON u.person_id = p.id
+        WHERE p.full_name ILIKE $1 OR p.nickname ILIKE $1
+        ORDER BY coalesce(p.full_name, p.nickname), p.id
+        LIMIT 100`,
+      [value]
+    );
+    return result.rows.map((row) => ({
+      id: Number(row.id),
+      fullName: row.full_name ?? null,
+      nickname: row.nickname ?? null,
+      email: row.email ?? null,
+      isActive: Boolean(row.is_active),
+      assignedUser: row.assigned_user_id == null ? null : {
+        id: Number(row.assigned_user_id),
+        username: String(row.assigned_username),
+        deletedAt: nullableIso(row.assigned_user_deleted_at)
+      }
+    }));
   }
 
   async function getManagedUserAudit(
@@ -636,6 +694,7 @@ export function createUserManagementService(
 
   return {
     listManagedUsers,
+    listManagedUserPersonOptions,
     getManagedUserAudit,
     createManagedUser,
     updateManagedUserProfile,
@@ -650,6 +709,7 @@ export function createUserManagementService(
 const defaultService = createUserManagementService();
 
 export const listManagedUsers = defaultService.listManagedUsers;
+export const listManagedUserPersonOptions = defaultService.listManagedUserPersonOptions;
 export const getManagedUserAudit = defaultService.getManagedUserAudit;
 export const createManagedUser = defaultService.createManagedUser;
 export const updateManagedUserProfile = defaultService.updateManagedUserProfile;
