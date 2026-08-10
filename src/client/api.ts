@@ -560,3 +560,56 @@ export async function fetchAuditLogs(filters: ActivityLogFilters = {}): Promise<
 }
 
 export * from "./api/projectApi.js";
+
+export type DocxTemplateMeta = { isCustom: boolean; exists: boolean; sizeBytes: number; updatedAt: string | null };
+export type DocxTemplatesInfo = { single: DocxTemplateMeta; project: DocxTemplateMeta; user: DocxTemplateMeta };
+
+export async function fetchDocxTemplatesInfo(): Promise<DocxTemplatesInfo> {
+  return fetchJson("/api/admin/docx-templates/info");
+}
+
+export function downloadDocxTemplateUrl(type: "single" | "project" | "user"): string {
+  return `/api/admin/docx-templates/${type}/download`;
+}
+
+export async function uploadDocxTemplate(type: "single" | "project" | "user", file: File): Promise<{ ok: boolean; message: string }> {
+  const reader = new FileReader();
+  const base64: string = await new Promise((resolve, reject) => {
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  return fetchJson(`/api/admin/docx-templates/${type}/upload`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contentBase64: base64, filename: file.name })
+  });
+}
+
+export async function resetDocxTemplate(type: "single" | "project" | "user"): Promise<{ ok: boolean; message: string }> {
+  return fetchJson(`/api/admin/docx-templates/${type}/reset`, { method: "POST" });
+}
+
+export async function downloadUserCrTemplate(issueId: number) {
+  const response = await fetch(`/api/issues/${issueId}/templates/cr-user`, { credentials: "include" });
+  if (!response.ok) {
+    const json = await response.json().catch(() => ({}));
+    throw new Error(json.message || "Failed to generate CR User Form document.");
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") || "";
+  let filename = `CR User Form ${issueId}.docx`;
+  const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="([^"]+)"|filename=([^;]+)/i);
+  if (match) {
+    const raw = match[1] || match[2] || match[3];
+    if (raw) filename = decodeURIComponent(raw.trim());
+  }
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}

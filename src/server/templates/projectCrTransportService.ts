@@ -134,11 +134,14 @@ export async function buildProjectCrTransportDocument(projectId: number) {
 
 export function buildProjectCrTransportDocumentFromModel(
   model: ProjectCrTransportModel,
-  templatePath = path.join(projectRoot, "templates", "cr_transport_project", "cr_transport_project.docx"),
+  templatePath?: string,
   pattern = "CR Transport Project {PROJECT_KEY}.docx"
 ) {
-  if (!fs.existsSync(templatePath)) throw new Error(`Template file was not found: ${templatePath}`);
-  const entries = readZipEntries(templatePath);
+  const customPath = path.join(projectRoot, "uploads", "templates", "project_cr_transport_custom.docx");
+  const activeTemplatePath = templatePath || (fs.existsSync(customPath) ? customPath : path.join(projectRoot, "templates", "cr_transport_project", "cr_transport_project.docx"));
+
+  if (!fs.existsSync(activeTemplatePath)) throw new Error(`Template file was not found: ${activeTemplatePath}`);
+  const entries = readZipEntries(activeTemplatePath);
   const document = entries.find((entry) => entry.name === "word/document.xml");
   if (!document) throw new Error("Project CR Transport template is missing word/document.xml.");
   document.data = Buffer.from(renderProjectCrTransportXml(document.data.toString("utf8"), model), "utf8");

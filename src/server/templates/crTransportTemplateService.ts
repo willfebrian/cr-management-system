@@ -63,6 +63,10 @@ export async function buildCrTransportDocument(issueId: number) {
 }
 
 function crTransportTemplatePath() {
+  const customPath = path.join(projectRoot, "uploads", "templates", "cr_transport_custom.docx");
+  if (fs.existsSync(customPath)) {
+    return customPath;
+  }
   const filePath = path.join(projectRoot, "templates", "cr_transport", "cr_transport.docx");
   if (!fs.existsSync(filePath)) throw new Error(`Template file was not found: ${filePath}`);
   return filePath;
@@ -529,4 +533,153 @@ function findEndOfCentralDirectory(buffer: Buffer) {
     if (buffer.readUInt32LE(offset) === 0x06054b50) return offset;
   }
   throw new Error("Invalid DOCX file: end of central directory not found.");
+}
+
+export async function buildUserCrDocument(issueId: number) {
+  const detail = await getIssueDetail(issueId);
+  if (!detail.issue) throw new Error("Issue not found.");
+
+  const primaryCr = detail.crLinks.find((link) => link.is_primary) || detail.crLinks[0];
+  const crDetail = primaryCr?.trkorr ? await getCrDetailForSystem(primaryCr.trkorr, primaryCr.sap_system_code || "DEV") : { request: { description: "" }, objects: [] };
+
+  const templatePath = userCrTemplatePath();
+  const entries = readZipEntries(templatePath);
+  const documentEntry = entries.find((entry) => entry.name === "word/document.xml");
+  if (!documentEntry) throw new Error("CR User template is missing word/document.xml.");
+
+  const values = buildUserCrValues(detail, crDetail);
+  documentEntry.data = Buffer.from(replaceUserCrPlaceholders(documentEntry.data.toString("utf8"), values), "utf8");
+
+  const pattern = await getAppSetting("filename_pattern_cr_user", "CR User {ISSUE_KEY}.docx");
+  const tokens: Record<string, string> = {
+    ISSUE_KEY: detail.issue.issue_key || String(issueId),
+    CR_SAP: primaryCr?.trkorr || "",
+    HELP_DESK: detail.crHelpdeskNumbers[0]?.cr_helpdesk_no || "",
+    DATE: new Date().toISOString().split("T")[0],
+    ENV: primaryCr?.sap_system_code || "DEV"
+  };
+  let formattedName = renderNamingPattern(pattern, tokens);
+  if (!formattedName.toLowerCase().endsWith(".docx")) {
+    formattedName += ".docx";
+  }
+  const filename = sanitizeFilename(formattedName);
+  return {
+    filename,
+    buffer: writeZipEntries(entries)
+  };
+}
+
+function userCrTemplatePath() {
+  const customPath = path.join(projectRoot, "uploads", "templates", "cr_user_custom.docx");
+  if (fs.existsSync(customPath)) {
+    return customPath;
+  }
+  const filePath = path.join(projectRoot, "templates", "cr_user", "cr_user.docx");
+  if (!fs.existsSync(filePath)) throw new Error(`Template file was not found: ${filePath}`);
+  return filePath;
+}
+
+function buildUserCrValues(detail: IssueDetail, crDetail: any) {
+  const issue = detail.issue!;
+  const primaryCr = detail.crLinks.find((link) => link.is_primary) || detail.crLinks[0];
+  const abaperList = detail.participants.filter((p) => p.role === "abaper");
+  const abaperCount = Math.max(abaperList.length, 1);
+  const requesterDept = detail.participants.find((p) => p.role === "requester")?.department || "IT";
+
+  const itManager = participantNames(detail, "approval", "full")
+    || participantNames(detail, "approver", "full")
+    || participantNames(detail, "approval", "nickname")
+    || participantNames(detail, "approver", "nickname")
+    || "IT Manager";
+
+  const evaluatorFullname = participantNames(detail, "dev_evaluator", "full")
+    || participantNames(detail, "qa_evaluator", "full")
+    || participantNames(detail, "prd_evaluator", "full")
+    || participantNames(detail, "evaluator", "full");
+
+  const managerRequester = participantNames(detail, "prd_requester", "full")
+    || participantNames(detail, "manager_requester", "full")
+    || participantNames(detail, "manager", "full");
+
+  const transporterFullname = participantNames(detail, "executor", "full")
+    || participantNames(detail, "transporter", "full")
+    || participantNames(detail, "qa_transporter", "full");
+
+  const dateDev = formatDateDmy(
+    readTimelineDate(detail.devTimeline, "dev_tested_date") ||
+    readTimelineDate(detail.devTimeline, "dev_evaluated_date") ||
+    ""
+  );
+
+  const dateQa = formatDateDmy(
+    readTimelineDate(detail.qaTimeline, "qa_evaluated_date") ||
+    readTimelineDate(detail.qaTimeline, "qa_tested_date") ||
+    primaryCr?.qa_import_date ||
+    ""
+  );
+
+  const datePrd = formatDateDmy(
+    readTimelineDate(detail.prdTimeline, "approval_date") ||
+    readTimelineDate(detail.prdTimeline, "prd_requested_date") ||
+    readTimelineDate(detail.prdTimeline, "prd_evaluated_date") ||
+    primaryCr?.prd_import_date ||
+    ""
+  );
+
+  return {
+    issueName: issue.issue_name || "",
+    crSap: primaryCr?.trkorr || "",
+    crSapDescription: crDetail.request?.description || primaryCr?.cr_description_snapshot || "",
+    module: (issue as any).module || "SAP",
+    requesterFullname: participantNames(detail, "requester", "full"),
+    department: requesterDept,
+    problem: issue.problem_analysis || "",
+    impact: issue.impact_analysis || "",
+    explanation: issue.impact_analysis || "",
+    abaperFullname: participantNames(detail, "abaper", "full"),
+    evaluatorFullname: evaluatorFullname,
+    transporterFullname: transporterFullname,
+    managerRequester: managerRequester,
+    itManager: itManager,
+    estimatedPersons: String(abaperCount),
+    estimatedDays: "3",
+    resourceEstimate: String(abaperCount),
+    dateDev: dateDev,
+    dateQa: dateQa,
+    datePrd: datePrd,
+    date: dateQa || dateDev || formatDateDmy(new Date().toISOString().split("T")[0])
+  };
+}
+
+function replaceUserCrPlaceholders(xml: string, values: ReturnType<typeof buildUserCrValues>) {
+  let rendered = xml;
+  const replacements: Record<string, string> = {
+    "[ISSUE_NAME]": values.issueName,
+    "[CR_SAP]": values.crSap,
+    "[CR SAP Description]": values.crSapDescription,
+    "[MODULE]": values.module,
+    "[Fullname Requester]": values.requesterFullname,
+    "[Department]": values.department,
+    "[Problem]": values.problem,
+    "[Impact]": values.impact,
+    "[Explanation]": values.explanation,
+    "[Fullname Examiner]": values.abaperFullname,
+    "[Fullname Evaluator]": values.evaluatorFullname,
+    "[Transporter]": values.transporterFullname,
+    "[Manager Requester]": values.managerRequester,
+    "[IT Manager]": values.itManager,
+    "[ESTIMATED_PERSONS]": values.estimatedPersons,
+    "[ESTIMATED_DAYS]": values.estimatedDays,
+    "[Resource Estimate]": values.resourceEstimate,
+    "[Effects]": values.impact,
+    "[DATE_DEV]": values.dateDev,
+    "[DATE_QA]": values.dateQa,
+    "[DATE_PRD]": values.datePrd,
+    "[Date]": values.date
+  };
+
+  for (const [placeholder, value] of Object.entries(replacements)) {
+    rendered = replaceAllTextAcrossRuns(rendered, placeholder, value);
+  }
+  return stripHighlight(rendered);
 }

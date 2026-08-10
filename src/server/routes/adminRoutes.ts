@@ -243,6 +243,138 @@ adminRoutes.put("/settings", async (req, res, next) => {
   }
 });
 
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirnameAdmin = path.dirname(fileURLToPath(import.meta.url));
+const projectRootAdmin = path.resolve(__dirnameAdmin, "..", "..", "..");
+const uploadsTemplatesDir = path.join(projectRootAdmin, "uploads", "templates");
+
+function getDocxPaths(type: string) {
+  const isSingle = type === "single";
+  const isUser = type === "user";
+  let defaultPath = path.join(projectRootAdmin, "templates", "cr_transport_project", "cr_transport_project.docx");
+  let customFileName = "project_cr_transport_custom.docx";
+  let filename = "cr_transport_project.docx";
+
+  if (isSingle) {
+    defaultPath = path.join(projectRootAdmin, "templates", "cr_transport", "cr_transport.docx");
+    customFileName = "cr_transport_custom.docx";
+    filename = "cr_transport.docx";
+  } else if (isUser) {
+    defaultPath = path.join(projectRootAdmin, "templates", "cr_user", "cr_user.docx");
+    customFileName = "cr_user_custom.docx";
+    filename = "cr_user.docx";
+  }
+
+  const customPath = path.join(uploadsTemplatesDir, customFileName);
+  return { isSingle, isUser, defaultPath, customPath, filename };
+}
+
+adminRoutes.get("/docx-templates/info", async (_req, res, next) => {
+  try {
+    const single = getDocxPaths("single");
+    const project = getDocxPaths("project");
+    const user = getDocxPaths("user");
+
+    const getMeta = (paths: ReturnType<typeof getDocxPaths>) => {
+      const isCustom = fs.existsSync(paths.customPath);
+      const activePath = isCustom ? paths.customPath : paths.defaultPath;
+      if (!fs.existsSync(activePath)) {
+        return { isCustom: false, exists: false, sizeBytes: 0, updatedAt: null };
+      }
+      const stat = fs.statSync(activePath);
+      return {
+        isCustom,
+        exists: true,
+        sizeBytes: stat.size,
+        updatedAt: stat.mtime.toISOString()
+      };
+    };
+
+    res.json({
+      single: getMeta(single),
+      project: getMeta(project),
+      user: getMeta(user)
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRoutes.get("/docx-templates/:type/download", async (req, res, next) => {
+  try {
+    const type = String(req.params.type || "single");
+    const paths = getDocxPaths(type);
+    const activePath = fs.existsSync(paths.customPath) ? paths.customPath : paths.defaultPath;
+    if (!fs.existsSync(activePath)) {
+      res.status(404).json({ ok: false, message: "Template file not found." });
+      return;
+    }
+    res.download(activePath, paths.filename);
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRoutes.post("/docx-templates/:type/upload", requireAdmin, async (req, res, next) => {
+  try {
+    const type = String(req.params.type || "single");
+    const { contentBase64 } = req.body;
+    if (!contentBase64 || typeof contentBase64 !== "string") {
+      res.status(400).json({ ok: false, message: "Invalid or missing contentBase64 payload." });
+      return;
+    }
+
+    const paths = getDocxPaths(type);
+    if (!fs.existsSync(uploadsTemplatesDir)) {
+      fs.mkdirSync(uploadsTemplatesDir, { recursive: true });
+    }
+
+    const fileBuffer = Buffer.from(contentBase64.replace(/^data:.*?;base64,/, ""), "base64");
+    fs.writeFileSync(paths.customPath, fileBuffer);
+
+    const user = await resolveAuthUser(req);
+    await recordActivityLog({
+      activityType: "admin",
+      action: "upload_docx_template",
+      username: user?.username || "system",
+      userId: user?.id || null,
+      description: `Uploaded custom Word .docx template for ${type}`,
+      ipAddress: req.ip
+    });
+
+    res.json({ ok: true, message: `Successfully updated ${type} Word template.` });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRoutes.post("/docx-templates/:type/reset", requireAdmin, async (req, res, next) => {
+  try {
+    const type = String(req.params.type || "single");
+    const paths = getDocxPaths(type);
+    if (fs.existsSync(paths.customPath)) {
+      fs.unlinkSync(paths.customPath);
+    }
+
+    const user = await resolveAuthUser(req);
+    await recordActivityLog({
+      activityType: "admin",
+      action: "reset_docx_template",
+      username: user?.username || "system",
+      userId: user?.id || null,
+      description: `Reset Word .docx template for ${type} to default`,
+      ipAddress: req.ip
+    });
+
+    res.json({ ok: true, message: `Successfully reset ${type} Word template to default.` });
+  } catch (error) {
+    next(error);
+  }
+});
+
 async function ensureSapSystemsTable() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS sap_systems (
