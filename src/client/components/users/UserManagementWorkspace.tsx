@@ -21,6 +21,7 @@ import {
   type UserEditorPayload
 } from "./UserEditorDialog";
 import { UserActionDialogs, type UserAction } from "./UserActionDialogs";
+import { managedPersonLabel } from "./UserPersonAssignmentDialog";
 
 type FilterState = { q: string; role: string; status: string };
 
@@ -56,7 +57,7 @@ export function UserManagementWorkspaceView({
     <div className="user-management__filters">
       <input
         aria-label="Search users"
-        placeholder="Search username"
+        placeholder="Search username, full name, or nickname"
         value={filters.q}
         onChange={(event) => onFiltersChange({ ...filters, q: event.target.value })}
       />
@@ -93,7 +94,11 @@ export function UserManagementWorkspaceView({
           aria-pressed={selectedUserId === user.id}
           onClick={() => onSelect(user.id)}
         >
-          <span><strong>{user.username}</strong><small>{user.role}</small></span>
+          <span className="user-management__identity">
+            <strong>{user.username}</strong>
+            <small>{user.person ? managedPersonLabel(user.person) : "Unassigned"} · {user.role}</small>
+            {user.person && !user.person.isActive && <span className="user-badge user-badge--person-warning">Inactive person</span>}
+          </span>
           <span className={`user-badge user-badge--${user.deletedAt ? "archived" : user.isActive ? "active" : "inactive"}`}>
             {user.deletedAt ? "Archived" : user.isActive ? "Active" : "Inactive"}
           </span>

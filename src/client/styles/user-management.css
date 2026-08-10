@@ -150,6 +150,18 @@
   font-size: 12px;
 }
 
+.user-management__identity {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.user-badge--person-warning {
+  width: fit-content;
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+
 .user-management__detail,
 .user-detail {
   min-width: 0;
@@ -200,6 +212,38 @@
   flex-wrap: wrap;
   gap: 0.65rem;
   margin-top: 1rem;
+}
+
+.user-detail__person {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.user-detail__person h3 {
+  margin-top: 0;
+}
+
+.user-detail__person dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.user-detail__person dl div {
+  min-width: 0;
+}
+
+.user-detail__person dd {
+  margin: 0.25rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.user-detail__person-actions {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
 }
 
 .user-detail__protection-note {
@@ -378,6 +422,53 @@
   gap: 0.75rem;
 }
 
+.user-person-dialog {
+  width: min(36rem, 100%);
+}
+
+.user-person-options {
+  display: grid;
+  gap: 0.5rem;
+  max-height: 20rem;
+  margin: 1rem 0;
+  overflow-y: auto;
+}
+
+.user-person-option {
+  display: grid;
+  gap: 0.2rem;
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  color: #0f172a;
+  text-align: left;
+  cursor: pointer;
+}
+
+.user-person-option--selected {
+  border-color: #0f766e;
+  background: #f0fdfa;
+}
+
+.user-person-option[disabled] {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.user-person-option small,
+.user-person-option span {
+  color: #64748b;
+}
+
+.user-person-transition {
+  margin: 1rem 0;
+  padding: 1rem;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
 .button {
   height: 38px;
   padding: 0 16px;
@@ -449,5 +540,9 @@
 
   .user-detail__summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .user-detail__person dl {
+    grid-template-columns: 1fr;
   }
 }
