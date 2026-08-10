@@ -583,6 +583,14 @@ ALTER TABLE app_users
   ADD COLUMN IF NOT EXISTS deleted_by_snapshot TEXT,
   ADD COLUMN IF NOT EXISTS delete_reason TEXT;
 
+ALTER TABLE app_users
+  ADD COLUMN IF NOT EXISTS person_id BIGINT
+  REFERENCES issue_people(id) ON DELETE RESTRICT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_app_users_person_unique
+  ON app_users (person_id)
+  WHERE person_id IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_app_users_management_scope
   ON app_users (deleted_at, is_active, role, username);
 

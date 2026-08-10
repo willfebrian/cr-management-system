@@ -6,6 +6,11 @@ const migrationUrl = new URL(
   "../database/migrations/20260731_user_management_lifecycle.sql",
   import.meta.url
 );
+const assignmentMigrationUrl = new URL(
+  "../database/migrations/20260810_user_person_assignment.sql",
+  import.meta.url
+);
+const schemaUrl = new URL("../database/schema.sql", import.meta.url);
 
 test("migration adds complete soft-archive metadata to app_users", async () => {
   const sql = await readFile(migrationUrl, "utf8");
@@ -35,4 +40,17 @@ test("migration idempotently backfills one current reservation for existing user
   assert.match(sql, /upper\s*\(\s*trim\s*\(\s*u\.username\s*\)\s*\)/i);
   assert.match(sql, /ON CONFLICT\s*\(normalized_username\)\s+DO NOTHING/i);
   assert.match(sql, /NOT EXISTS[\s\S]+existing\.user_id = u\.id[\s\S]+existing\.is_current/i);
+});
+
+test("user-person assignment is nullable, referential, unique, and additive", async () => {
+  const [migration, schema] = await Promise.all([
+    readFile(assignmentMigrationUrl, "utf8"),
+    readFile(schemaUrl, "utf8")
+  ]);
+  for (const sql of [migration, schema]) {
+    assert.match(sql, /ADD COLUMN IF NOT EXISTS person_id BIGINT/i);
+    assert.match(sql, /person_id[\s\S]+REFERENCES issue_people\s*\(id\)\s+ON DELETE RESTRICT/i);
+    assert.match(sql, /CREATE UNIQUE INDEX IF NOT EXISTS idx_app_users_person_unique[\s\S]+ON app_users\s*\(person_id\)[\s\S]+WHERE person_id IS NOT NULL/i);
+  }
+  assert.doesNotMatch(migration, /UPDATE app_users[\s\S]+SET person_id/i);
 });
