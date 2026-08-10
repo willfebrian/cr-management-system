@@ -389,6 +389,7 @@ export function App() {
   const [nextSubIssueNo, setNextSubIssueNo] = useState<string>("01");
   const reportRequestId = useRef(0);
   const issueRequestId = useRef(0);
+  const dashboardViewEffectMountedRef = useRef(false);
 
   async function loadDashboardData() {
     const [dashboardData, trendData, systemData] = await Promise.all([
@@ -745,6 +746,11 @@ export function App() {
 
   useEffect(() => {
     if (view !== "dashboard") return;
+    if (dashboardViewEffectMountedRef.current) {
+      loadDashboardData().catch((err) => setError(err instanceof Error ? err.message : String(err)));
+    } else {
+      dashboardViewEffectMountedRef.current = true;
+    }
     const interval = window.setInterval(() => {
       loadDashboardData().catch((err) => setError(err instanceof Error ? err.message : String(err)));
     }, DASHBOARD_DB_REFRESH_MS);
@@ -3730,7 +3736,10 @@ export function App() {
                 setSyncRefreshToken((current) => current + 1);
                 showToast("success", "Issue saved.");
                 setView("issue-change");
-                await loadIssues({ ...issueFilters, page: 1 });
+                await Promise.all([
+                  loadIssues({ ...issueFilters, page: 1 }),
+                  loadDashboardData()
+                ]);
               } catch (err) {
                 setError(err instanceof Error ? err.message : String(err));
               }
@@ -3813,7 +3822,10 @@ export function App() {
                 setSyncRefreshToken((current) => current + 1);
                 showToast("success", "Issue saved.");
                 setView("issue-change");
-                await loadIssues({ ...issueFilters, page: 1 });
+                await Promise.all([
+                  loadIssues({ ...issueFilters, page: 1 }),
+                  loadDashboardData()
+                ]);
               } catch (err) {
                 setError(err instanceof Error ? err.message : String(err));
               }
@@ -3827,7 +3839,10 @@ export function App() {
                 setIssueFormDirty(false);
                 showToast("success", "Issue cancelled.");
                 setView("issue-display");
-                await loadIssues({ ...issueFilters, page: 1 });
+                await Promise.all([
+                  loadIssues({ ...issueFilters, page: 1 }),
+                  loadDashboardData()
+                ]);
               } catch (err) {
                 setError(err instanceof Error ? err.message : String(err));
               }
@@ -3841,7 +3856,10 @@ export function App() {
                 setIssueFormDirty(false);
                 showToast("success", "Issue deleted.");
                 setView("issue-display");
-                await loadIssues({ ...issueFilters, page: 1 });
+                await Promise.all([
+                  loadIssues({ ...issueFilters, page: 1 }),
+                  loadDashboardData()
+                ]);
               } catch (err) {
                 setError(err instanceof Error ? err.message : String(err));
               }

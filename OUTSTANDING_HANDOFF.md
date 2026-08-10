@@ -1,5 +1,7 @@
 # CR Management System - Outstanding Handoff
 
+> This document is the canonical handoff for the next chat. The original UI outstanding below is historical context; the current runtime and SAP outstanding are listed in the latest sections.
+
 Dokumen ini menjadi konteks lanjutan untuk task Codex berikutnya. Project berada di:
 
 `D:\Discovery AI\cr-management-system`
@@ -40,6 +42,46 @@ Lanjutkan enhancement konsistensi navigasi dan tampilan web dengan urutan beriku
     - Sync Mode
     - Lookback Days
     - Sync CR
+
+## Current Runtime Status (2026-08-10)
+
+The web flows required by CR Management System now use local runtime files inside this project. The runtime must not depend on `D:\Discovery AI\SAP-Agent-Discovery-Platform`.
+
+Local SAP runtime used by the web:
+
+- `scripts/sap-discovery.mjs` for CR discovery, Sync CR, CR detail, and transport logs.
+- `mcp/sap/*` for SAP client, landscape, gateway, tools, analyzer, and audit support.
+- `scripts/cr-transport-request.mjs` plus local transport-request modules for Create CR Transport.
+
+`SAP_AGENT_PLATFORM_DIR` and external connector mode are not supported. `SAP_DISCOVERY_SCRIPT` must be a relative path inside this project. The platform repository remains separate analysis/development context only.
+
+Create CR Transport currently supports Master Data targets, including DEV NC, DEV AIX, and active development-capable Sandbox targets such as TRS. Target validation remains restricted to active development/sandbox systems, RFC user `TRSTDEV`, and package `ZTRD`.
+
+## Latest Completed Enhancements
+
+- Create CR Transport runtime moved into this project.
+- Dynamic SAP target resolution from `sap_systems` with server-side credential handling.
+- Approval secret required only for actual Create; Resolve and Preflight remain read-only.
+- Partial SAP Object autocomplete: minimum 3 characters, 350 ms debounce, stale-response protection.
+- Legacy external SAP runtime fallback removed from production web flows.
+- `npm run build` and runtime isolation tests passed after the latest cleanup.
+- RFC source reference for partial matching is available at `ZRFC_TRANSPORT_OBJECT_RESOLVE.partial.abap`.
+
+## Current SAP Outstanding
+
+1. Copy the updated `ZRFC_TRANSPORT_OBJECT_RESOLVE.partial.abap` source into SE37 on DEV NC and DEV AIX.
+2. Run syntax check and activate the Function Module on both servers.
+3. Test partial searches such as `ZZK`, partial TCode, and partial function-module names on both targets.
+4. Confirm result ordering and result limits when the RFC returns many candidates.
+5. Test multi-object preflight and ensure no SAP request is created if any object fails.
+6. Verify duplicate Create behavior after objects are assigned to a request.
+
+## Portability Rules
+
+- Do not restore references to `SAP-Agent-Discovery-Platform` in production runtime code.
+- Do not commit `.env` passwords or `SAP_ABAP_ACTION_APPROVAL_SECRET`.
+- Every new machine needs its own `.env`, database connection, SAP target credentials, and approval secret.
+- Preserve user changes in the dirty worktree; do not reset unrelated changes.
 
 ## Status Saat Handoff
 
@@ -134,4 +176,3 @@ Lakukan pengecekan visual pada browser untuk:
 - Menu titik tiga Project.
 - Sorting CR descending.
 - Tidak ada layout yang overlap pada desktop.
-

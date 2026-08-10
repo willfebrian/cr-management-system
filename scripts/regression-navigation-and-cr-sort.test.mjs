@@ -50,4 +50,22 @@ assert.match(
   "Phase title copy must consume remaining space so headings stay left-aligned",
 );
 
+assert.match(
+  app,
+  /if \(view !== "dashboard"\) return;\s*if \(dashboardViewEffectMountedRef\.current\)[\s\S]*?loadDashboardData\(\)\.catch[\s\S]*?const interval = window\.setInterval/,
+  "Dashboard must refresh immediately when re-entered without duplicating its initial load",
+);
+
+const issueSaveMarker = "onSave={async (payload) =>";
+const issueSaveHandlers = app.split(issueSaveMarker).slice(1).map((segment) => segment.slice(0, segment.indexOf("            }}")));
+assert.equal(issueSaveHandlers.length, 2, "Create Issue and Change Issue must each expose a save handler");
+for (const [index, block] of issueSaveHandlers.entries()) {
+  assert.match(block, /loadDashboardData\(\)/, `Issue save handler ${index + 1} must refresh Dashboard data`);
+}
+
+for (const marker of ["onCancel={async (id, reason) =>", "onDelete={async (id) =>"]) {
+  const block = app.split(marker)[1]?.slice(0, app.split(marker)[1].indexOf("            }}")) || "";
+  assert.match(block, /loadDashboardData\(\)/, `${marker} must refresh Dashboard data after a successful Issue mutation`);
+}
+
 console.log("Navigation, authentication metadata, and CR sorting regression checks passed.");
