@@ -14,7 +14,12 @@ export const transportRequestRoutes = Router();
 transportRequestRoutes.use(requireAdmin);
 
 transportRequestRoutes.post("/resolve-object", asyncHandler(async (req, res) => {
-  res.json(await resolveTransportObject(String(req.body?.query || ""), req.body?.targetSystem));
+  const query = String(req.body?.query || "").trim();
+  if (query.length < 3) {
+    res.json({ ok: true, message: "Enter at least 3 characters to search SAP objects.", rows: [] });
+    return;
+  }
+  res.json(await resolveTransportObject(query, req.body?.targetSystem));
 }));
 
 transportRequestRoutes.post("/preflight", asyncHandler(async (req, res) => {

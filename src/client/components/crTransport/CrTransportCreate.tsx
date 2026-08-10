@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, type FormEvent } from "react";
+import { useMemo, useState, useEffect, useRef, type FormEvent } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, PackageCheck, Plus, Search, ShieldCheck, Trash2 } from "lucide-react";
 import { UIModal } from "../common/UIModal";
 import { createTransportRequest, preflightTransportRequest, resolveTransportObject, type ResolvedTransportObject, type TransportRequestResult } from "../../api/transportRequestApi";
@@ -29,6 +29,7 @@ export function CrTransportCreate() {
   const [created, setCreated] = useState<TransportRequestResult | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmError, setConfirmError] = useState("");
+  const resolveRequestRef = useRef(0);
   const fullDescription = `${PREFIX}${description.trim()}`;
   const selectedKeys = useMemo(() => new Set(objects.map(objectKey)), [objects]);
   const canPreflight = objects.length > 0 && description.trim().length > 0 && !busy && !created?.ok;
@@ -52,6 +53,30 @@ export function CrTransportCreate() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    const value = query.trim();
+    if (value.length < 3) {
+      setResults([]);
+      setResolvedQuery("");
+      return;
+    }
+    const requestId = ++resolveRequestRef.current;
+    const timer = window.setTimeout(async () => {
+      setBusy("resolve"); setError("");
+      try {
+        const response = await resolveTransportObject(value, targetSystem);
+        if (requestId !== resolveRequestRef.current) return;
+        setResolvedQuery(value.toUpperCase()); setResults(response.rows || []);
+      } catch (err) {
+        if (requestId !== resolveRequestRef.current) return;
+        setResolvedQuery(value.toUpperCase()); setResults([]); setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        if (requestId === resolveRequestRef.current) setBusy("");
+      }
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [query, targetSystem]);
+
   function invalidatePreflight() { setPreflight(null); setCreated(null); setConfirmError(""); }
 
   function startNewRequest() {
@@ -71,7 +96,7 @@ export function CrTransportCreate() {
   async function runResolve(event?: FormEvent) {
     event?.preventDefault();
     const value = query.trim();
-    if (!value) { setResults([]); setResolvedQuery(""); return; }
+    if (value.length < 3) { setResults([]); setResolvedQuery(""); return; }
     setBusy("resolve"); setError(""); setResults([]);
     try {
       const response = await resolveTransportObject(value, targetSystem);
@@ -116,7 +141,7 @@ export function CrTransportCreate() {
 
     <section className="card cr-create-card">
       <div className="cr-create-section-heading"><div><span className="cr-create-step">1</span><h3>SAP Objects</h3><p>Search by TCode, program, class, function module, table, or another repository object.</p></div><span className="cr-create-count">{objects.length} selected</span></div>
-      <form className="cr-object-search" onSubmit={runResolve}><label><span>SAP Object</span><div className="cr-search-input"><Search size={17} /><input value={query} onChange={(event) => updateQuery(event.target.value)} placeholder="Search by technical name or TCode" /></div></label><button className="secondary cr-resolve-button" disabled={!query.trim() || busy === "resolve"}>{busy === "resolve" ? <Loader2 className="spin" size={17} /> : <Search size={17} />} Resolve</button></form>
+      <form className="cr-object-search" onSubmit={runResolve}><label><span>SAP Object</span><div className="cr-search-input"><Search size={17} /><input value={query} onChange={(event) => updateQuery(event.target.value)} placeholder="Search by technical name or TCode" /></div></label><button className="secondary cr-resolve-button" disabled={query.trim().length < 3 || busy === "resolve"}>{busy === "resolve" ? <Loader2 className="spin" size={17} /> : <Search size={17} />} Resolve</button></form>
       {results.length ? <div className="cr-resolve-results"><div className="cr-result-caption">Resolved from <strong>{resolvedQuery}</strong></div>{results.map((item) => { const selected = selectedKeys.has(objectKey(item)); const state = getTransportCreateState({ created, selected, locked: item.locked, lockOrder: item.lockOrder }); return <div className="cr-result-row" key={objectKey(item)}><div className="cr-object-icon"><PackageCheck size={18} /></div><div className="cr-object-main"><strong>{item.objectName}</strong><span>{item.pgmid} · {item.objectType}</span></div><div className="cr-object-package"><span>Package</span><strong>{item.sourcePackage} → ZTRD</strong></div>{state.assigned ? <span className="cr-assigned-badge">Assigned · {state.request}</span> : item.locked ? <span className="cr-lock-warning">Locked: {item.lockOrder}</span> : null}<button type="button" className="secondary cr-row-action" disabled={selected || state.assigned} onClick={() => addObject(item)}><Plus size={15} /> {state.assigned ? "Assigned" : selected ? "Added" : "Add"}</button></div>; })}</div> : null}
       {objects.length ? <div className="cr-selected-list"><h4>Selected transport roots</h4>{objects.map((item) => { const state = getTransportCreateState({ created, selected: true, locked: item.locked, lockOrder: item.lockOrder }); return <div className="cr-selected-row" key={objectKey(item)}><span className="cr-object-type">{item.objectType}</span><div><strong>{item.objectName}</strong><small>{item.pgmid} · {item.sourcePackage} → ZTRD{state.assigned ? ` · Assigned to ${state.request}` : ""}</small></div>{state.assigned ? <span className="cr-assigned-badge">Assigned</span> : <button type="button" aria-label={`Remove ${item.objectName}`} onClick={() => { setObjects((current) => current.filter((row) => objectKey(row) !== objectKey(item))); invalidatePreflight(); }}><Trash2 size={16} /></button>}</div>; })}</div> : <div className="cr-empty-selection">No SAP objects selected.</div>}
     </section>
