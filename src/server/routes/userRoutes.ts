@@ -7,13 +7,16 @@ import type {
 } from "../../shared/userManagementTypes";
 import {
   archiveManagedUser,
+  assignManagedUserPerson,
   createManagedUser,
   getManagedUserAudit,
   listManagedUsers,
+  listManagedUserPersonOptions,
   resetManagedUserPassword,
   restoreManagedUser,
   revokeManagedUserSessions,
   setManagedUserStatus,
+  unassignManagedUserPerson,
   updateManagedUserProfile
 } from "../users/userManagementService";
 import { UserManagementError } from "../users/userManagementDomain";
@@ -21,6 +24,9 @@ import { recordActivityLog } from "../db/auditRepository.js";
 
 type UserManagementService = {
   listManagedUsers: typeof listManagedUsers;
+  listManagedUserPersonOptions: typeof listManagedUserPersonOptions;
+  assignManagedUserPerson: typeof assignManagedUserPerson;
+  unassignManagedUserPerson: typeof unassignManagedUserPerson;
   getManagedUserAudit: typeof getManagedUserAudit;
   createManagedUser: typeof createManagedUser;
   updateManagedUserProfile: typeof updateManagedUserProfile;
@@ -33,6 +39,9 @@ type UserManagementService = {
 
 const defaultService: UserManagementService = {
   listManagedUsers,
+  listManagedUserPersonOptions,
+  assignManagedUserPerson,
+  unassignManagedUserPerson,
   getManagedUserAudit,
   createManagedUser,
   updateManagedUserProfile,
@@ -118,6 +127,48 @@ export function createUserRoutes(service: UserManagementService = defaultService
 
   router.get("/", route(async (req, res) => {
     res.json(await service.listManagedUsers(parseFilters(req), actorFrom(req)));
+  }));
+
+  router.get("/person-options", route(async (req, res) => {
+    const rows = await service.listManagedUserPersonOptions(
+      String(req.query.q ?? ""),
+      actorFrom(req)
+    );
+    res.json({ rows });
+  }));
+
+  router.put("/:id/person", route(async (req, res) => {
+    const personId = optionalInteger(req.body?.personId, "Person ID");
+    if (personId == null) throw new UserManagementError("Person ID wajib diisi");
+    const user = await service.assignManagedUserPerson(
+      parseUserId(req), personId, actorFrom(req)
+    );
+    const actor = actorFrom(req);
+    await recordActivityLog({
+      activityType: "master_data",
+      action: "assign_user_person",
+      username: actor.username,
+      userId: actor.id,
+      description: `Assigned person ID ${personId} to user "${user.username}"`,
+      ipAddress: req.ip
+    });
+    res.json({ user });
+  }));
+
+  router.delete("/:id/person", route(async (req, res) => {
+    const user = await service.unassignManagedUserPerson(
+      parseUserId(req), actorFrom(req)
+    );
+    const actor = actorFrom(req);
+    await recordActivityLog({
+      activityType: "master_data",
+      action: "unassign_user_person",
+      username: actor.username,
+      userId: actor.id,
+      description: `Unassigned person from user "${user.username}"`,
+      ipAddress: req.ip
+    });
+    res.json({ user });
   }));
 
   router.get("/:id/audit", route(async (req, res) => {

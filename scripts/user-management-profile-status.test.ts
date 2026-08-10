@@ -22,6 +22,7 @@ class BehaviorDatabase {
   calls: Array<{ text: string; values: unknown[] }> = [];
   activeAdminCount = 2;
   currentTarget: any = target;
+  lastUpdated: any = null;
   reservation: any = null;
 
   async query(text: string, values: unknown[] = []) {
@@ -35,14 +36,26 @@ class BehaviorDatabase {
     if (/FROM app_user_usernames r/i.test(text)) {
       return { rows: this.reservation ? [this.reservation] : [] };
     }
+    if (/FROM app_users u[\s\S]+LEFT JOIN issue_people p[\s\S]+WHERE u.id = \$1/i.test(text)) {
+      return { rows: [this.lastUpdated ?? this.currentTarget] };
+    }
     if (/UPDATE app_users[\s\S]+RETURNING/i.test(text)) {
+      this.lastUpdated = {
+        ...this.currentTarget,
+        username: values.includes("RENAMED") ? "RENAMED" : this.currentTarget.username,
+        role: values.includes("ADMIN") ? "ADMIN" : this.currentTarget.role,
+        is_active: typeof values[0] === "boolean" ? values[0] : this.currentTarget.is_active
+      };
+      const {
+        person_id: _personId,
+        person_full_name: _personFullName,
+        person_nickname: _personNickname,
+        person_email: _personEmail,
+        person_is_active: _personIsActive,
+        ...returnedRow
+      } = this.lastUpdated;
       return {
-        rows: [{
-          ...this.currentTarget,
-          username: values.includes("RENAMED") ? "RENAMED" : this.currentTarget.username,
-          role: values.includes("ADMIN") ? "ADMIN" : this.currentTarget.role,
-          is_active: typeof values[0] === "boolean" ? values[0] : this.currentTarget.is_active
-        }]
+        rows: [returnedRow]
       };
     }
     return { rows: [], rowCount: 1 };
@@ -84,6 +97,31 @@ test("changes role with an audit and target session revocation", async () => {
   assert.equal(updated.role, "ADMIN");
   assert.ok(db.calls.some((call) => /ROLE_CHANGED/.test(call.text)));
   assert.ok(db.calls.some((call) => /UPDATE app_user_sessions[\s\S]+revoked_at/i.test(call.text)));
+});
+
+test("profile and status responses retain the linked person projection", async () => {
+  const linkedTarget = {
+    ...target,
+    person_id: 12,
+    person_full_name: "Alice Example",
+    person_nickname: "Alice",
+    person_email: "alice@example.test",
+    person_is_active: true
+  };
+
+  const profileDb = new BehaviorDatabase();
+  profileDb.currentTarget = linkedTarget;
+  const profileService = createUserManagementService(profileDb as any, async () => "unused");
+  const profiled = await profileService.updateManagedUserProfile(2, { role: "ADMIN" }, actor);
+  assert.equal(profiled.person?.id, 12);
+  assert.equal(profiled.person?.fullName, "Alice Example");
+
+  const statusDb = new BehaviorDatabase();
+  statusDb.currentTarget = linkedTarget;
+  const statusService = createUserManagementService(statusDb as any, async () => "unused");
+  const statusChanged = await statusService.setManagedUserStatus(2, false, actor);
+  assert.equal(statusChanged.person?.id, 12);
+  assert.equal(statusChanged.person?.nickname, "Alice");
 });
 
 test("rejects self-demotion inside the transaction", async () => {

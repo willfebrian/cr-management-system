@@ -16,7 +16,8 @@ const user = {
   updatedAt: "2026-07-01T00:00:00.000Z",
   deletedAt: null,
   deletedBySnapshot: null,
-  deleteReason: null
+  deleteReason: null,
+  person: null
 };
 
 function fakeService(overrides: Record<string, Function> = {}) {
@@ -30,6 +31,9 @@ function fakeService(overrides: Record<string, Function> = {}) {
     revokeManagedUserSessions: async () => undefined,
     archiveManagedUser: async () => undefined,
     restoreManagedUser: async () => user,
+    listManagedUserPersonOptions: async () => [],
+    assignManagedUserPerson: async () => user,
+    unassignManagedUserPerson: async () => user,
     ...overrides
   };
 }
@@ -188,4 +192,41 @@ test("maps validation/protection errors and exposes every lifecycle route", asyn
       "profile", "status", "password", "revoke", "audit", "archive", "restore"
     ]);
   });
+});
+
+test("validates and exposes person option, assign, and unassign routes", async () => {
+  const received: unknown[] = [];
+  const service = fakeService({
+    listManagedUserPersonOptions: async (q: string) => {
+      received.push(["options", q]);
+      return [];
+    },
+    assignManagedUserPerson: async (userId: number, personId: number) => {
+      received.push(["assign", userId, personId]);
+      return user;
+    },
+    unassignManagedUserPerson: async (userId: number) => {
+      received.push(["unassign", userId]);
+      return user;
+    }
+  });
+  await withServer(service, async (baseUrl) => {
+    const headers = { "content-type": "application/json", "x-role": "ADMIN" };
+    assert.equal((await fetch(`${baseUrl}/api/users/person-options?q=ali`, { headers })).status, 200);
+    assert.equal((await fetch(`${baseUrl}/api/users/2/person`, {
+      method: "PUT", headers, body: JSON.stringify({ personId: 12 })
+    })).status, 200);
+    assert.equal((await fetch(`${baseUrl}/api/users/2/person`, {
+      method: "DELETE", headers
+    })).status, 200);
+    const invalid = await fetch(`${baseUrl}/api/users/2/person`, {
+      method: "PUT", headers, body: JSON.stringify({ personId: 0 })
+    });
+    assert.equal(invalid.status, 400);
+  });
+  assert.deepEqual(received, [
+    ["options", "ali"],
+    ["assign", 2, 12],
+    ["unassign", 2]
+  ]);
 });

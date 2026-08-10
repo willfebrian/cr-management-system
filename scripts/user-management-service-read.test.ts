@@ -35,6 +35,15 @@ const dbUser = {
   delete_reason: null
 };
 
+const dbUserWithPerson = {
+  ...dbUser,
+  person_id: 12,
+  person_full_name: "Alice Wijaya",
+  person_nickname: "Alice",
+  person_email: "alice@example.test",
+  person_is_active: true
+};
+
 test("lists active and inactive non-archived users with parameterized filters and pagination", async () => {
   const db = new ScriptedDatabase([{ rows: [{ total: "1" }] }, { rows: [dbUser] }]);
   const service = createUserManagementService(db as any, async () => "unused");
@@ -51,7 +60,7 @@ test("lists active and inactive non-archived users with parameterized filters an
   assert.match(db.calls[0]!.text, /username ILIKE/i);
   assert.match(db.calls[0]!.text, /role =/i);
   assert.match(db.calls[0]!.text, /is_active =/i);
-  assert.deepEqual(db.calls[0]!.values, ["%ALI%", "USER", false]);
+  assert.deepEqual(db.calls[0]!.values, ["%ali%", "USER", false]);
   assert.deepEqual(db.calls[1]!.values.slice(-2), [10, 10]);
 });
 
@@ -62,6 +71,52 @@ test("lists archived users only when archived scope is requested", async () => {
   await service.listManagedUsers({ scope: "archived" }, actor);
 
   assert.match(db.calls[0]!.text, /deleted_at IS NOT NULL/i);
+});
+
+test("returns linked person and searches username, full name, or nickname", async () => {
+  const db = new ScriptedDatabase([
+    { rows: [{ total: "1" }] },
+    { rows: [dbUserWithPerson] }
+  ]);
+  const service = createUserManagementService(db as any, async () => "unused");
+
+  const result = await service.listManagedUsers({ q: "alice" }, actor);
+
+  assert.deepEqual(result.users[0]?.person, {
+    id: 12,
+    fullName: "Alice Wijaya",
+    nickname: "Alice",
+    email: "alice@example.test",
+    isActive: true
+  });
+  assert.match(db.calls[0]!.text, /u\.username ILIKE[\s\S]+p\.full_name ILIKE[\s\S]+p\.nickname ILIKE/i);
+  assert.deepEqual(db.calls[0]!.values, ["%alice%"]);
+});
+
+test("lists people with active state and assignment ownership", async () => {
+  const db = new ScriptedDatabase([{ rows: [{
+    id: 12,
+    full_name: "Alice Wijaya",
+    nickname: "Alice",
+    email: "alice@example.test",
+    is_active: false,
+    assigned_user_id: 2,
+    assigned_username: "ALICE",
+    assigned_user_deleted_at: null
+  }] }]);
+  const service = createUserManagementService(db as any, async () => "unused");
+
+  const options = await service.listManagedUserPersonOptions("wij", actor);
+
+  assert.deepEqual(options[0], {
+    id: 12,
+    fullName: "Alice Wijaya",
+    nickname: "Alice",
+    email: "alice@example.test",
+    isActive: false,
+    assignedUser: { id: 2, username: "ALICE", deletedAt: null }
+  });
+  assert.deepEqual(db.calls[0]!.values, ["%wij%"]);
 });
 
 test("returns immutable audit entries without authentication secrets", async () => {

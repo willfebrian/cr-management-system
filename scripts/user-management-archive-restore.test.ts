@@ -21,6 +21,7 @@ const baseTarget = {
 class LifecycleDatabase {
   calls: Array<{ text: string; values: unknown[] }> = [];
   currentTarget: any = baseTarget;
+  lastUpdated: any = null;
   activeAdminCount = 2;
 
   async query(text: string, values: unknown[] = []) {
@@ -31,17 +32,29 @@ class LifecycleDatabase {
     if (/count\(\*\).*active_admin_count/i.test(text)) {
       return { rows: [{ active_admin_count: String(this.activeAdminCount) }] };
     }
+    if (/FROM app_users u[\s\S]+LEFT JOIN issue_people p[\s\S]+WHERE u.id = \$1/i.test(text)) {
+      return { rows: [this.lastUpdated ?? this.currentTarget] };
+    }
     if (/UPDATE app_users[\s\S]+RETURNING/i.test(text)) {
+      this.lastUpdated = {
+        ...this.currentTarget,
+        role: values.includes("ADMIN") ? "ADMIN" : "USER",
+        is_active: values.includes(false) ? false : true,
+        must_change_password: true,
+        deleted_at: null,
+        deleted_by_snapshot: null,
+        delete_reason: null
+      };
+      const {
+        person_id: _personId,
+        person_full_name: _personFullName,
+        person_nickname: _personNickname,
+        person_email: _personEmail,
+        person_is_active: _personIsActive,
+        ...returnedRow
+      } = this.lastUpdated;
       return {
-        rows: [{
-          ...this.currentTarget,
-          role: values.includes("ADMIN") ? "ADMIN" : "USER",
-          is_active: values.includes(false) ? false : true,
-          must_change_password: true,
-          deleted_at: null,
-          deleted_by_snapshot: null,
-          delete_reason: null
-        }]
+        rows: [returnedRow]
       };
     }
     return { rows: [], rowCount: 1 };
@@ -69,6 +82,7 @@ test("soft archives another user, records actor/reason, revokes sessions, and au
   const archive = db.calls.find((call) => /UPDATE app_users[\s\S]+deleted_at = now/i.test(call.text));
   assert.ok(archive);
   assert.match(archive.text, /is_active = FALSE/i);
+  assert.doesNotMatch(archive.text, /person_id/i);
   assert.deepEqual(archive.values, [actor.id, actor.username, "Left company", 2]);
   assert.ok(db.calls.some((call) => /UPDATE app_user_sessions[\s\S]+revoked_at/i.test(call.text)));
   const audit = db.calls.find((call) => /USER_ARCHIVED/.test(call.text));
@@ -126,4 +140,31 @@ test("restores the archived account with the same ID and new security state", as
   const audit = db.calls.find((call) => /USER_RESTORED/.test(call.text));
   assert.ok(audit);
   assert.doesNotMatch(JSON.stringify(audit.values), /initial2|RESTORE_HASH|password/i);
+});
+
+test("restore response retains the archived account's linked person", async () => {
+  const db = new LifecycleDatabase();
+  db.currentTarget = {
+    ...baseTarget,
+    is_active: false,
+    deleted_at: "2026-07-30T00:00:00.000Z",
+    deleted_by_snapshot: "ROOT",
+    delete_reason: "Left company",
+    person_id: 12,
+    person_full_name: "Alice Example",
+    person_nickname: "Alice",
+    person_email: "alice@example.test",
+    person_is_active: false
+  };
+  const service = createUserManagementService(db as any, async () => "RESTORE_HASH");
+
+  const restored = await service.restoreManagedUser(
+    2,
+    { password: "initial2", role: "USER", isActive: true },
+    actor
+  );
+
+  assert.equal(restored.person?.id, 12);
+  assert.equal(restored.person?.fullName, "Alice Example");
+  assert.equal(restored.person?.isActive, false);
 });

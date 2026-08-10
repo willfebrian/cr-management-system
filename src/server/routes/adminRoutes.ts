@@ -3,6 +3,7 @@ import net from "net";
 import { pool } from "../db/pool.js";
 import { requireAdmin, resolveAuthUser } from "../auth/middleware.js";
 import { recordActivityLog } from "../db/auditRepository.js";
+import { deleteAdminPerson, PeopleAdminError } from "../admin/peopleAdminService.js";
 
 export const adminRoutes = Router();
 
@@ -91,10 +92,10 @@ adminRoutes.put("/people/:id", async (req, res, next) => {
   }
 });
 
-adminRoutes.delete("/people/:id", async (req, res, next) => {
+adminRoutes.delete("/people/:id", requireAdmin, async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    await pool.query(`DELETE FROM issue_people WHERE id = $1`, [id]);
+    await deleteAdminPerson(id);
     const user = await resolveAuthUser(req);
     await recordActivityLog({
       activityType: "admin",
@@ -106,6 +107,14 @@ adminRoutes.delete("/people/:id", async (req, res, next) => {
     });
     res.json({ ok: true });
   } catch (error) {
+    if (error instanceof PeopleAdminError) {
+      res.status(error.statusCode).json({
+        message: error.message,
+        code: error.code,
+        ...error.details
+      });
+      return;
+    }
     next(error);
   }
 });

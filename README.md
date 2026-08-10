@@ -100,6 +100,10 @@ Status definitions:
 - `Pending to PRD`: parent CR is in QA but not imported in PRD.
 - `In PRD`: parent CR has imported lifecycle evidence in PRD.
 
+## User-to-person assignment
+
+ADMIN can open User Management, select a current account, and use **Assign Person**, **Change Assignment**, or **Unassign**. Accounts may remain unassigned. Only active people can be selected, and one person can belong to only one account. Archived accounts keep their link but must be restored before it can change.
+
 ## Automatic Incremental Sync
 
 Auto sync is available but disabled by default.

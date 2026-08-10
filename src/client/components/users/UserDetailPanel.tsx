@@ -11,6 +11,9 @@ type Props = {
   onRevokeSessions(): void;
   onArchive(): void;
   onRestore(): void;
+  onAssignPerson?(): void;
+  onChangePerson?(): void;
+  onUnassignPerson?(): void;
 };
 
 function auditValue(value: unknown): string {
@@ -29,7 +32,10 @@ export function UserDetailPanel({
   onResetPassword,
   onRevokeSessions,
   onArchive,
-  onRestore
+  onRestore,
+  onAssignPerson,
+  onChangePerson,
+  onUnassignPerson
 }: Props) {
   const isSelf = user.id === currentUserId;
   const isFinalActiveAdmin =
@@ -64,6 +70,25 @@ export function UserDetailPanel({
       <div><dt>Password</dt><dd>{user.mustChangePassword ? "Change required" : "Current"}</dd></div>
       <div><dt>Last login</dt><dd>{user.lastLoginAt ?? "Never"}</dd></div>
     </dl>
+
+    <section className="user-detail__person" aria-labelledby="linked-person-title">
+      <h3 id="linked-person-title">Linked Person</h3>
+      {user.person ? <>
+        <dl>
+          <div><dt>Full name</dt><dd>{user.person.fullName ?? "-"}</dd></div>
+          <div><dt>Nickname</dt><dd>{user.person.nickname ?? "-"}</dd></div>
+          <div><dt>Email</dt><dd>{user.person.email ?? "-"}</dd></div>
+          <div><dt>Person status</dt><dd>{user.person.isActive ? "Active" : "Inactive"}</dd></div>
+        </dl>
+        {!user.deletedAt && <div className="user-detail__person-actions">
+          <button type="button" className="button" onClick={onChangePerson}>Change Assignment</button>
+          <button type="button" className="button button--danger" onClick={onUnassignPerson}>Unassign</button>
+        </div>}
+      </> : <>
+        <p>No person assigned to this account.</p>
+        {!user.deletedAt && <button type="button" className="button button--primary" onClick={onAssignPerson}>Assign Person</button>}
+      </>}
+    </section>
 
     {user.deletedAt ? <div className="user-detail__archive-context">
       <p><strong>Archived by:</strong> {user.deletedBySnapshot ?? "Unknown"}</p>
