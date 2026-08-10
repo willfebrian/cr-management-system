@@ -92,7 +92,7 @@ adminRoutes.put("/people/:id", async (req, res, next) => {
   }
 });
 
-adminRoutes.delete("/people/:id", async (req, res, next) => {
+adminRoutes.delete("/people/:id", requireAdmin, async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     await deleteAdminPerson(id);

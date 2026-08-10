@@ -608,7 +608,7 @@ export function createUserManagementService(
         assertRoleChangeAllowed(target, actor, activeAdminCount, nextRole);
       }
 
-      const updatedResult = await client.query(
+      await client.query(
         `UPDATE app_users
             SET username = $1, role = $2, updated_at = now()
           WHERE id = $3
@@ -617,8 +617,6 @@ export function createUserManagementService(
                     deleted_by_snapshot, delete_reason`,
         [nextUsername, nextRole, userId]
       );
-      const updated = toManagedUser(updatedResult.rows[0]);
-
       if (usernameChanged) {
         await client.query(
           `INSERT INTO app_user_audit_logs (
@@ -654,7 +652,7 @@ export function createUserManagementService(
       if (usernameChanged || roleChanged) {
         await revokeSessions(client, userId);
       }
-      return updated;
+      return getManagedUserById(client, userId);
     });
   }
 
@@ -673,7 +671,7 @@ export function createUserManagementService(
       const target = toManagedUser(row);
       const activeAdminCount = await getActiveAdminCount(client);
       assertStatusChangeAllowed(target, actor, activeAdminCount, isActive);
-      const updatedResult = await client.query(
+      await client.query(
         `UPDATE app_users
             SET is_active = $1, updated_at = now()
           WHERE id = $2
@@ -682,7 +680,6 @@ export function createUserManagementService(
                     deleted_by_snapshot, delete_reason`,
         [isActive, userId]
       );
-      const updated = toManagedUser(updatedResult.rows[0]);
       if (target.isActive !== isActive) {
         if (!isActive) {
           await revokeSessions(client, userId);
@@ -703,7 +700,7 @@ export function createUserManagementService(
           ]
         );
       }
-      return updated;
+      return getManagedUserById(client, userId);
     });
   }
 
@@ -848,7 +845,7 @@ export function createUserManagementService(
         throw new UserManagementError("User tidak berada di archive", 409);
       }
       const passwordHash = await passwordHasher(payload.password);
-      const updatedResult = await client.query(
+      await client.query(
         `UPDATE app_users
             SET password_hash = $1,
                 role = $2,
@@ -866,7 +863,6 @@ export function createUserManagementService(
                     deleted_by_snapshot, delete_reason`,
         [passwordHash, payload.role, payload.isActive, userId]
       );
-      const restored = toManagedUser(updatedResult.rows[0]);
       await revokeSessions(client, userId);
       await client.query(
         `INSERT INTO app_user_audit_logs (
@@ -883,7 +879,7 @@ export function createUserManagementService(
           })
         ]
       );
-      return restored;
+      return getManagedUserById(client, userId);
     });
   }
 

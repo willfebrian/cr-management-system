@@ -49,7 +49,8 @@ test("user-person assignment is nullable, referential, unique, and additive", as
   ]);
   for (const sql of [migration, schema]) {
     assert.match(sql, /ADD COLUMN IF NOT EXISTS person_id BIGINT/i);
-    assert.match(sql, /person_id[\s\S]+REFERENCES issue_people\s*\(id\)\s+ON DELETE RESTRICT/i);
+    assert.match(sql, /ADD COLUMN IF NOT EXISTS person_id BIGINT/i);
+    assert.match(sql, /ADD CONSTRAINT fk_app_users_person[\s\S]+FOREIGN KEY\s*\(person_id\)[\s\S]+REFERENCES issue_people\s*\(id\)\s+ON DELETE RESTRICT/i);
     assert.match(sql, /CREATE UNIQUE INDEX IF NOT EXISTS idx_app_users_person_unique[\s\S]+ON app_users\s*\(person_id\)[\s\S]+WHERE person_id IS NOT NULL/i);
   }
   assert.doesNotMatch(migration, /UPDATE app_users[\s\S]+SET person_id/i);

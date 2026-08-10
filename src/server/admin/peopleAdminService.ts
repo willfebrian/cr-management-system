@@ -16,14 +16,16 @@ export class PeopleAdminError extends Error {
   }
 }
 
-function isForeignKeyConflict(error: unknown): boolean {
-  return Boolean(error && typeof error === "object" && (error as { code?: unknown }).code === "23503");
+function isUserPersonForeignKeyConflict(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; constraint?: unknown };
+  return candidate.code === "23503" && candidate.constraint === "fk_app_users_person";
 }
 
 export function createPeopleAdminService(
   database: Queryable = pool as unknown as Queryable
 ) {
-  async function deleteAdminPerson(personId: number): Promise<void> {
+  async function findAssignedAccount(personId: number) {
     const linked = await database.query(
       `SELECT id, username
          FROM app_users
@@ -32,14 +34,26 @@ export function createPeopleAdminService(
         LIMIT 1`,
       [personId]
     );
-    const owner = linked.rows[0];
+    return linked.rows[0];
+  }
+
+  function linkedPersonError(owner?: { id: unknown; username: unknown }) {
+    return new PeopleAdminError(
+      owner
+        ? `Person masih terhubung ke akun ${owner.username}. Unassign akun terlebih dahulu.`
+        : "Person masih terhubung ke akun. Unassign akun terlebih dahulu.",
+      409,
+      "PERSON_LINKED_TO_USER",
+      owner
+        ? { assignedUserId: Number(owner.id), assignedUsername: owner.username }
+        : {}
+    );
+  }
+
+  async function deleteAdminPerson(personId: number): Promise<void> {
+    const owner = await findAssignedAccount(personId);
     if (owner) {
-      throw new PeopleAdminError(
-        `Person masih terhubung ke akun ${owner.username}. Unassign akun terlebih dahulu.`,
-        409,
-        "PERSON_LINKED_TO_USER",
-        { assignedUserId: Number(owner.id), assignedUsername: owner.username }
-      );
+      throw linkedPersonError(owner);
     }
     try {
       const deleted = await database.query(
@@ -50,12 +64,8 @@ export function createPeopleAdminService(
         throw new PeopleAdminError("Person tidak ditemukan", 404, "PERSON_NOT_FOUND");
       }
     } catch (error) {
-      if (isForeignKeyConflict(error)) {
-        throw new PeopleAdminError(
-          "Person masih terhubung ke akun. Unassign akun terlebih dahulu.",
-          409,
-          "PERSON_LINKED_TO_USER"
-        );
+      if (isUserPersonForeignKeyConflict(error)) {
+        throw linkedPersonError(await findAssignedAccount(personId));
       }
       throw error;
     }
