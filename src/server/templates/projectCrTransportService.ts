@@ -121,25 +121,41 @@ export async function getProjectCrTransportReadiness(projectId: number) {
   return (await loadProjectCrTransport(projectId)).readiness;
 }
 
+import { getAppSetting, renderNamingPattern } from "../utils/namingPattern.js";
+
 export async function buildProjectCrTransportDocument(projectId: number) {
   const result = await loadProjectCrTransport(projectId);
   if (!result.readiness.ready) {
     throw new ProjectCrTransportReadinessError(result.readiness);
   }
-  return buildProjectCrTransportDocumentFromModel(result.model);
+  const pattern = await getAppSetting("filename_pattern_project_cr_transport", "CR Transport Project {PROJECT_KEY}.docx");
+  return buildProjectCrTransportDocumentFromModel(result.model, undefined, pattern);
 }
 
 export function buildProjectCrTransportDocumentFromModel(
   model: ProjectCrTransportModel,
-  templatePath = path.join(projectRoot, "templates", "cr_transport_project", "cr_transport_project.docx")
+  templatePath = path.join(projectRoot, "templates", "cr_transport_project", "cr_transport_project.docx"),
+  pattern = "CR Transport Project {PROJECT_KEY}.docx"
 ) {
   if (!fs.existsSync(templatePath)) throw new Error(`Template file was not found: ${templatePath}`);
   const entries = readZipEntries(templatePath);
   const document = entries.find((entry) => entry.name === "word/document.xml");
   if (!document) throw new Error("Project CR Transport template is missing word/document.xml.");
   document.data = Buffer.from(renderProjectCrTransportXml(document.data.toString("utf8"), model), "utf8");
+
+  const tokens: Record<string, string> = {
+    PROJECT_KEY: model.project.projectKey || "",
+    PROJECT_NAME: model.project.projectName || "",
+    DATE: new Date().toISOString().split("T")[0]
+  };
+
+  let formattedName = renderNamingPattern(pattern, tokens);
+  if (!formattedName.toLowerCase().endsWith(".docx")) {
+    formattedName += ".docx";
+  }
+
   return {
-    filename: sanitizeFilename(`CR Transport Project ${model.project.projectKey}.docx`),
+    filename: sanitizeFilename(formattedName),
     buffer: writeZipEntries(entries)
   };
 }

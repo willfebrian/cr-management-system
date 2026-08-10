@@ -20,6 +20,8 @@ type CrTransportObjectClassification = {
   names: string[];
 };
 
+import { getAppSetting, renderNamingPattern } from "../utils/namingPattern.js";
+
 export async function buildCrTransportDocument(issueId: number) {
   const detail = await getIssueDetail(issueId);
   if (!detail.issue) throw new Error("Issue not found.");
@@ -36,7 +38,24 @@ export async function buildCrTransportDocument(issueId: number) {
   const values = buildCrTransportValues(detail, crDetail);
   documentEntry.data = Buffer.from(replaceCrTransportPlaceholders(documentEntry.data.toString("utf8"), values), "utf8");
 
-  const filename = sanitizeFilename(`CR Transport ${detail.issue.issue_key || primaryCr.trkorr}.docx`);
+  const pattern = await getAppSetting("filename_pattern_cr_transport", "CR Transport {ISSUE_KEY}.docx");
+  const primaryGlpi = detail.glpi.find((ticket) => ticket.is_primary)?.ticket_number || detail.glpi[0]?.ticket_number || "";
+  const tokens: Record<string, string> = {
+    ISSUE_KEY: detail.issue.issue_key || primaryCr.trkorr,
+    CR_SAP: primaryCr.trkorr,
+    GLPI_NO: primaryGlpi,
+    PROJECT_NAME: detail.issue.project_name || "",
+    REQUESTER: participantNames(detail, "requester", "nickname"),
+    ABAPER: participantNames(detail, "abaper", "nickname"),
+    DATE: new Date().toISOString().split("T")[0],
+    ENV: primaryCr.sap_system_code || "DEV"
+  };
+
+  let formattedName = renderNamingPattern(pattern, tokens);
+  if (!formattedName.toLowerCase().endsWith(".docx")) {
+    formattedName += ".docx";
+  }
+  const filename = sanitizeFilename(formattedName);
   return {
     filename,
     buffer: writeZipEntries(entries)

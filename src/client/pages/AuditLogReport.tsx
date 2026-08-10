@@ -75,17 +75,17 @@ export function AuditLogReport() {
   const getActivityBadge = (type: string) => {
     switch (type) {
       case "sync":
-        return <span className="status-badge" style={{ background: "#fef3c7", color: "#b45309", display: "inline-flex", alignItems: "center", gap: "4px" }}><Cpu size={12} /> Sync</span>;
+        return <span className="status-badge" style={{ background: "var(--badge-sync-bg, #fef3c7)", color: "var(--badge-sync-color, #b45309)", display: "inline-flex", alignItems: "center", gap: "4px" }}><Cpu size={12} /> Sync</span>;
       case "issue":
-        return <span className="status-badge" style={{ background: "#e0f2fe", color: "#0369a1", display: "inline-flex", alignItems: "center", gap: "4px" }}><FileCode2 size={12} /> Issue</span>;
+        return <span className="status-badge" style={{ background: "var(--badge-issue-bg, #e0f2fe)", color: "var(--badge-issue-color, #0369a1)", display: "inline-flex", alignItems: "center", gap: "4px" }}><FileCode2 size={12} /> Issue</span>;
       case "project":
-        return <span className="status-badge" style={{ background: "#f3e8ff", color: "#6b21a8", display: "inline-flex", alignItems: "center", gap: "4px" }}><FolderGit2 size={12} /> Project</span>;
+        return <span className="status-badge" style={{ background: "var(--badge-project-bg, #f3e8ff)", color: "var(--badge-project-color, #6b21a8)", display: "inline-flex", alignItems: "center", gap: "4px" }}><FolderGit2 size={12} /> Project</span>;
       case "master_data":
-        return <span className="status-badge" style={{ background: "#ccfbf1", color: "#0f766e", display: "inline-flex", alignItems: "center", gap: "4px" }}><Database size={12} /> Master Data</span>;
+        return <span className="status-badge" style={{ background: "var(--badge-master-bg, #ccfbf1)", color: "var(--badge-master-color, #0f766e)", display: "inline-flex", alignItems: "center", gap: "4px" }}><Database size={12} /> Master Data</span>;
       case "setting":
-        return <span className="status-badge" style={{ background: "#f1f5f9", color: "#334155", display: "inline-flex", alignItems: "center", gap: "4px" }}><Settings size={12} /> Setting</span>;
+        return <span className="status-badge" style={{ background: "var(--badge-setting-bg, #f1f5f9)", color: "var(--badge-setting-color, #334155)", display: "inline-flex", alignItems: "center", gap: "4px" }}><Settings size={12} /> Setting</span>;
       case "auth":
-        return <span className="status-badge" style={{ background: "#dcfce7", color: "#15803d", display: "inline-flex", alignItems: "center", gap: "4px" }}><KeyRound size={12} /> Auth</span>;
+        return <span className="status-badge" style={{ background: "var(--badge-auth-bg, #dcfce7)", color: "var(--badge-auth-color, #15803d)", display: "inline-flex", alignItems: "center", gap: "4px" }}><KeyRound size={12} /> Auth</span>;
       default:
         return <span className="status-badge">{type}</span>;
     }
@@ -136,7 +136,7 @@ export function AuditLogReport() {
           <strong>{summary.master_data_count}</strong>
         </div>
         <div className={`metric ${activeFilters.activityType === "auth" ? "active" : ""}`} style={{ cursor: "pointer" }} onClick={() => { setDraftFilters(p => ({ ...p, activityType: "auth" })); setActiveFilters(p => ({ ...p, activityType: "auth" })); setPage(1); }}>
-          <span>Auth & Login Logs</span>
+          <span>Auth &amp; Login Logs</span>
           <strong>{summary.auth_count}</strong>
         </div>
       </div>
@@ -145,54 +145,54 @@ export function AuditLogReport() {
       <section className="panel" style={{ padding: "16px 20px" }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "14px", alignItems: "flex-end" }}>
           <div style={{ flex: 1, minWidth: "220px" }}>
-            <label style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "4px", color: "#475569" }}>Search</label>
+            <label style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "4px", color: "var(--color-text-muted, #475569)" }}>Search</label>
             <div style={{ position: "relative" }}>
-              <Search size={15} style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
+              <Search size={15} style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "var(--color-text-muted, #94a3b8)" }} />
               <input
                 type="text"
                 placeholder="Search keyword, username, action..."
                 value={draftFilters.q}
                 onChange={(e) => setDraftFilters({ ...draftFilters, q: e.target.value })}
                 onKeyDown={(e) => e.key === "Enter" && handleApplyFilter()}
-                style={{ padding: "8px 12px 8px 32px", width: "100%", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "13px" }}
+                style={{ padding: "8px 12px 8px 32px", width: "100%", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", background: "var(--color-bg-elevated, #ffffff)", color: "var(--color-text, #0f172a)", fontSize: "13px" }}
               />
             </div>
           </div>
 
           <div style={{ width: "180px" }}>
-            <label style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "4px", color: "#475569" }}>Category</label>
+            <label style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "4px", color: "var(--color-text-muted, #475569)" }}>Category</label>
             <select
               value={draftFilters.activityType}
               onChange={(e) => setDraftFilters({ ...draftFilters, activityType: e.target.value })}
-              style={{ width: "100%", padding: "8px 12px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "13px" }}
+              style={{ width: "100%", padding: "8px 12px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", background: "var(--color-bg-elevated, #ffffff)", color: "var(--color-text, #0f172a)", fontSize: "13px" }}
             >
               <option value="all">All Categories</option>
               <option value="sync">Sync (SAP CR)</option>
               <option value="issue">Issue (Create/Change/Delete)</option>
               <option value="project">Project (Create/Change/Delete)</option>
-              <option value="master_data">Master Data & User</option>
-              <option value="setting">Setting & App Config</option>
+              <option value="master_data">Master Data &amp; User</option>
+              <option value="setting">Setting &amp; App Config</option>
               <option value="auth">Authentication (Login/Logout)</option>
             </select>
           </div>
 
           <div style={{ width: "150px" }}>
-            <label style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "4px", color: "#475569" }}>From Date</label>
+            <label style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "4px", color: "var(--color-text-muted, #475569)" }}>From Date</label>
             <input
               type="date"
               value={draftFilters.fromDate}
               onChange={(e) => setDraftFilters({ ...draftFilters, fromDate: e.target.value })}
-              style={{ width: "100%", padding: "8px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "13px" }}
+              style={{ width: "100%", padding: "8px 10px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", background: "var(--color-bg-elevated, #ffffff)", color: "var(--color-text, #0f172a)", fontSize: "13px" }}
             />
           </div>
 
           <div style={{ width: "150px" }}>
-            <label style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "4px", color: "#475569" }}>To Date</label>
+            <label style={{ display: "block", fontSize: "12px", fontWeight: "600", marginBottom: "4px", color: "var(--color-text-muted, #475569)" }}>To Date</label>
             <input
               type="date"
               value={draftFilters.toDate}
               onChange={(e) => setDraftFilters({ ...draftFilters, toDate: e.target.value })}
-              style={{ width: "100%", padding: "8px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "13px" }}
+              style={{ width: "100%", padding: "8px 10px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", background: "var(--color-bg-elevated, #ffffff)", color: "var(--color-text, #0f172a)", fontSize: "13px" }}
             />
           </div>
 
@@ -209,7 +209,7 @@ export function AuditLogReport() {
 
       {/* Error Notice */}
       {error && (
-        <div style={{ padding: "12px 16px", background: "#fef2f2", color: "#dc2626", borderRadius: "8px", border: "1px solid #fecaca", fontSize: "14px" }}>
+        <div style={{ padding: "12px 16px", background: "var(--surface-selected, #fef2f2)", color: "#dc2626", borderRadius: "8px", border: "1px solid #fecaca", fontSize: "14px" }}>
           {error}
         </div>
       )}
@@ -218,14 +218,14 @@ export function AuditLogReport() {
       <section className="panel table-panel" style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: "400px" }}>
         <div className="table-scroll" style={{ flex: 1, overflow: "auto" }}>
           <table className="report-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
-            <thead style={{ background: "#f8fafc", position: "sticky", top: 0, zIndex: 1, borderBottom: "1px solid #e2e8f0" }}>
+            <thead style={{ background: "var(--surface-subtle, #f8fafc)", position: "sticky", top: 0, zIndex: 1, borderBottom: "1px solid var(--color-border, #e2e8f0)" }}>
               <tr>
-                <th style={{ padding: "10px 14px", textAlign: "left", width: "170px" }}>DATE & TIME</th>
-                <th style={{ padding: "10px 14px", textAlign: "left", width: "130px" }}>CATEGORY</th>
-                <th style={{ padding: "10px 14px", textAlign: "left", width: "140px" }}>ACTION</th>
-                <th style={{ padding: "10px 14px", textAlign: "left", width: "150px" }}>USERNAME</th>
-                <th style={{ padding: "10px 14px", textAlign: "left" }}>ACTIVITY DESCRIPTION</th>
-                <th style={{ padding: "10px 14px", textAlign: "left", width: "120px" }}>IP ADDRESS</th>
+                <th style={{ padding: "10px 14px", textAlign: "left", width: "170px", color: "var(--color-text-muted, #475569)" }}>DATE &amp; TIME</th>
+                <th style={{ padding: "10px 14px", textAlign: "left", width: "130px", color: "var(--color-text-muted, #475569)" }}>CATEGORY</th>
+                <th style={{ padding: "10px 14px", textAlign: "left", width: "140px", color: "var(--color-text-muted, #475569)" }}>ACTION</th>
+                <th style={{ padding: "10px 14px", textAlign: "left", width: "150px", color: "var(--color-text-muted, #475569)" }}>USERNAME</th>
+                <th style={{ padding: "10px 14px", textAlign: "left", color: "var(--color-text-muted, #475569)" }}>ACTIVITY DESCRIPTION</th>
+                <th style={{ padding: "10px 14px", textAlign: "left", width: "120px", color: "var(--color-text-muted, #475569)" }}>IP ADDRESS</th>
               </tr>
             </thead>
             <tbody>
@@ -237,27 +237,27 @@ export function AuditLogReport() {
                 </tr>
               ) : logs.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ padding: "40px 0", textAlign: "center", color: "#64748b" }}>
+                  <td colSpan={6} style={{ padding: "40px 0", textAlign: "center", color: "var(--color-text-muted, #64748b)" }}>
                     No activity logs match the selected filter.
                   </td>
                 </tr>
               ) : (
                 logs.map((log) => (
-                  <tr key={log.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                    <td style={{ padding: "10px 14px", whiteSpace: "nowrap", color: "#475569", fontWeight: "500" }}>
+                  <tr key={log.id} style={{ borderBottom: "1px solid var(--color-border-soft, #f1f5f9)" }}>
+                    <td style={{ padding: "10px 14px", whiteSpace: "nowrap", color: "var(--color-text-muted, #475569)", fontWeight: "500" }}>
                       {formatTimestamp(log.created_at)}
                     </td>
                     <td style={{ padding: "10px 14px" }}>{getActivityBadge(log.activity_type)}</td>
-                    <td style={{ padding: "10px 14px", fontWeight: "600", color: "#334155" }}>
+                    <td style={{ padding: "10px 14px", fontWeight: "600", color: "var(--color-text-heading, #334155)" }}>
                       <code>{log.action}</code>
                     </td>
                     <td style={{ padding: "10px 14px" }}>
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontWeight: "600", color: "#0f766e" }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontWeight: "600", color: "var(--color-primary, #0f766e)" }}>
                         <User size={13} /> {log.username}
                       </span>
                     </td>
-                    <td style={{ padding: "10px 14px", color: "#1e293b" }}>{log.description}</td>
-                    <td style={{ padding: "10px 14px", color: "#64748b", fontSize: "12px" }}>{log.ip_address || "-"}</td>
+                    <td style={{ padding: "10px 14px", color: "var(--color-text, #1e293b)" }}>{log.description}</td>
+                    <td style={{ padding: "10px 14px", color: "var(--color-text-muted, #64748b)", fontSize: "12px" }}>{log.ip_address || "-"}</td>
                   </tr>
                 ))
               )}
@@ -266,8 +266,8 @@ export function AuditLogReport() {
         </div>
 
         {/* Pagination Footer */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderTop: "1px solid #e2e8f0", background: "#f8fafc" }}>
-          <span style={{ fontSize: "13px", color: "#64748b" }}>
+        <div className="audit-pagination-footer" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderTop: "1px solid var(--color-border, #e2e8f0)", background: "var(--surface-subtle, #f8fafc)" }}>
+          <span style={{ fontSize: "13px", color: "var(--color-text-muted, #64748b)" }}>
             Showing <strong>{logs.length}</strong> of <strong>{totalCount}</strong> activity logs
           </span>
 
@@ -280,7 +280,7 @@ export function AuditLogReport() {
             >
               &laquo; Prev
             </button>
-            <span style={{ fontSize: "13px", fontWeight: "600", color: "#334155" }}>
+            <span style={{ fontSize: "13px", fontWeight: "600", color: "var(--color-text, #334155)" }}>
               Page {page} of {totalPages}
             </span>
             <button

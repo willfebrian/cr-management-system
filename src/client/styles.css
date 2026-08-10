@@ -5902,3 +5902,33 @@ body.dark-theme .system-check-label.is-checked {
   background: #064e3b !important;
   color: #34d399 !important;
 }
+
+/* Audit Log Dark Mode Badges & Table Overrides */
+body.dark-theme {
+  --badge-sync-bg: #451a03;
+  --badge-sync-color: #fcd34d;
+  --badge-issue-bg: #075985;
+  --badge-issue-color: #7dd3fc;
+  --badge-project-bg: #581c87;
+  --badge-project-color: #e9d5ff;
+  --badge-master-bg: #064e3b;
+  --badge-master-color: #6ee7b7;
+  --badge-setting-bg: #334155;
+  --badge-setting-color: #cbd5e1;
+  --badge-auth-bg: #14532d;
+  --badge-auth-color: #86efac;
+}
+
+body.dark-theme .audit-pagination-footer {
+  background: #151d2a !important;
+  border-top-color: #243044 !important;
+  color: #f8fafc !important;
+}
+
+body.dark-theme .report-table code {
+  background: #1e293b;
+  color: #38bdf8;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid #334155;
+}

@@ -37,7 +37,7 @@ const VIEW_META: Record<View, { title: string; description: string }> = {
   "project-create": { title: "Create Project", description: "Create a project and group its related Issues." },
   "project-change": { title: "Change Project", description: "Maintain project ownership, scope, and linked Issues." },
   "master-data": { title: "Master Data Workspace", description: "Manage people roles, emails, and group notifications." },
-  settings: { title: "System & Appearance Settings", description: "Configure AI instructions, Exchange Mail, Appearance Settings, Font Size, and Status Tag Colors." },
+  settings: { title: "System & Appearance Settings", description: "Maintain SAP target systems, AI instructions, Exchange Mail, Appearance Settings, Font Size, and Status Tag Colors." },
   "audit-log": { title: "Audit Log & Activity Report", description: "Audit trail report recording system and user activities." },
 };
 const SYNC_RESULT_VISIBLE_MS = 6000;
@@ -434,7 +434,7 @@ export function App() {
   }
 
   const [masterDataTab, setMasterDataTab] = useState<string>("people");
-  const [settingsTab, setSettingsTab] = useState<string>("general_settings");
+  const [settingsTab, setSettingsTab] = useState<string>("sap_systems");
   const [userMgmtScope, setUserMgmtScope] = useState<"current" | "archived">("current");
   const [crTargetSystem, setCrTargetSystem] = useState<string>(() => {
     try { return localStorage.getItem("cr_transport_target_system") || "DEV_NC"; }
@@ -1166,27 +1166,27 @@ export function App() {
               >
                 Group Emails
               </button>
-              <button
-                type="button"
-                onClick={() => window.dispatchEvent(new CustomEvent("set-master-data-tab", { detail: "sap_systems" }))}
-                style={{
-                  padding: "6px 14px",
-                  borderRadius: "6px",
-                  border: "none",
-                  background: masterDataTab === "sap_systems" ? "var(--color-primary, #0f766e)" : "transparent",
-                  color: masterDataTab === "sap_systems" ? "#ffffff" : "var(--color-text-muted)",
-                  fontWeight: masterDataTab === "sap_systems" ? "700" : "500",
-                  fontSize: "0.85rem",
-                  cursor: "pointer"
-                }}
-              >
-                Target Systems
-              </button>
             </div>
           ) : view === "settings" ? (
             <div className="topbar-action-slot" style={{ display: "flex", gap: "6px", background: "var(--color-bg-subtle, #f1f5f9)", padding: "4px", borderRadius: "8px", border: "1px solid var(--color-border, #e2e8f0)" }}>
               {authUser?.role === "ADMIN" && (
                 <>
+                  <button
+                    type="button"
+                    onClick={() => window.dispatchEvent(new CustomEvent("set-settings-tab", { detail: "sap_systems" }))}
+                    style={{
+                      padding: "6px 14px",
+                      borderRadius: "6px",
+                      border: "none",
+                      background: settingsTab === "sap_systems" ? "var(--color-primary, #0f766e)" : "transparent",
+                      color: settingsTab === "sap_systems" ? "#ffffff" : "var(--color-text-muted)",
+                      fontWeight: settingsTab === "sap_systems" ? "700" : "500",
+                      fontSize: "0.85rem",
+                      cursor: "pointer"
+                    }}
+                  >
+                    Target Systems
+                  </button>
                   <button
                     type="button"
                     onClick={() => window.dispatchEvent(new CustomEvent("set-settings-tab", { detail: "general_settings" }))}

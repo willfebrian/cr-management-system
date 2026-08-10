@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchAdminPeople, fetchAdminSettings, updateAdminPerson, updateAdminSettings, createAdminPerson, deleteAdminPerson, fetchGroupEmails, createGroupEmail, updateGroupEmail, deleteGroupEmail, fetchSapSystems, createSapSystem, updateSapSystem, deleteSapSystem, testSapSystemConnection, type AdminPersonRow, type GroupEmailRow, type SapSystemRow } from "../api";
-import { Check, Loader2, Save, X, Trash2, CheckCircle2, XCircle, AlertTriangle, Mail, Palette, Type, Sliders, User, Database, LayoutGrid, Server, Eye, EyeOff, Plus, Edit2, Activity, ShieldCheck, Radio } from "lucide-react";
+import { Check, Loader2, Save, X, Trash2, CheckCircle2, XCircle, AlertTriangle, Mail, Palette, Type, Sliders, User, Database, LayoutGrid, Server, Eye, EyeOff, Plus, Edit2, Activity, ShieldCheck, Radio, FileCode2 } from "lucide-react";
 import { STATUS_COLOR_CONFIGS, applyCustomStatusColors } from "../utils/tagColors";
 import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
 import { TableDataLoader } from "../components/InteractiveLoaders";
@@ -20,10 +20,10 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
     if (mode === "settings") {
       if (!isAdmin) {
         setActiveTab("appearance");
-      } else if (activeTab === "people" || activeTab === "group_emails" || activeTab === "sap_systems") {
-        setActiveTab("general_settings");
+      } else if (activeTab === "people" || activeTab === "group_emails") {
+        setActiveTab("sap_systems");
       }
-    } else if (mode === "master-data" && (activeTab === "general_settings" || activeTab === "ai_instructions" || activeTab === "appearance")) {
+    } else if (mode === "master-data" && (activeTab === "sap_systems" || activeTab === "general_settings" || activeTab === "ai_instructions" || activeTab === "appearance")) {
       setActiveTab("people");
     }
   }, [mode, isAdmin]);
@@ -60,6 +60,8 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
     exchange_user: "",
     exchange_pass: "",
     app_font_size: "14",
+    filename_pattern_cr_transport: "CR Transport {ISSUE_KEY}.docx",
+    filename_pattern_project_cr_transport: "CR Transport Project {PROJECT_KEY}.docx",
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -71,6 +73,46 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [deleteConfirmPerson, setDeleteConfirmPerson] = useState<AdminPersonRow | null>(null);
   const [deleteConfirmGroup, setDeleteConfirmGroup] = useState<GroupEmailRow | null>(null);
+
+  const [activePatternField, setActivePatternField] = useState<"single" | "project">("single");
+
+  function renderPatternPreview(pattern: string, isProject = false) {
+    if (!pattern || !pattern.trim()) return "(empty pattern)";
+    const sampleTokens: Record<string, string> = isProject
+      ? {
+          PROJECT_KEY: "PRJ-2026-001",
+          PROJECT_NAME: "New Company Rollout",
+          DATE: new Date().toISOString().split("T")[0]
+        }
+      : {
+          ISSUE_KEY: "26039-01",
+          CR_SAP: "TRDK921784",
+          GLPI_NO: "INC-10042",
+          PROJECT_NAME: "New Company Rollout",
+          REQUESTER: "WILLFEBRIAN",
+          ABAPER: "BUDI",
+          DATE: new Date().toISOString().split("T")[0],
+          ENV: "DEV"
+        };
+
+    let res = pattern;
+    for (const [k, v] of Object.entries(sampleTokens)) {
+      res = res.replace(new RegExp(`\\{${k}\\}`, "gi"), v);
+    }
+    res = res.replace(/\{[A-Z0-9_]+\}/gi, "");
+    res = res
+      .replace(/\(\s*\)/g, "")
+      .replace(/\[\s*\]/g, "")
+      .replace(/-\s*-+/g, "-")
+      .replace(/_\s*_+/g, "_")
+      .replace(/\s+/g, " ")
+      .replace(/\s+-\s+/g, " - ")
+      .replace(/\s+\./g, ".")
+      .trim();
+    res = res.replace(/[-_\s]+(\.[a-zA-Z0-9]+)$/, "$1");
+    if (!res.toLowerCase().endsWith(".docx")) res += ".docx";
+    return res;
+  }
 
   function showToast(type: "success" | "error", message: string) {
     setToast({ type, message });
@@ -106,6 +148,8 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
           exchange_user: settingsRes.exchange_user || "",
           exchange_pass: settingsRes.exchange_pass || "",
           app_font_size: settingsRes.app_font_size || "14",
+          filename_pattern_cr_transport: settingsRes.filename_pattern_cr_transport || "CR Transport {ISSUE_KEY}.docx",
+          filename_pattern_project_cr_transport: settingsRes.filename_pattern_project_cr_transport || "CR Transport Project {PROJECT_KEY}.docx",
           ...settingsRes,
           ...localAppearance,
         };
@@ -1032,6 +1076,98 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
                       style={{ width: "100%", padding: "0.625rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", fontSize: "0.875rem" }}
                     />
                     <small style={{ color: "var(--color-text-muted, #6b7280)", display: "block", marginTop: "0.25rem" }}>Default: <code>openrouter/auto</code> (or <code>anthropic/claude-3.5-sonnet</code>, <code>google/gemini-2.5-flash</code>, etc.)</small>
+                  </div>
+                </div>
+              </div>
+
+              {/* Document & File Naming Patterns */}
+              <div style={{ marginTop: "1.5rem", paddingTop: "1.5rem", borderTop: "1px solid var(--color-border, #e5e7eb)" }}>
+                <h4 style={{ margin: "0 0 0.5rem 0", fontSize: "1rem", color: "var(--color-text-heading, #111827)", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <FileCode2 size={18} style={{ color: "var(--color-primary, #0f766e)" }} /> Document &amp; File Naming Patterns
+                </h4>
+                <p style={{ color: "var(--color-text-muted, #6b7280)", margin: "0 0 1.25rem 0", fontSize: "0.85rem" }}>
+                  Configure dynamic filename formats for CR Transport Word documents. Click any available token chip to insert it into the active pattern field.
+                </p>
+
+                {/* Token Chips */}
+                <div style={{ background: "var(--color-bg-subtle, #f8fafc)", padding: "1rem", borderRadius: "8px", border: "1px solid var(--color-border, #e2e8f0)", marginBottom: "1.25rem" }}>
+                  <span style={{ fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", color: "var(--color-text-muted, #64748b)", display: "block", marginBottom: "0.5rem" }}>
+                    Available Dynamic Tokens (Click chip to insert into active field):
+                  </span>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                    {["{ISSUE_KEY}", "{CR_SAP}", "{GLPI_NO}", "{PROJECT_KEY}", "{PROJECT_NAME}", "{REQUESTER}", "{ABAPER}", "{DATE}", "{ENV}"].map((token) => (
+                      <button
+                        key={token}
+                        type="button"
+                        onClick={() => {
+                          const key = activePatternField === "single" ? "filename_pattern_cr_transport" : "filename_pattern_project_cr_transport";
+                          const currentVal = settings[key] || "";
+                          setSettings({ ...settings, [key]: currentVal ? `${currentVal} ${token}` : token });
+                        }}
+                        style={{ padding: "4px 10px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", background: "var(--color-bg-elevated, #ffffff)", color: "var(--color-primary, #0f766e)", fontFamily: "monospace", fontSize: "0.8rem", fontWeight: "600", cursor: "pointer", transition: "all 0.15s" }}
+                        title={`Insert ${token}`}
+                      >
+                        + {token}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+                  {/* Single Issue Pattern */}
+                  <div
+                    style={{ padding: "1rem", borderRadius: "8px", border: activePatternField === "single" ? "2px solid var(--color-primary, #0f766e)" : "1px solid var(--color-border, #e2e8f0)", background: "var(--color-bg-elevated, #ffffff)", transition: "all 0.2s" }}
+                    onClick={() => setActivePatternField("single")}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+                      <label style={{ fontWeight: "600", color: "var(--color-text-heading, #1e293b)", fontSize: "0.875rem" }}>
+                        Single Issue CR Transport Filename
+                      </label>
+                      <span style={{ fontSize: "0.75rem", background: "var(--color-bg-subtle, #f1f5f9)", padding: "2px 8px", borderRadius: "4px", color: "var(--color-text-muted, #64748b)" }}>
+                        {activePatternField === "single" ? "● Active Field" : "Click to select"}
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      value={settings.filename_pattern_cr_transport || ""}
+                      onChange={(e) => setSettings({ ...settings, filename_pattern_cr_transport: e.target.value })}
+                      onFocus={() => setActivePatternField("single")}
+                      placeholder="e.g. CR Transport {ISSUE_KEY}.docx"
+                      style={{ width: "100%", padding: "0.625rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", fontSize: "0.875rem", fontFamily: "monospace" }}
+                    />
+                    {/* Live Preview Box */}
+                    <div style={{ marginTop: "0.75rem", padding: "8px 12px", background: "var(--color-bg-subtle, #f8fafc)", borderRadius: "6px", border: "1px border-dashed var(--color-border, #cbd5e1)", fontSize: "0.825rem", color: "var(--color-text, #334155)" }}>
+                      <strong style={{ color: "var(--color-primary, #0f766e)" }}>👁️ Live Preview: </strong>
+                      <span style={{ fontFamily: "monospace", fontWeight: "600" }}>{renderPatternPreview(settings.filename_pattern_cr_transport || "", false)}</span>
+                    </div>
+                  </div>
+
+                  {/* Project Group Pattern */}
+                  <div
+                    style={{ padding: "1rem", borderRadius: "8px", border: activePatternField === "project" ? "2px solid var(--color-primary, #0f766e)" : "1px solid var(--color-border, #e2e8f0)", background: "var(--color-bg-elevated, #ffffff)", transition: "all 0.2s" }}
+                    onClick={() => setActivePatternField("project")}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+                      <label style={{ fontWeight: "600", color: "var(--color-text-heading, #1e293b)", fontSize: "0.875rem" }}>
+                        Project Group CR Transport Filename
+                      </label>
+                      <span style={{ fontSize: "0.75rem", background: "var(--color-bg-subtle, #f1f5f9)", padding: "2px 8px", borderRadius: "4px", color: "var(--color-text-muted, #64748b)" }}>
+                        {activePatternField === "project" ? "● Active Field" : "Click to select"}
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      value={settings.filename_pattern_project_cr_transport || ""}
+                      onChange={(e) => setSettings({ ...settings, filename_pattern_project_cr_transport: e.target.value })}
+                      onFocus={() => setActivePatternField("project")}
+                      placeholder="e.g. CR Transport Project {PROJECT_KEY}.docx"
+                      style={{ width: "100%", padding: "0.625rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", fontSize: "0.875rem", fontFamily: "monospace" }}
+                    />
+                    {/* Live Preview Box */}
+                    <div style={{ marginTop: "0.75rem", padding: "8px 12px", background: "var(--color-bg-subtle, #f8fafc)", borderRadius: "6px", border: "1px border-dashed var(--color-border, #cbd5e1)", fontSize: "0.825rem", color: "var(--color-text, #334155)" }}>
+                      <strong style={{ color: "var(--color-primary, #0f766e)" }}>👁️ Live Preview: </strong>
+                      <span style={{ fontFamily: "monospace", fontWeight: "600" }}>{renderPatternPreview(settings.filename_pattern_project_cr_transport || "", true)}</span>
+                    </div>
                   </div>
                 </div>
               </div>
