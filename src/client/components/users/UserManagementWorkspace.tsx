@@ -8,6 +8,7 @@ import {
 import type {
   ManagedUser,
   ManagedUserListFilters,
+  ManagedUserPersonOption,
   ManagedUserScope,
   UserAuditEntry
 } from "../../../shared/userManagementTypes";
@@ -21,7 +22,10 @@ import {
   type UserEditorPayload
 } from "./UserEditorDialog";
 import { UserActionDialogs, type UserAction } from "./UserActionDialogs";
-import { managedPersonLabel } from "./UserPersonAssignmentDialog";
+import {
+  managedPersonLabel,
+  UserPersonAssignmentDialog
+} from "./UserPersonAssignmentDialog";
 
 type FilterState = { q: string; role: string; status: string };
 
@@ -123,6 +127,33 @@ export function conflictRestoreTarget(error: unknown): number | null {
 
 type Api = typeof defaultApi;
 
+type PersonAssignmentApi = Pick<Api,
+  "assignManagedUserPerson" |
+  "unassignManagedUserPerson" |
+  "fetchManagedUserAudit"
+>;
+
+export async function runPersonAssignmentMutation(
+  api: PersonAssignmentApi,
+  userId: number,
+  personId: number | null
+) {
+  const user = personId == null
+    ? await api.unassignManagedUserPerson(userId)
+    : await api.assignManagedUserPerson(userId, personId);
+  const audit = await api.fetchManagedUserAudit(userId);
+  return { user, audit };
+}
+
+type PersonDialogState = {
+  user: ManagedUser;
+  query: string;
+  options: ManagedUserPersonOption[];
+  selectedPersonId: number | null;
+  phase: "select" | "confirm";
+  operation: "assign" | "unassign";
+};
+
 type Props = {
   currentUser: { id: number; username: string; role: "ADMIN" | "USER" };
   onSessionInvalidated?(): void;
@@ -147,8 +178,9 @@ export function UserManagementWorkspace({
   const [dialogError, setDialogError] = useState("");
   const [busy, setBusy] = useState(false);
   const [restoreConflictId, setRestoreConflictId] = useState<number | null>(null);
+  const [personDialog, setPersonDialog] = useState<PersonDialogState | null>(null);
 
-  const loadUsers = useCallback(async () => {
+  const loadUsers = useCallback(async (preferredUserId?: number) => {
     setLoading(true);
     setError("");
     try {
@@ -160,9 +192,12 @@ export function UserManagementWorkspace({
         pageSize: 100
       });
       setUsers(result.users);
-      setSelectedUserId((previous) =>
-        result.users.some((user) => user.id === previous) ? previous : result.users[0]?.id ?? null
-      );
+      setSelectedUserId((previous) => {
+        const wanted = preferredUserId ?? previous;
+        return wanted != null && result.users.some((user) => user.id === wanted)
+          ? wanted
+          : result.users[0]?.id ?? null;
+      });
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Gagal memuat user");
       setUsers([]);
@@ -202,10 +237,69 @@ export function UserManagementWorkspace({
     }
   }, [restoreConflictId, scope, users]);
 
+  useEffect(() => {
+    if (!personDialog || personDialog.operation !== "assign" || personDialog.phase !== "select") return;
+    let active = true;
+    const userId = personDialog.user.id;
+    const query = personDialog.query;
+    api.fetchManagedUserPersonOptions(query)
+      .then((options) => {
+        if (!active) return;
+        setPersonDialog((current) => current?.user.id === userId && current.query === query
+          ? { ...current, options }
+          : current);
+      })
+      .catch((nextError) => {
+        if (active) setDialogError(nextError instanceof Error ? nextError.message : "Gagal memuat person");
+      });
+    return () => { active = false; };
+  }, [api, personDialog?.user.id, personDialog?.query, personDialog?.operation, personDialog?.phase]);
+
   function closeDialogs() {
     setEditor(null);
     setAction(null);
     setDialogError("");
+    setPersonDialog(null);
+  }
+
+  function openPersonDialog(user: ManagedUser, operation: "assign" | "unassign") {
+    setDialogError("");
+    setPersonDialog({
+      user,
+      query: "",
+      options: [],
+      selectedPersonId: null,
+      phase: operation === "unassign" ? "confirm" : "select",
+      operation
+    });
+  }
+
+  async function confirmPersonAssignment() {
+    if (!personDialog) return;
+    const personId = personDialog.operation === "unassign"
+      ? null
+      : personDialog.selectedPersonId;
+    if (personDialog.operation === "assign" && personId == null) return;
+    setBusy(true);
+    setDialogError("");
+    try {
+      const result = await runPersonAssignmentMutation(
+        api,
+        personDialog.user.id,
+        personId
+      );
+      setAudit(result.audit);
+      setSelectedUserId(result.user.id);
+      setNotice(personId == null
+        ? "Assignment person berhasil dilepas."
+        : "Assignment person berhasil diperbarui.");
+      setPersonDialog(null);
+      await loadUsers(result.user.id);
+    } catch (nextError) {
+      setDialogError(nextError instanceof Error ? nextError.message : "Operasi assignment gagal");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function saveEditor(payload: UserEditorPayload) {
@@ -335,6 +429,9 @@ export function UserManagementWorkspace({
         onRevokeSessions={() => setAction({ kind: "revoke", user: selectedUser })}
         onArchive={() => setAction({ kind: "archive", user: selectedUser })}
         onRestore={() => setEditor({ mode: "restore", user: selectedUser })}
+        onAssignPerson={() => openPersonDialog(selectedUser, "assign")}
+        onChangePerson={() => openPersonDialog(selectedUser, "assign")}
+        onUnassignPerson={() => openPersonDialog(selectedUser, "unassign")}
       /> : !loading && <p className="user-management__empty">Select a user to view details.</p>}
     </UserManagementWorkspaceView>
     <UserEditorDialog
@@ -354,5 +451,22 @@ export function UserManagementWorkspace({
       onClose={closeDialogs}
       onConfirm={confirmAction}
     />
+    {personDialog && <UserPersonAssignmentDialog
+      open
+      user={personDialog.user}
+      query={personDialog.query}
+      options={personDialog.options}
+      selectedPersonId={personDialog.selectedPersonId}
+      phase={personDialog.phase}
+      operation={personDialog.operation}
+      busy={busy}
+      error={dialogError}
+      onQueryChange={(query) => setPersonDialog((current) => current ? { ...current, query } : current)}
+      onSelect={(selectedPersonId) => setPersonDialog((current) => current ? { ...current, selectedPersonId } : current)}
+      onContinue={() => setPersonDialog((current) => current ? { ...current, phase: "confirm" } : current)}
+      onBack={() => setPersonDialog((current) => current ? { ...current, phase: "select" } : current)}
+      onConfirm={confirmPersonAssignment}
+      onClose={closeDialogs}
+    />}
   </>;
 }

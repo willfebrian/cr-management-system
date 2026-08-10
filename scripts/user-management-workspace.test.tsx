@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { ManagedUser, UserAuditEntry } from "../src/shared/userManagementTypes";
 import {
   conflictRestoreTarget,
+  runPersonAssignmentMutation,
   UserManagementWorkspaceView
 } from "../src/client/components/users/UserManagementWorkspace";
 import { UserDetailPanel } from "../src/client/components/users/UserDetailPanel";
@@ -231,4 +232,31 @@ test("assignment dialog confirms reassignment and unassignment transitions", () 
     onConfirm={noop} onClose={noop}
   />);
   assert.match(unassignment, /Alice Wijaya \(Alice\)[\s\S]*Unassigned/);
+});
+
+test("assignment coordinator mutates then reloads audit", async () => {
+  const calls: string[] = [];
+  const api = {
+    assignManagedUserPerson: async (userId: number, personId: number) => {
+      calls.push(`assign:${userId}:${personId}`);
+      return linked;
+    },
+    unassignManagedUserPerson: async (userId: number) => {
+      calls.push(`unassign:${userId}`);
+      return { ...linked, person: null };
+    },
+    fetchManagedUserAudit: async (userId: number) => {
+      calls.push(`audit:${userId}`);
+      return [];
+    }
+  };
+
+  const assigned = await runPersonAssignmentMutation(api as any, 2, 12);
+  assert.equal(assigned.user.person?.id, 12);
+  assert.deepEqual(calls, ["assign:2:12", "audit:2"]);
+
+  calls.length = 0;
+  const unassigned = await runPersonAssignmentMutation(api as any, 2, null);
+  assert.equal(unassigned.user.person, null);
+  assert.deepEqual(calls, ["unassign:2", "audit:2"]);
 });
