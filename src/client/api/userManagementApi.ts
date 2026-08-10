@@ -3,6 +3,7 @@ import type {
   ManagedUser,
   ManagedUserListFilters,
   ManagedUserListResult,
+  ManagedUserPersonOption,
   RestoreManagedUserPayload,
   UpdateManagedUserProfilePayload,
   UserAuditEntry
@@ -63,6 +64,37 @@ export async function fetchManagedUserAudit(userId: number): Promise<UserAuditEn
     `/api/users/${userId}/audit`
   );
   return body.audit;
+}
+
+export async function fetchManagedUserPersonOptions(
+  q = ""
+): Promise<ManagedUserPersonOption[]> {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  const suffix = params.size ? `?${params}` : "";
+  const body = await requestJson<{ rows: ManagedUserPersonOption[] }>(
+    `/api/users/person-options${suffix}`
+  );
+  return body.rows;
+}
+
+export async function assignManagedUserPerson(
+  userId: number,
+  personId: number
+): Promise<ManagedUser> {
+  const body = await requestJson<{ user: ManagedUser }>(
+    `/api/users/${userId}/person`,
+    jsonInit("PUT", { personId })
+  );
+  return body.user;
+}
+
+export async function unassignManagedUserPerson(userId: number): Promise<ManagedUser> {
+  const body = await requestJson<{ user: ManagedUser }>(
+    `/api/users/${userId}/person`,
+    jsonInit("DELETE")
+  );
+  return body.user;
 }
 
 export async function createManagedUser(

@@ -2,14 +2,17 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   archiveManagedUser,
+  assignManagedUserPerson,
   createManagedUser,
   fetchManagedUserAudit,
   fetchManagedUsers,
+  fetchManagedUserPersonOptions,
   ManagedUserApiError,
   resetManagedUserPassword,
   restoreManagedUser,
   revokeManagedUserSessions,
   setManagedUserStatus,
+  unassignManagedUserPerson,
   updateManagedUserProfile
 } from "../src/client/api/userManagementApi";
 
@@ -117,5 +120,25 @@ test("preserves archived-user restore guidance on API conflicts", async () => {
     );
   } finally {
     globalThis.fetch = original;
+  }
+});
+
+test("sends person assignment operations to explicit endpoints", async () => {
+  const capture = captureFetch({ rows: [], user: { id: 2, person: null } });
+  try {
+    await fetchManagedUserPersonOptions("A B");
+    await assignManagedUserPerson(2, 12);
+    await unassignManagedUserPerson(2);
+    assert.deepEqual(
+      capture.calls.map(({ url, init }) => [init.method ?? "GET", url]),
+      [
+        ["GET", "/api/users/person-options?q=A+B"],
+        ["PUT", "/api/users/2/person"],
+        ["DELETE", "/api/users/2/person"]
+      ]
+    );
+    assert.deepEqual(JSON.parse(String(capture.calls[1]?.init.body)), { personId: 12 });
+  } finally {
+    capture.restore();
   }
 });
