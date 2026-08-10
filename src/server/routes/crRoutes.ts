@@ -252,11 +252,19 @@ crRoutes.get("/issues/:id/templates/:kind", async (req, res, next) => {
     let actorNickname = authUser?.username || "User";
     let actorDept = "IT";
 
-    if (authUser?.username) {
+    if (authUser?.id || authUser?.username) {
       try {
         const personRes = await pool.query(
-          `SELECT full_name, nickname, department FROM issue_people WHERE lower(email) = lower($1) OR lower(nickname) = lower($1) OR lower(full_name) LIKE lower($2) LIMIT 1`,
-          [authUser.username, `%${authUser.username}%`]
+          `SELECT p.full_name, p.nickname, p.department 
+           FROM app_users u 
+           JOIN issue_people p ON p.id = u.person_id 
+           WHERE u.id = $1
+           UNION ALL
+           SELECT full_name, nickname, department 
+           FROM issue_people 
+           WHERE lower(email) = lower($2) OR lower(nickname) = lower($2) OR lower(full_name) LIKE lower($3)
+           LIMIT 1`,
+          [authUser?.id || 0, authUser?.username || "", `%${authUser?.username || ""}%`]
         );
         if (personRes.rows.length > 0) {
           actorName = personRes.rows[0].full_name || personRes.rows[0].nickname || actorName;
@@ -271,7 +279,7 @@ crRoutes.get("/issues/:id/templates/:kind", async (req, res, next) => {
     res.json(await buildIssueTemplatePreview(
       numberQuery(req.params.id, 0),
       kind as IssueTemplateKind,
-      { name: actorName, nickname: actorNickname, department: actorDept }
+      { name: actorName, nickname: actorNickname, department: actorDept, username: authUser?.username }
     ));
   } catch (error) {
     next(error);

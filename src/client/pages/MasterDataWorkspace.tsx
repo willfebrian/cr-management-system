@@ -1683,7 +1683,7 @@ Regards,
 
                   {/* Dynamic Tokens */}
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
-                    {["{ISSUE_KEY}", "{ISSUE_NAME}", "{CR_SAP}", "{CR_DESCRIPTION}", "{OBJECT_LIST}", "{GLPI_NO}", "{GLPI_LINK}", "{FULLNAME}", "{USER_NICKNAME}", "{USER_DEPARTMENT}", "{REQUESTER}", "{ABAPER}"].map((token) => (
+                    {["{ISSUE_KEY}", "{ISSUE_NAME}", "{CR_SAP}", "{CR_DESCRIPTION}", "{OBJECT_LIST}", "{GLPI_NO}", "{GLPI_LINK}", "{USERNAME}", "{FULLNAME}", "{USER_NICKNAME}", "{USER_DEPARTMENT}", "{REQUESTER}", "{ABAPER}"].map((token) => (
                       <button
                         key={token}
                         type="button"

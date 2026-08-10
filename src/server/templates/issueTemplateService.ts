@@ -17,7 +17,7 @@ import { getAppSetting, renderMarkdownTemplate } from "../utils/namingPattern.js
 export async function buildIssueTemplatePreview(
   issueId: number,
   kind: IssueTemplateKind,
-  userContext?: { name?: string; nickname?: string; department?: string }
+  userContext?: { name?: string; nickname?: string; department?: string; username?: string }
 ) {
   const detail = await getIssueDetail(issueId);
   if (!detail.issue) throw new Error("Issue not found.");
@@ -39,6 +39,7 @@ export async function buildIssueTemplatePreview(
   const glpiNo = formatGlpiTemplate(primaryGlpi);
   const glpiLink = formatGlpiLink(primaryGlpi);
 
+  const userAccount = userContext?.username || userContext?.nickname || userContext?.name || "User";
   const userName = userContext?.name || detail.issue.abaper_name || "User";
   const userNickname = userContext?.nickname || userName;
   const userDept = userContext?.department || "IT";
@@ -57,6 +58,8 @@ export async function buildIssueTemplatePreview(
       GLPI_NO: glpiNo,
       GLPI_LINK: glpiLink,
       OBJECT_LIST: objectListText,
+      USERNAME: userAccount,
+      USER_ACCOUNT: userAccount,
       USER_NAME: userName,
       FULLNAME: userName,
       USER_NICKNAME: userNickname,
