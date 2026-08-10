@@ -12,7 +12,7 @@ import { planQuestionExecution } from "./orchestrator-planner.mjs";
 import { executeQuestionWorkflow } from "./orchestrator-executor.mjs";
 
 const serverInfo = {
-  name: "sap-agent-discovery-platform",
+  name: "cr-management-sap-runtime",
   version: "0.1.0"
 };
 

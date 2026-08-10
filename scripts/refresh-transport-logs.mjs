@@ -122,15 +122,14 @@ function resolveSapDiscoveryRuntime() {
   if (mode === "disabled") {
     throw new Error("SAP connector is disabled. Set SAP_CONNECTOR_MODE=internal to refresh transport logs.");
   }
-  if (mode === "external") {
-    const cwd = process.env.SAP_AGENT_PLATFORM_DIR;
-    if (!cwd) throw new Error("SAP_AGENT_PLATFORM_DIR is required when SAP_CONNECTOR_MODE=external.");
-    return { cwd, script: path.join(cwd, "scripts", "sap-discovery.mjs") };
-  }
   const configuredScript = process.env.SAP_DISCOVERY_SCRIPT || "scripts/sap-discovery.mjs";
+  if (path.isAbsolute(configuredScript)) throw new Error("SAP_DISCOVERY_SCRIPT must be a relative path inside cr-management-system.");
+  const script = path.resolve(process.cwd(), configuredScript);
+  const root = path.resolve(process.cwd()) + path.sep;
+  if (!script.startsWith(root)) throw new Error("SAP_DISCOVERY_SCRIPT must stay inside cr-management-system.");
   return {
     cwd: process.cwd(),
-    script: path.isAbsolute(configuredScript) ? configuredScript : path.resolve(process.cwd(), configuredScript)
+    script
   };
 }
 

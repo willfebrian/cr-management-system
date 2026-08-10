@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, type FormEvent } from "react";
+import { useMemo, useState, useEffect, useRef, type FormEvent } from "react";
 import { AlertTriangle, Check, CheckCircle2, Database, Loader2, PackageCheck, Plus, Search, SearchX, ShieldCheck, Trash2, X } from "lucide-react";
 import { UIModal } from "../common/UIModal";
 import { createTransportRequest, preflightTransportRequest, resolveTransportObject, type ResolvedTransportObject, type TransportRequestResult } from "../../api/transportRequestApi";

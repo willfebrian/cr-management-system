@@ -34,7 +34,6 @@ Web application for SAP Change Request management.
    Required SAP fields:
 
    ```env
-   SAP_AGENT_PLATFORM_DIR=
    SAP_CR_SYSTEMS=DEV,QA,PRD
    SAP_CR_DEFAULT_SYSTEM=DEV
 

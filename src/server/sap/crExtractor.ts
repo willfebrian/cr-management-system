@@ -250,7 +250,7 @@ async function runSapDiscovery<T>(args: string[]) {
   const runtime = resolveSapDiscoveryRuntime();
   const script = runtime.script;
   if (!fs.existsSync(script)) {
-    throw new Error(`SAP connector script was not found at ${script}. Check SAP_CONNECTOR_MODE and SAP_DISCOVERY_SCRIPT in .env.`);
+    throw new Error(`SAP connector script was not found at ${script}. Check the bundled SAP_DISCOVERY_SCRIPT in .env.`);
   }
   const { stdout, stderr } = await execFileAsync(process.execPath, [script, ...args], {
     cwd: runtime.cwd,
@@ -264,22 +264,16 @@ async function runSapDiscovery<T>(args: string[]) {
 
 function resolveSapDiscoveryRuntime() {
   if (config.sap.connectorMode === "disabled") {
-    throw new Error("SAP connector is disabled. Set SAP_CONNECTOR_MODE=internal to use the bundled web connector, or external to use SAP_AGENT_PLATFORM_DIR.");
-  }
-
-  if (config.sap.connectorMode === "external") {
-    const cwd = config.sap.externalPlatformDir;
-    if (!cwd) throw new Error("SAP_AGENT_PLATFORM_DIR is required when SAP_CONNECTOR_MODE=external.");
-    return {
-      cwd,
-      script: path.join(cwd, "scripts", "sap-discovery.mjs")
-    };
+    throw new Error("SAP connector is disabled. Set SAP_CONNECTOR_MODE=internal to use the bundled web connector.");
   }
 
   const configuredScript = config.sap.discoveryScript;
-  const script = path.isAbsolute(configuredScript)
-    ? configuredScript
-    : path.resolve(process.cwd(), configuredScript);
+  if (path.isAbsolute(configuredScript)) {
+    throw new Error("SAP_DISCOVERY_SCRIPT must be a relative path inside cr-management-system.");
+  }
+  const script = path.resolve(process.cwd(), configuredScript);
+  const root = path.resolve(process.cwd()) + path.sep;
+  if (!script.startsWith(root)) throw new Error("SAP_DISCOVERY_SCRIPT must stay inside cr-management-system.");
   return {
     cwd: process.cwd(),
     script

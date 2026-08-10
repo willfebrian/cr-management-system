@@ -8,7 +8,7 @@ export type SapCrSystemConfig = {
   enabled: boolean;
 };
 
-export type SapConnectorMode = "internal" | "external" | "disabled";
+export type SapConnectorMode = "internal" | "disabled";
 
 const systemCodes = (process.env.SAP_CR_SYSTEMS || "DEV")
   .split(",")
@@ -44,7 +44,7 @@ function listEnv(value: string | undefined, fallback: string[]) {
 
 function sapConnectorMode(value: string | undefined): SapConnectorMode {
   const normalized = String(value || "internal").trim().toLowerCase();
-  if (normalized === "external" || normalized === "disabled") return normalized;
+  if (normalized === "disabled") return normalized;
   return "internal";
 }
 
@@ -72,7 +72,6 @@ export const config = {
   sap: {
     connectorMode: sapConnectorMode(process.env.SAP_CONNECTOR_MODE),
     discoveryScript: process.env.SAP_DISCOVERY_SCRIPT || "scripts/sap-discovery.mjs",
-    externalPlatformDir: process.env.SAP_AGENT_PLATFORM_DIR || "",
     transportRequestTimeoutMs: Math.max(Number(process.env.SAP_CR_CREATE_TIMEOUT_MS || 60000), 5000),
     systems,
     defaultSystem: (process.env.SAP_CR_DEFAULT_SYSTEM || "DEV").toUpperCase()
