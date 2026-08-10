@@ -1558,7 +1558,7 @@ Regards,
                     <div style={{ paddingTop: "0.75rem", borderTop: "1px border-dashed var(--color-border, #cbd5e1)", fontSize: "0.75rem" }}>
                       <strong style={{ color: "var(--color-primary, #0f766e)", display: "block", marginBottom: "4px" }}>💡 Supported Tags:</strong>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
-                        {["[ISSUE_NAME]", "[CR_SAP]", "[CR SAP Description]", "[MODULE]", "[Fullname Requester]", "[Department]", "[Problem]", "[Impact]", "[Explanation]", "[Fullname Examiner]", "[Fullname Evaluator]", "[Transporter]", "[Manager Requester]", "[IT Manager]", "[ESTIMATED_PERSONS]", "[ESTIMATED_DAYS]", "[Resource Estimate]", "[Effects]", "[Date]"].map((t) => (
+                        {["[ISSUE_NAME]", "[CR_SAP]", "[CR SAP Description]", "[MODULE]", "[Fullname Requester]", "[Department]", "[Problem]", "[Impact]", "[Explanation]", "[Fullname Examiner]", "[Fullname Evaluator]", "[Transporter]", "[Manager Requester]", "[IT Manager]", "[ESTIMATED_PERSONS]", "[ESTIMATED_DAYS]", "[Resource Estimate]", "[Effects]", "[DATE_DEV]", "[DATE_QA]", "[DATE_PRD]", "[Date]"].map((t) => (
                           <code key={t} style={{ background: "var(--color-bg-elevated, #ffffff)", padding: "1px 5px", borderRadius: "4px", border: "1px solid var(--color-border, #cbd5e1)", color: "var(--color-primary, #0f766e)" }}>{t}</code>
                         ))}
                       </div>

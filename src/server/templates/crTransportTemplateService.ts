@@ -585,7 +585,46 @@ function buildUserCrValues(detail: IssueDetail, crDetail: any) {
   const abaperList = detail.participants.filter((p) => p.role === "abaper");
   const abaperCount = Math.max(abaperList.length, 1);
   const requesterDept = detail.participants.find((p) => p.role === "requester")?.department || "IT";
-  const itManager = participantNames(detail, "approver", "full") || participantNames(detail, "approver", "nickname") || "IT Manager";
+
+  const itManager = participantNames(detail, "approval", "full")
+    || participantNames(detail, "approver", "full")
+    || participantNames(detail, "approval", "nickname")
+    || participantNames(detail, "approver", "nickname")
+    || "IT Manager";
+
+  const evaluatorFullname = participantNames(detail, "dev_evaluator", "full")
+    || participantNames(detail, "qa_evaluator", "full")
+    || participantNames(detail, "prd_evaluator", "full")
+    || participantNames(detail, "evaluator", "full");
+
+  const managerRequester = participantNames(detail, "prd_requester", "full")
+    || participantNames(detail, "manager_requester", "full")
+    || participantNames(detail, "manager", "full");
+
+  const transporterFullname = participantNames(detail, "executor", "full")
+    || participantNames(detail, "transporter", "full")
+    || participantNames(detail, "qa_transporter", "full");
+
+  const dateDev = formatDateDmy(
+    readTimelineDate(detail.devTimeline, "dev_tested_date") ||
+    readTimelineDate(detail.devTimeline, "dev_evaluated_date") ||
+    ""
+  );
+
+  const dateQa = formatDateDmy(
+    readTimelineDate(detail.qaTimeline, "qa_evaluated_date") ||
+    readTimelineDate(detail.qaTimeline, "qa_tested_date") ||
+    primaryCr?.qa_import_date ||
+    ""
+  );
+
+  const datePrd = formatDateDmy(
+    readTimelineDate(detail.prdTimeline, "approval_date") ||
+    readTimelineDate(detail.prdTimeline, "prd_requested_date") ||
+    readTimelineDate(detail.prdTimeline, "prd_evaluated_date") ||
+    primaryCr?.prd_import_date ||
+    ""
+  );
 
   return {
     issueName: issue.issue_name || "",
@@ -598,14 +637,17 @@ function buildUserCrValues(detail: IssueDetail, crDetail: any) {
     impact: issue.impact_analysis || "",
     explanation: issue.impact_analysis || "",
     abaperFullname: participantNames(detail, "abaper", "full"),
-    evaluatorFullname: participantNames(detail, "evaluator", "full"),
-    transporterFullname: participantNames(detail, "executor", "full") || participantNames(detail, "transporter", "full"),
-    managerRequester: participantNames(detail, "prd_requester", "full") || participantNames(detail, "requester", "full"),
+    evaluatorFullname: evaluatorFullname,
+    transporterFullname: transporterFullname,
+    managerRequester: managerRequester,
     itManager: itManager,
     estimatedPersons: String(abaperCount),
     estimatedDays: "3",
     resourceEstimate: String(abaperCount),
-    date: formatDateDmy(new Date().toISOString().split("T")[0])
+    dateDev: dateDev,
+    dateQa: dateQa,
+    datePrd: datePrd,
+    date: dateQa || dateDev || formatDateDmy(new Date().toISOString().split("T")[0])
   };
 }
 
@@ -630,6 +672,9 @@ function replaceUserCrPlaceholders(xml: string, values: ReturnType<typeof buildU
     "[ESTIMATED_DAYS]": values.estimatedDays,
     "[Resource Estimate]": values.resourceEstimate,
     "[Effects]": values.impact,
+    "[DATE_DEV]": values.dateDev,
+    "[DATE_QA]": values.dateQa,
+    "[DATE_PRD]": values.datePrd,
     "[Date]": values.date
   };
 

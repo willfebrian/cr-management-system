@@ -6752,23 +6752,23 @@ function IssueEditor({
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); handleGenerateAiAnalysis(); }}
-                  disabled={formDisabled || !fetchedEmailContext || !fetchedGlpiContext || generatingAi}
+                  disabled={formDisabled || (!fetchedEmailContext && !fetchedGlpiContext) || generatingAi}
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
                     gap: "0.375rem",
                     padding: "0.4rem 0.8rem",
                     borderRadius: "8px",
-                    background: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "var(--color-bg-subtle, #e5e7eb)" : "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
-                    color: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "var(--color-text-muted, #9ca3af)" : "#ffffff",
+                    background: ((!fetchedEmailContext && !fetchedGlpiContext) || formDisabled || generatingAi) ? "var(--color-bg-subtle, #e5e7eb)" : "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
+                    color: ((!fetchedEmailContext && !fetchedGlpiContext) || formDisabled || generatingAi) ? "var(--color-text-muted, #9ca3af)" : "#ffffff",
                     border: "none",
-                    cursor: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "not-allowed" : "pointer",
+                    cursor: ((!fetchedEmailContext && !fetchedGlpiContext) || formDisabled || generatingAi) ? "not-allowed" : "pointer",
                     fontSize: "0.785rem",
                     fontWeight: "600",
-                    boxShadow: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "none" : "0 2px 8px rgba(99, 102, 241, 0.3)",
+                    boxShadow: ((!fetchedEmailContext && !fetchedGlpiContext) || formDisabled || generatingAi) ? "none" : "0 2px 8px rgba(99, 102, 241, 0.3)",
                     transition: "all 0.2s"
                   }}
-                  title={(!fetchedEmailContext || !fetchedGlpiContext) ? "Both Email context and GLPI context must be active & checked to enable AI generation" : "Generate Problem & Impact Analysis using OpenRouter AI"}
+                  title={(!fetchedEmailContext && !fetchedGlpiContext) ? "Fetch Outlook Email or GLPI Ticket context first to enable AI generation" : "Generate Problem & Impact Analysis using OpenRouter AI"}
                 >
                   {generatingAi ? <Loader2 className="spinner" size={13} /> : <Sparkles size={13} />}
                   {generatingAi ? "Generating..." : "Generate AI"}
@@ -6828,23 +6828,23 @@ function IssueEditor({
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); handleGenerateAiAnalysis(); }}
-              disabled={formDisabled || !fetchedEmailContext || !fetchedGlpiContext || generatingAi}
+              disabled={formDisabled || (!fetchedEmailContext && !fetchedGlpiContext) || generatingAi}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "0.375rem",
                 padding: "0.55rem 0.9rem",
                 borderRadius: "8px",
-                background: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "var(--color-bg-subtle, #e5e7eb)" : "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
-                color: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "var(--color-text-muted, #9ca3af)" : "#ffffff",
+                background: ((!fetchedEmailContext && !fetchedGlpiContext) || formDisabled || generatingAi) ? "var(--color-bg-subtle, #e5e7eb)" : "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
+                color: ((!fetchedEmailContext && !fetchedGlpiContext) || formDisabled || generatingAi) ? "var(--color-text-muted, #9ca3af)" : "#ffffff",
                 border: "none",
-                cursor: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "not-allowed" : "pointer",
+                cursor: ((!fetchedEmailContext && !fetchedGlpiContext) || formDisabled || generatingAi) ? "not-allowed" : "pointer",
                 fontSize: "0.8125rem",
                 fontWeight: "600",
-                boxShadow: (!fetchedEmailContext || !fetchedGlpiContext || formDisabled || generatingAi) ? "none" : "0 2px 8px rgba(99, 102, 241, 0.3)",
+                boxShadow: ((!fetchedEmailContext && !fetchedGlpiContext) || formDisabled || generatingAi) ? "none" : "0 2px 8px rgba(99, 102, 241, 0.3)",
                 transition: "all 0.2s"
               }}
-              title={(!fetchedEmailContext || !fetchedGlpiContext) ? "Both Email context and GLPI context must be active & checked to enable AI generation" : "Generate Problem & Impact Analysis using OpenRouter AI"}
+              title={(!fetchedEmailContext && !fetchedGlpiContext) ? "Fetch Outlook Email or GLPI Ticket context first to enable AI generation" : "Generate Problem & Impact Analysis using OpenRouter AI"}
             >
               {generatingAi ? <Loader2 className="spinner" size={14} /> : <Sparkles size={14} />}
               {generatingAi ? "Generating..." : "Generate AI"}
