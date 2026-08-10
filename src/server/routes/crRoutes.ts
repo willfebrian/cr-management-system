@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { assertDatabaseConfigured } from "../db/pool.js";
+import { pool, assertDatabaseConfigured } from "../db/pool.js";
 import {
   getCrDetailForSystem,
   getDashboard,
@@ -232,7 +232,30 @@ crRoutes.get("/issues/:id/templates/:kind", async (req, res, next) => {
       res.status(400).json({ ok: false, message: "Template kind must be email or ticket." });
       return;
     }
-    res.json(await buildIssueTemplatePreview(numberQuery(req.params.id, 0), kind as IssueTemplateKind));
+    const authUser = await resolveAuthUser(req);
+    let actorName = authUser?.username || "User";
+    let actorNickname = authUser?.username || "User";
+
+    if (authUser?.username) {
+      try {
+        const personRes = await pool.query(
+          `SELECT full_name, nickname FROM issue_people WHERE lower(email) = lower($1) OR lower(nickname) = lower($1) OR lower(full_name) LIKE lower($2) LIMIT 1`,
+          [authUser.username, `%${authUser.username}%`]
+        );
+        if (personRes.rows.length > 0) {
+          actorName = personRes.rows[0].full_name || personRes.rows[0].nickname || actorName;
+          actorNickname = personRes.rows[0].nickname || personRes.rows[0].full_name || actorNickname;
+        }
+      } catch (err) {
+        console.warn("[crRoutes] Could not fetch actor full name:", err);
+      }
+    }
+
+    res.json(await buildIssueTemplatePreview(
+      numberQuery(req.params.id, 0),
+      kind as IssueTemplateKind,
+      { name: actorName, nickname: actorNickname }
+    ));
   } catch (error) {
     next(error);
   }

@@ -5932,3 +5932,114 @@ body.dark-theme .report-table code {
   border-radius: 4px;
   border: 1px solid #334155;
 }
+
+/* Template Editor Toolbar & Textarea Styling (Light & Dark Mode Support) */
+.template-editor-toolbar {
+  background: var(--color-bg-subtle, #f1f5f9);
+  padding: 10px 14px;
+  border-radius: 10px 10px 0 0;
+  border: 1px solid var(--color-border, #cbd5e1);
+  border-bottom: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar-btn-group {
+  display: flex;
+  gap: 4px;
+  padding-right: 10px;
+  border-right: 1px solid var(--color-border, #cbd5e1);
+}
+
+.toolbar-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border, #cbd5e1);
+  background: var(--color-bg-elevated, #ffffff);
+  color: var(--color-text, #1e293b);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.toolbar-btn:hover {
+  background: var(--color-primary-light, #e0f2fe);
+  border-color: var(--color-primary, #0f766e);
+  color: var(--color-primary, #0f766e);
+}
+
+.toolbar-btn-code {
+  color: #0284c7;
+  font-family: monospace;
+}
+
+.token-chip-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #0f766e;
+  font-family: monospace;
+  font-size: 0.775rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.token-chip-btn:hover {
+  background: #dcfce7;
+  border-color: #0f766e;
+}
+
+.template-editor-textarea {
+  width: 100%;
+  padding: 1rem;
+  border-radius: 0 0 10px 10px;
+  border: 1px solid var(--color-border, #cbd5e1);
+  background: var(--color-bg-elevated, #ffffff);
+  color: var(--color-text, #0f172a);
+  font-family: monospace;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+/* Dark Theme Overrides for Template Editor */
+body.dark-theme .template-editor-toolbar {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+body.dark-theme .toolbar-btn-group {
+  border-right-color: #334155 !important;
+}
+
+body.dark-theme .toolbar-btn {
+  background: #0f172a !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+body.dark-theme .toolbar-btn:hover {
+  background: #334155 !important;
+  color: #38bdf8 !important;
+}
+
+body.dark-theme .token-chip-btn {
+  background: #064e3b !important;
+  border-color: #047857 !important;
+  color: #34d399 !important;
+}
+
+body.dark-theme .token-chip-btn:hover {
+  background: #047857 !important;
+  color: #a7f3d0 !important;
+}
+
+body.dark-theme .template-editor-textarea {
+  background: #0f172a !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}

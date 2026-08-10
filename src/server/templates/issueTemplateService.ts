@@ -12,7 +12,13 @@ export type IssueTemplateKind = "email" | "ticket";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..", "..", "..");
 
-export async function buildIssueTemplatePreview(issueId: number, kind: IssueTemplateKind) {
+import { getAppSetting, renderMarkdownTemplate } from "../utils/namingPattern.js";
+
+export async function buildIssueTemplatePreview(
+  issueId: number,
+  kind: IssueTemplateKind,
+  userContext?: { name?: string; nickname?: string }
+) {
   const detail = await getIssueDetail(issueId);
   if (!detail.issue) throw new Error("Issue not found.");
 
@@ -23,14 +29,58 @@ export async function buildIssueTemplatePreview(issueId: number, kind: IssueTemp
   const templatePath = issueTemplatePath(kind);
   const paragraphs = readDocxParagraphs(templatePath);
   const primaryGlpi = detail.glpi.find((ticket) => ticket.is_primary)?.ticket_number || detail.glpi[0]?.ticket_number;
+  
+  const objectListText = formatTemplateObjectList(crDetail);
+  const objectListHtml = formatTemplateObjectListHtml(objectListText);
+  const issueKey = detail.issue.issue_key || `${detail.issue.issue_no}-${detail.issue.sub_issue_no}`;
+  const issueName = detail.issue.issue_name || "-";
+  const cr = primaryCr.trkorr;
+  const crDescription = crDetail.request?.description || primaryCr.cr_description_snapshot || "-";
+  const glpiNo = formatGlpiTemplate(primaryGlpi);
+  const glpiLink = formatGlpiLink(primaryGlpi);
+
+  const userName = userContext?.name || detail.issue.abaper_name || "User";
+  const userNickname = userContext?.nickname || userName;
+  const requester = detail.issue.requester_name || "-";
+  const abaper = detail.issue.abaper_name || "-";
+
+  const settingKey = kind === "email" ? "template_body_email" : "template_body_glpi";
+  const customTemplate = await getAppSetting(settingKey, "");
+
+  if (customTemplate && customTemplate.trim()) {
+    const tokens: Record<string, string> = {
+      ISSUE_KEY: issueKey,
+      ISSUE_NAME: issueName,
+      CR_SAP: cr,
+      CR_DESCRIPTION: crDescription,
+      GLPI_NO: glpiNo,
+      GLPI_LINK: glpiLink,
+      OBJECT_LIST: objectListText,
+      USER_NAME: userName,
+      FULLNAME: userName,
+      USER_NICKNAME: userNickname,
+      REQUESTER: requester,
+      ABAPER: abaper
+    };
+
+    const renderedMarkdown = renderMarkdownTemplate(customTemplate, tokens, objectListHtml);
+    return {
+      kind,
+      title: kind === "email" ? "Generate Email Template" : "Generate GLPI Ticket Template",
+      templatePath: "Custom App Setting",
+      body: renderedMarkdown.body,
+      bodyHtml: renderedMarkdown.bodyHtml
+    };
+  }
+
   const values = {
-    glpi: formatGlpiTemplate(primaryGlpi),
-    glpiLink: formatGlpiLink(primaryGlpi),
-    issueKey: detail.issue.issue_key || `${detail.issue.issue_no}-${detail.issue.sub_issue_no}`,
-    issueName: detail.issue.issue_name || "-",
-    cr: primaryCr.trkorr,
-    crDescription: crDetail.request?.description || primaryCr.cr_description_snapshot || "-",
-    objectList: formatTemplateObjectList(crDetail)
+    glpi: glpiNo,
+    glpiLink: glpiLink,
+    issueKey,
+    issueName,
+    cr,
+    crDescription,
+    objectList: objectListText
   };
 
   return {

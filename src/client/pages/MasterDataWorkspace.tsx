@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { fetchAdminPeople, fetchAdminSettings, updateAdminPerson, updateAdminSettings, createAdminPerson, deleteAdminPerson, fetchGroupEmails, createGroupEmail, updateGroupEmail, deleteGroupEmail, fetchSapSystems, createSapSystem, updateSapSystem, deleteSapSystem, testSapSystemConnection, type AdminPersonRow, type GroupEmailRow, type SapSystemRow } from "../api";
-import { Check, Loader2, Save, X, Trash2, CheckCircle2, XCircle, AlertTriangle, Mail, Palette, Type, Sliders, User, Database, LayoutGrid, Server, Eye, EyeOff, Plus, Edit2, Activity, ShieldCheck, Radio, FileCode2 } from "lucide-react";
+import { Check, Loader2, Save, X, Trash2, CheckCircle2, XCircle, AlertTriangle, Mail, Palette, Type, Sliders, User, Database, LayoutGrid, Server, Eye, EyeOff, Plus, Edit2, Activity, ShieldCheck, Radio, FileCode2, FileText } from "lucide-react";
 import { STATUS_COLOR_CONFIGS, applyCustomStatusColors } from "../utils/tagColors";
 import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
 import { TableDataLoader } from "../components/InteractiveLoaders";
@@ -48,6 +48,38 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
     rfc_password: "",
     is_active: true
   });
+  const DEFAULT_GLPI_TEMPLATE = `Dear All,
+
+Issue and CR **CREATED**.
+
+- Issue no: **{ISSUE_KEY}** ({ISSUE_NAME})
+- CR no.: **{CR_SAP}**
+- CR Description: **{CR_DESCRIPTION}**
+- SAP Object List:
+{OBJECT_LIST}
+
+**Note:**
+Mohon dibantu melengkapi kelengkapan dokumen sebagai berikut:
+1. Dokumen CR User
+2. No. CR User
+
+Terima kasih.
+
+Regards,
+**{FULLNAME}**`;
+
+  const DEFAULT_EMAIL_TEMPLATE = `Dear Team,
+
+Berikut update pengerjaan Issue & CR SAP:
+
+- Issue no: **{ISSUE_KEY}** ({ISSUE_NAME})
+- CR no.: **{CR_SAP}**
+- Deskripsi: **{CR_DESCRIPTION}**
+
+Mohon dapat dilakukan verifikasi/testing.
+
+Terima kasih.`;
+
   const [settings, setSettings] = useState<Record<string, string>>({
     ai_instruction_glpi: "",
     ai_instruction_email: "",
@@ -62,7 +94,57 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
     app_font_size: "14",
     filename_pattern_cr_transport: "CR Transport {ISSUE_KEY}.docx",
     filename_pattern_project_cr_transport: "CR Transport Project {PROJECT_KEY}.docx",
+    template_body_glpi: DEFAULT_GLPI_TEMPLATE,
+    template_body_email: DEFAULT_EMAIL_TEMPLATE,
   });
+
+  const glpiTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const emailTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const [activeTemplateTab, setActiveTemplateTab] = useState<"glpi" | "email">("glpi");
+
+  function applyToolbarFormatting(prefix: string, suffix = "") {
+    const isGlpi = activeTemplateTab === "glpi";
+    const key = isGlpi ? "template_body_glpi" : "template_body_email";
+    const ref = isGlpi ? glpiTextareaRef : emailTextareaRef;
+    const textarea = ref.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const currentVal = settings[key] !== undefined ? settings[key] : (isGlpi ? DEFAULT_GLPI_TEMPLATE : DEFAULT_EMAIL_TEMPLATE);
+    const selectedText = currentVal.substring(start, end) || "text";
+    const newVal = currentVal.substring(0, start) + prefix + selectedText + suffix + currentVal.substring(end);
+
+    setSettings((prev) => ({ ...prev, [key]: newVal }));
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + prefix.length, start + prefix.length + selectedText.length);
+    }, 50);
+  }
+
+  function insertTemplateToken(token: string) {
+    const isGlpi = activeTemplateTab === "glpi";
+    const key = isGlpi ? "template_body_glpi" : "template_body_email";
+    const ref = isGlpi ? glpiTextareaRef : emailTextareaRef;
+    const textarea = ref.current;
+
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const currentVal = settings[key] !== undefined ? settings[key] : (isGlpi ? DEFAULT_GLPI_TEMPLATE : DEFAULT_EMAIL_TEMPLATE);
+      const newVal = currentVal.substring(0, start) + token + currentVal.substring(end);
+      setSettings((prev) => ({ ...prev, [key]: newVal }));
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + token.length, start + token.length);
+      }, 50);
+    } else {
+      setSettings((prev) => {
+        const currentVal = prev[key] !== undefined ? prev[key] : (isGlpi ? DEFAULT_GLPI_TEMPLATE : DEFAULT_EMAIL_TEMPLATE);
+        return { ...prev, [key]: `${currentVal} ${token}` };
+      });
+    }
+  }
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -150,6 +232,8 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
           app_font_size: settingsRes.app_font_size || "14",
           filename_pattern_cr_transport: settingsRes.filename_pattern_cr_transport || "CR Transport {ISSUE_KEY}.docx",
           filename_pattern_project_cr_transport: settingsRes.filename_pattern_project_cr_transport || "CR Transport Project {PROJECT_KEY}.docx",
+          template_body_glpi: settingsRes.template_body_glpi || DEFAULT_GLPI_TEMPLATE,
+          template_body_email: settingsRes.template_body_email || DEFAULT_EMAIL_TEMPLATE,
           ...settingsRes,
           ...localAppearance,
         };
@@ -1171,6 +1255,147 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
                   </div>
                 </div>
               </div>
+
+              {/* Custom GLPI & Email Template Editor Panel */}
+              <div style={{ marginTop: "1.5rem", paddingTop: "1.5rem", borderTop: "1px solid var(--color-border, #e5e7eb)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem", flexWrap: "wrap", gap: "1rem" }}>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: "1rem", color: "var(--color-text-heading, #111827)", display: "flex", alignItems: "center", gap: "8px" }}>
+                      <FileText size={18} style={{ color: "var(--color-primary, #0f766e)" }} /> GLPI Ticket &amp; Email Template Editor
+                    </h4>
+                    <p style={{ color: "var(--color-text-muted, #6b7280)", margin: "4px 0 0 0", fontSize: "0.85rem" }}>
+                      Customize the exact template body text and rich formatting used when generating GLPI tickets or email notifications.
+                    </p>
+                  </div>
+
+                  {/* Tab Switcher: GLPI vs Email */}
+                  <div style={{ display: "flex", gap: "4px", background: "var(--color-bg-subtle, #f1f5f9)", padding: "4px", borderRadius: "8px", border: "1px solid var(--color-border, #cbd5e1)" }}>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTemplateTab("glpi")}
+                      style={{ padding: "6px 14px", borderRadius: "6px", border: "none", background: activeTemplateTab === "glpi" ? "var(--color-primary, #0f766e)" : "transparent", color: activeTemplateTab === "glpi" ? "#ffffff" : "var(--color-text-muted)", fontWeight: activeTemplateTab === "glpi" ? "700" : "500", fontSize: "0.85rem", cursor: "pointer" }}
+                    >
+                      GLPI Ticket Template
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTemplateTab("email")}
+                      style={{ padding: "6px 14px", borderRadius: "6px", border: "none", background: activeTemplateTab === "email" ? "var(--color-primary, #0f766e)" : "transparent", color: activeTemplateTab === "email" ? "#ffffff" : "var(--color-text-muted)", fontWeight: activeTemplateTab === "email" ? "700" : "500", fontSize: "0.85rem", cursor: "pointer" }}
+                    >
+                      Email Template
+                    </button>
+                  </div>
+                </div>
+
+                {/* User-Friendly Formatting Toolbar */}
+                <div className="template-editor-toolbar">
+                  <div className="toolbar-btn-group">
+                    <button
+                      type="button"
+                      className="toolbar-btn"
+                      onClick={() => applyToolbarFormatting("**", "**")}
+                      style={{ fontWeight: "800" }}
+                      title="Bold (**text**)"
+                    >
+                      B
+                    </button>
+                    <button
+                      type="button"
+                      className="toolbar-btn"
+                      onClick={() => applyToolbarFormatting("*", "*")}
+                      style={{ fontStyle: "italic" }}
+                      title="Italic (*text*)"
+                    >
+                      I
+                    </button>
+                    <button
+                      type="button"
+                      className="toolbar-btn"
+                      onClick={() => applyToolbarFormatting("<u>", "</u>")}
+                      style={{ textDecoration: "underline" }}
+                      title="Underline (<u>text</u>)"
+                    >
+                      U
+                    </button>
+                  </div>
+
+                  <div className="toolbar-btn-group">
+                    <button
+                      type="button"
+                      className="toolbar-btn"
+                      onClick={() => applyToolbarFormatting("### ")}
+                      style={{ fontWeight: "700" }}
+                      title="Subheading 3 (### Heading)"
+                    >
+                      H3
+                    </button>
+                    <button
+                      type="button"
+                      className="toolbar-btn"
+                      onClick={() => applyToolbarFormatting("## ")}
+                      style={{ fontWeight: "700" }}
+                      title="Subheading 2 (## Heading)"
+                    >
+                      H2
+                    </button>
+                  </div>
+
+                  <div className="toolbar-btn-group">
+                    <button
+                      type="button"
+                      className="toolbar-btn toolbar-btn-code"
+                      onClick={() => applyToolbarFormatting("`", "`")}
+                      title="Inline Code (`code`)"
+                    >
+                      Code
+                    </button>
+                    <button
+                      type="button"
+                      className="toolbar-btn"
+                      onClick={() => applyToolbarFormatting("- ")}
+                      title="List Item (- Item)"
+                    >
+                      • List
+                    </button>
+                  </div>
+
+                  {/* Dynamic Tokens */}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                    {["{ISSUE_KEY}", "{ISSUE_NAME}", "{CR_SAP}", "{CR_DESCRIPTION}", "{OBJECT_LIST}", "{GLPI_NO}", "{FULLNAME}", "{USER_NICKNAME}", "{REQUESTER}", "{ABAPER}"].map((token) => (
+                      <button
+                        key={token}
+                        type="button"
+                        className="token-chip-btn"
+                        onClick={() => insertTemplateToken(token)}
+                        title={`Insert token ${token}`}
+                      >
+                        + {token}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Selection-Aware Textarea Editor */}
+                {activeTemplateTab === "glpi" ? (
+                  <textarea
+                    ref={glpiTextareaRef}
+                    className="template-editor-textarea"
+                    value={settings.template_body_glpi !== undefined ? settings.template_body_glpi : DEFAULT_GLPI_TEMPLATE}
+                    onChange={(e) => setSettings({ ...settings, template_body_glpi: e.target.value })}
+                    rows={12}
+                    placeholder="Compose custom GLPI ticket template format..."
+                  />
+                ) : (
+                  <textarea
+                    ref={emailTextareaRef}
+                    className="template-editor-textarea"
+                    value={settings.template_body_email !== undefined ? settings.template_body_email : DEFAULT_EMAIL_TEMPLATE}
+                    onChange={(e) => setSettings({ ...settings, template_body_email: e.target.value })}
+                    rows={12}
+                    placeholder="Compose custom Email template format..."
+                  />
+                )}
+              </div>
             </div>
 
             <div style={{ marginTop: "2rem", paddingTop: "1.5rem", borderTop: "1px solid var(--color-border, #e5e7eb)", display: "flex", justifyContent: "flex-end" }}>
@@ -1189,9 +1414,8 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
 
       {activeTab === "ai_instructions" && (
         <div className="settings-tab" style={{ display: "flex", flexDirection: "column", gap: "2rem", maxWidth: "100%" }}>
-          
           <div style={{ background: "var(--color-bg-elevated, #ffffff)", padding: "2rem", borderRadius: "8px", border: "1px solid var(--color-border, #e5e7eb)", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
-            <h3 style={{ marginTop: 0, marginBottom: "0.5rem", fontSize: "1.25rem", color: "var(--color-text-heading, #111827)" }}>System Prompts & AI Instructions</h3>
+            <h3 style={{ marginTop: 0, marginBottom: "0.5rem", fontSize: "1.25rem", color: "var(--color-text-heading, #111827)" }}>System Prompts &amp; AI Instructions</h3>
             <p style={{ color: "var(--color-text-muted, #6b7280)", marginBottom: "1.5rem", fontSize: "0.875rem" }}>
               Configure the underlying instructions used by the AI assistant when generating content for GLPI and Problem/Impact Analysis.
             </p>
@@ -1244,20 +1468,8 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
                   style={{ width: "100%", minHeight: "150px", padding: "0.875rem 1rem", borderRadius: "8px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "inherit", fontSize: "0.875rem", lineHeight: "1.6", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
                 />
               </div>
-
-              <div>
-                <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "600", color: "var(--color-text, #374151)", fontSize: "0.875rem" }}>
-                  General Email Guidelines (Optional)
-                </label>
-                <textarea
-                  value={settings.ai_instruction_email}
-                  onChange={(e) => setSettings({ ...settings, ai_instruction_email: e.target.value })}
-                  placeholder="e.g., Address the user by their first name. Keep paragraphs short..."
-                  style={{ width: "100%", minHeight: "120px", padding: "0.875rem 1rem", borderRadius: "8px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", resize: "vertical", fontFamily: "inherit", fontSize: "0.875rem", lineHeight: "1.6", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.02)" }}
-                />
-              </div>
             </div>
-            
+
             <div style={{ marginTop: "2rem", paddingTop: "1.5rem", borderTop: "1px solid var(--color-border, #e5e7eb)", display: "flex", justifyContent: "flex-end" }}>
               <button
                 onClick={saveSettings}
@@ -1269,7 +1481,6 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
               </button>
             </div>
           </div>
-          
         </div>
       )}
 
