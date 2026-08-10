@@ -139,6 +139,7 @@ export type IssueSavePayload = {
   issueNo?: number | string;
   subIssueNo?: string;
   issueName: string;
+  requestDescription?: string;
   requesterNames?: string;
   abaperNames?: string;
   problemAnalysis?: string;
@@ -408,6 +409,7 @@ export async function searchOutlookEmail(subject: string): Promise<{ rows: Outlo
 
 export type AiAnalysisResult = {
   issueName: string;
+  requestDescription?: string;
   problemAnalysis: string;
   impactAnalysis: string;
   participants?: Record<string, string>;

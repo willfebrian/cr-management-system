@@ -1,9 +1,9 @@
 import { applyCustomStatusColors } from "../utils/tagColors";
 import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
-import { AlertTriangle, BarChart3, Ban, Calendar, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Database, FileOutput, FileSearch, FileText, FolderKanban, GitPullRequest, KeyRound, LayoutGrid, Link as LinkIcon, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Tag, Trash2, User, Users, X, XCircle } from "lucide-react";
+import { AlertTriangle, BarChart3, Ban, Calendar, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Copy, Database, ExternalLink, FileOutput, FileSearch, FileText, FolderKanban, GitPullRequest, KeyRound, LayoutGrid, Link as LinkIcon, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Tag, Trash2, User, Users, X, XCircle } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchAdminSettings, fetchAdminPeople, fetchCrDetail, fetchCrList, fetchDashboard, fetchGlpiTicketDetail, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind, type GlpiTicketDetail, type AdminPersonRow } from "../api";
+import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, fetchAdminSettings, fetchAdminPeople, fetchCrDetail, fetchCrList, fetchDashboard, fetchGlpiTicketDetail, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchSapSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind, type GlpiTicketDetail, type AdminPersonRow, type SapSystemRow } from "../api";
 import { IncompleteGroupCards } from "../components/IncompleteGroupCards";
 import { DisplayNameList } from "../components/DisplayNameList";
 import { DEFAULT_ISSUE_COLUMNS, IssueColumnMenu, type IssueColumnKey } from "../components/IssueColumnMenu";
@@ -15,6 +15,7 @@ import { UserManagementWorkspace } from "../components/users/UserManagementWorks
 import { MasterDataWorkspace } from "./MasterDataWorkspace";
 import { AuditLogReport } from "./AuditLogReport";
 import { CrTransportCreate } from "../components/crTransport/CrTransportCreate";
+import { TRANSPORT_TARGETS, transportTargetLabel } from "../components/crTransport/transportTarget";
 import { UIModal, type ModalType } from "../components/common/UIModal";
 import { fetchProjectDetail } from "../api/projectApi";
 import { afterIncompleteSectionRender, expandSection, getIncompleteItems, getIssueRowMissingItems, groupIncompleteItems, markIncompleteTarget, type ExpandedIssueSections, type IncompleteItem, type IssueSection } from "../issueIncomplete";
@@ -435,6 +436,34 @@ export function App() {
   const [masterDataTab, setMasterDataTab] = useState<string>("people");
   const [settingsTab, setSettingsTab] = useState<string>("general_settings");
   const [userMgmtScope, setUserMgmtScope] = useState<"current" | "archived">("current");
+  const [crTargetSystem, setCrTargetSystem] = useState<string>(() => {
+    try { return localStorage.getItem("cr_transport_target_system") || "DEV_NC"; }
+    catch { return "DEV_NC"; }
+  });
+  const [sapSystems, setSapSystems] = useState<SapSystemRow[]>([]);
+
+  useEffect(() => {
+    fetchSapSystems()
+      .then((res) => {
+        if (res.rows && res.rows.length > 0) {
+          const active = res.rows.filter((s) => s.is_active);
+          const systemsToUse = active.length > 0 ? active : res.rows;
+          setSapSystems(systemsToUse);
+          setCrTargetSystem((prev) => {
+            const stored = (() => { try { return localStorage.getItem("cr_transport_target_system"); } catch { return null; } })();
+            const candidate = stored || prev;
+            if (systemsToUse.some((s) => s.code === candidate)) {
+              try { localStorage.setItem("cr_transport_target_system", candidate); } catch {}
+              return candidate;
+            }
+            const fallback = systemsToUse[0].code;
+            try { localStorage.setItem("cr_transport_target_system", fallback); } catch {}
+            return fallback;
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const handleTabChange = (e: Event) => {
@@ -1216,16 +1245,15 @@ export function App() {
                 {systems.map((system) => (
                   <label
                     key={system.code}
+                    className={`system-check-label ${syncSystems.includes(system.code) ? "is-checked" : ""}`}
                     style={{
                       display: "inline-flex",
                       alignItems: "center",
                       gap: "4px",
                       padding: "3px 8px",
                       borderRadius: "6px",
-                      background: syncSystems.includes(system.code) ? "#f0fdf4" : "transparent",
                       fontSize: "0.78rem",
                       fontWeight: "600",
-                      color: syncSystems.includes(system.code) ? "#0f766e" : "var(--color-text, #334155)",
                       cursor: system.enabled ? "pointer" : "not-allowed",
                       opacity: system.enabled ? 1 : 0.5
                     }}
@@ -1326,6 +1354,226 @@ export function App() {
                 <RefreshCw size={15} className={loading ? "spinner" : ""} />
                 <span>{loading ? "Syncing..." : "Sync CR"}</span>
               </button>
+            </div>
+          ) : view === "cr-transport-create" ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+              {/* Target System Dropdown to the left of Sync CR button */}
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontSize: "0.825rem", color: "var(--color-text-muted, #64748b)", fontWeight: "600", whiteSpace: "nowrap" }}>Target System</span>
+                <select
+                  value={crTargetSystem}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCrTargetSystem(val);
+                    try { localStorage.setItem("cr_transport_target_system", val); } catch {}
+                  }}
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--color-border, #cbd5e1)",
+                    background: "var(--color-bg, #ffffff)",
+                    color: "var(--color-text, #1e293b)",
+                    fontSize: "0.825rem",
+                    fontWeight: "600",
+                    height: "36px",
+                    boxSizing: "border-box",
+                    cursor: "pointer"
+                  }}
+                >
+                  {sapSystems.length > 0 ? (
+                    sapSystems.map((sys) => (
+                      <option key={sys.id || sys.code} value={sys.code}>
+                        {sys.description ? `${sys.description} (${sys.code})` : sys.code}
+                      </option>
+                    ))
+                  ) : (
+                    TRANSPORT_TARGETS.map((target) => (
+                      <option key={target.code} value={target.code}>
+                        {target.label}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              {/* Sync CR Popover Button */}
+              <div
+                className="sync-cr-popover-wrapper"
+                style={{ position: "relative", display: "inline-block" }}
+                onMouseEnter={() => setSyncPopoverOpen(true)}
+                onMouseLeave={() => setSyncPopoverOpen(false)}
+              >
+                <button
+                  type="button"
+                  className="primary sync-button"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    background: "#0f766e",
+                    border: "none",
+                    color: "#ffffff",
+                    padding: "8px 18px",
+                    borderRadius: "8px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    fontSize: "0.875rem",
+                    height: "36px"
+                  }}
+                  onClick={() => setSyncPopoverOpen((prev) => !prev)}
+                >
+                  <RefreshCw size={16} className={loading ? "spinner" : ""} />
+                  <span>{loading ? "Syncing CR..." : "Sync CR"}</span>
+                  <ChevronDown size={14} style={{ opacity: 0.8, transform: syncPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                </button>
+
+                {syncPopoverOpen ? (
+                  <div
+                    className="sync-cr-popover-menu"
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      zIndex: 1000,
+                      width: "280px",
+                      background: "var(--color-bg-elevated, #ffffff)",
+                      border: "1px solid var(--color-border, #cbd5e1)",
+                      borderRadius: "12px",
+                      boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.18)",
+                      padding: "12px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "10px"
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--color-border, #cbd5e1)", paddingBottom: "8px" }}>
+                      <span style={{ fontSize: "0.825rem", fontWeight: "700", color: "var(--color-text, #1e293b)" }}>Sync CR Options</span>
+                      <span style={{ fontSize: "0.725rem", color: "var(--color-text-muted, #64748b)" }}>Config & Action</span>
+                    </div>
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>Target System(s)</label>
+                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                        {systems.map((system) => (
+                          <label
+                            key={system.code}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "6px",
+                              padding: "4px 8px",
+                              borderRadius: "6px",
+                              border: "1px solid var(--color-border, #cbd5e1)",
+                              background: syncSystems.includes(system.code) ? "#f0fdf4" : "var(--color-bg, #ffffff)",
+                              color: syncSystems.includes(system.code) ? "#0f766e" : "var(--color-text, #334155)",
+                              fontSize: "0.75rem",
+                              fontWeight: "600",
+                              cursor: "pointer"
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={syncSystems.includes(system.code)}
+                              onChange={() => setSyncSystems(toggleSystem(syncSystems, system.code))}
+                            />
+                            <span>{system.code}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                      <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>Sync Mode</label>
+                      <select
+                        value={syncMode}
+                        onChange={(e) => setSyncMode(e.target.value as any)}
+                        style={{
+                          padding: "6px 8px",
+                          borderRadius: "6px",
+                          border: "1px solid var(--color-border, #cbd5e1)",
+                          background: "var(--color-bg, #ffffff)",
+                          fontSize: "0.8rem",
+                          width: "100%"
+                        }}
+                      >
+                        <option value="incremental">Incremental</option>
+                        <option value="full_period">Full by Period</option>
+                      </select>
+                    </div>
+
+                    {syncMode === "incremental" ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>Lookback Days</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="30"
+                          value={lookbackDays}
+                          onChange={(e) => setLookbackDays(Number(e.target.value || 0))}
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: "6px",
+                            border: "1px solid var(--color-border, #cbd5e1)",
+                            background: "var(--color-bg, #ffffff)",
+                            color: "var(--color-text, #111827)",
+                            fontSize: "0.825rem",
+                            width: "100%"
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>From</label>
+                          <input
+                            type="month"
+                            value={syncFromPeriod}
+                            onChange={(e) => setSyncFromPeriod(e.target.value)}
+                            style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.78rem" }}
+                          />
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>To</label>
+                          <input
+                            type="month"
+                            value={syncToPeriod}
+                            onChange={(e) => setSyncToPeriod(e.target.value)}
+                            style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.78rem" }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      className="primary"
+                      disabled={loading || syncSystems.length === 0}
+                      onClick={() => {
+                        setSyncPopoverOpen(false);
+                        runSync();
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "8px",
+                        background: "#0f766e",
+                        color: "#ffffff",
+                        border: "none",
+                        padding: "8px 14px",
+                        borderRadius: "8px",
+                        fontWeight: "600",
+                        fontSize: "0.85rem",
+                        cursor: "pointer",
+                        marginTop: "4px"
+                      }}
+                    >
+                      <RefreshCw size={15} className={loading ? "spinner" : ""} />
+                      <span>{loading ? "Syncing..." : "Sync CR Now"}</span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             </div>
           ) : view === "report" ? (
             <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
@@ -3376,7 +3624,14 @@ export function App() {
             }}
           />
         ) : view === "cr-transport-create" ? (
-          <CrTransportCreate />
+          <CrTransportCreate
+            targetSystem={crTargetSystem}
+            onTargetSystemChange={(val) => {
+              setCrTargetSystem(val);
+              try { localStorage.setItem("cr_transport_target_system", val); } catch {}
+            }}
+            availableSystems={sapSystems}
+          />
         ) : view === "report" ? (
           <Report
             requests={requests}
@@ -3416,10 +3671,10 @@ export function App() {
             onFilters={setDraftIssueFilters}
             onSelect={setSelectedIssueId}
             onCloseDetail={() => setSelectedIssueId(null)}
-            onChangeIssue={(issueId) => {
+            onChangeIssue={(issueId, item) => {
               setChangeIssueInitialId(issueId);
               setChangeIssueInitialAction("");
-              setChangeIssueInitialItem(null);
+              setChangeIssueInitialItem(item || null);
               navigateTo("issue-change");
             }}
             onIssueAction={(issueId, action) => {
@@ -3458,6 +3713,9 @@ export function App() {
             onExternalCreateModeChange={setIssueCreateMode}
             selectedBaseIssue={selectedBaseIssue}
             nextSubIssueNo={nextSubIssueNo}
+            crTargetSystem={crTargetSystem}
+            onTargetSystemChange={setCrTargetSystem}
+            sapSystems={sapSystems}
             onNotify={showToast}
             onDirtyChange={setIssueFormDirty}
             onSave={async (payload) => {
@@ -3538,6 +3796,9 @@ export function App() {
             initialAction={changeIssueInitialAction}
             initialIncompleteItem={changeIssueInitialItem}
             refreshToken={syncRefreshToken}
+            crTargetSystem={crTargetSystem}
+            onTargetSystemChange={setCrTargetSystem}
+            sapSystems={sapSystems}
             onNotify={showToast}
             onDirtyChange={setIssueFormDirty}
             onSave={async (payload) => {
@@ -4158,26 +4419,50 @@ function Dashboard({
         </section>
       </div>
 
-      {/* Issue Overview Section */}
-      <h2 className="dashboard-section-title" style={{ gridColumn: "1 / -1", margin: "16px 0 4px" }}>Issue Overview</h2>
-      
-      {/* Row 1: Issue Completion & Status Metrics */}
-      <div className="summary-metrics-bar">
-        <Metric label="Complete Issues" value={issueInsights?.completion?.complete || 0} onClick={() => onMetricClick?.("Complete Issues List", "issue", { status: "all", completionStatus: "complete" })} />
-        <Metric label="Incomplete Active" value={issueInsights?.completion?.incomplete || 0} onClick={() => onMetricClick?.("Incomplete Active Issues List", "issue", { status: "all", completionStatus: "incomplete" })} />
-        <Metric label="Open Issues" value={issueStatusCount("open")} onClick={() => onMetricClick?.("Open Issues List", "issue", { status: "open" })} />
-        <Metric label="In Progress Issues" value={issueStatusCount("in_progress")} onClick={() => onMetricClick?.("In Progress Issues List", "issue", { status: "in_progress" })} />
-        <Metric label="OK Issues" value={issueStatusCount("ok")} onClick={() => onMetricClick?.("OK Issues List", "issue", { status: "ok" })} />
+      {/* Issue Overview Section - Responsive Side-by-Side & Horizontal Row Layout */}
+      <h2 className="dashboard-section-title" style={{ gridColumn: "1 / -1", margin: "20px 0 12px" }}>Issue Overview</h2>
+
+      {/* Row 1 on Desktop: Workflow Status (Left) & Data Audit (Right) side-by-side */}
+      <div className="overview-split-row">
+        {/* Left Column: Workflow Status (4 cards) */}
+        <div className="overview-split-col-4">
+          <div style={{ fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)", textTransform: "uppercase", marginBottom: "8px" }}>
+            Workflow Status
+          </div>
+          <div className="summary-metrics-bar-4">
+            <Metric label="Open Issues" value={issueStatusCount("open")} onClick={() => onMetricClick?.("Open Issues List", "issue", { status: "open" })} />
+            <Metric label="In Progress Issues" value={issueStatusCount("in_progress")} onClick={() => onMetricClick?.("In Progress Issues List", "issue", { status: "in_progress" })} />
+            <Metric label="OK Issues" value={issueStatusCount("ok")} onClick={() => onMetricClick?.("OK Issues List", "issue", { status: "ok" })} />
+            <Metric label="Cancelled / Excluded" value={issueLifecycleCount("cancelled")} onClick={() => onMetricClick?.("Cancelled / Excluded Issues List", "issue", { status: "cancelled" })} />
+          </div>
+        </div>
+
+        {/* Right Column: Data Completeness Audit (3 cards) */}
+        <div className="overview-split-col-3">
+          <div style={{ fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)", textTransform: "uppercase", marginBottom: "8px" }}>
+            Data Completeness Audit
+          </div>
+          <div className="summary-metrics-bar-3">
+            <Metric label="Complete Issues" value={issueInsights?.completion?.complete || 0} onClick={() => onMetricClick?.("Complete Issues List", "issue", { status: "all", completionStatus: "complete" })} />
+            <Metric label="Incomplete Issues" value={issueInsights?.completion?.incomplete || 0} onClick={() => onMetricClick?.("Incomplete Active Issues List", "issue", { status: "all", completionStatus: "incomplete" })} />
+            <Metric label="Cancelled / Excluded" value={issueLifecycleCount("cancelled")} onClick={() => onMetricClick?.("Cancelled / Excluded Issues List", "issue", { status: "cancelled" })} />
+          </div>
+        </div>
       </div>
 
-      {/* Row 2: Issue by CR Lifecycle Metrics */}
-      <div className="summary-metrics-bar summary-metrics-bar-6">
-        <Metric label="No CR Assigned" value={issueLifecycleCount("no_cr")} onClick={() => onMetricClick?.("Issues with No CR Assigned", "issue", { lifecycleStatus: "no_cr" })} />
-        <Metric label="CR Created" value={issueLifecycleCount("created")} onClick={() => onMetricClick?.("Issues with CR Created", "issue", { lifecycleStatus: "created" })} />
-        <Metric label="CR Released" value={issueLifecycleCount("released")} onClick={() => onMetricClick?.("Issues with CR Released", "issue", { lifecycleStatus: "released" })} />
-        <Metric label="CR In QA" value={issueLifecycleCount("in_qa")} onClick={() => onMetricClick?.("Issues with CR In QA", "issue", { lifecycleStatus: "in_qa" })} />
-        <Metric label="CR In PRD" value={issueLifecycleCount("in_prd")} onClick={() => onMetricClick?.("Issues with CR In PRD", "issue", { lifecycleStatus: "in_prd" })} />
-        <Metric label="Cancelled / Excluded" value={issueLifecycleCount("cancelled")} onClick={() => onMetricClick?.("Cancelled / Excluded Issues List", "issue", { status: "cancelled" })} />
+      {/* Row 2: CR SAP Lifecycle (6 cards spread horizontally to the right) */}
+      <div style={{ gridColumn: "1 / -1", marginBottom: "20px" }}>
+        <div style={{ fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)", textTransform: "uppercase", marginBottom: "8px" }}>
+          CR SAP Lifecycle
+        </div>
+        <div className="summary-metrics-bar-6">
+          <Metric label="No CR Assigned" value={issueLifecycleCount("no_cr")} onClick={() => onMetricClick?.("Issues with No CR Assigned", "issue", { lifecycleStatus: "no_cr" })} />
+          <Metric label="CR Created" value={issueLifecycleCount("created")} onClick={() => onMetricClick?.("Issues with CR Created", "issue", { lifecycleStatus: "created" })} />
+          <Metric label="CR Released" value={issueLifecycleCount("released")} onClick={() => onMetricClick?.("Issues with CR Released", "issue", { lifecycleStatus: "released" })} />
+          <Metric label="CR In QA" value={issueLifecycleCount("in_qa")} onClick={() => onMetricClick?.("Issues with CR In QA", "issue", { lifecycleStatus: "in_qa" })} />
+          <Metric label="CR In PRD" value={issueLifecycleCount("in_prd")} onClick={() => onMetricClick?.("Issues with CR In PRD", "issue", { lifecycleStatus: "in_prd" })} />
+          <Metric label="Cancelled / Excluded" value={issueLifecycleCount("cancelled")} onClick={() => onMetricClick?.("Cancelled / Excluded Issues List", "issue", { status: "cancelled" })} />
+        </div>
       </div>
 
       <section className="panel chart-panel">
@@ -4289,13 +4574,14 @@ function Dashboard({
               return (
                 <div
                   key={log.id}
+                  className="activity-stream-row"
                   style={{
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "space-between",
                     padding: "0.75rem 1rem",
                     borderRadius: "8px",
-                    background: "var(--color-bg-subtle, #f8fafc)",
+                    background: "var(--surface-subtle, #f8fafc)",
                     border: "1px solid var(--color-border, #e2e8f0)",
                     gap: "1rem"
                   }}
@@ -4772,7 +5058,7 @@ function IssueDisplay({
   onFilters: (filters: IssueFilters) => void;
   onSelect: (value: number) => void;
   onCloseDetail: () => void;
-  onChangeIssue: (id: number) => void;
+  onChangeIssue: (id: number, item?: IncompleteItem | null) => void;
   onIssueAction: (id: number, action: "cancel" | "delete") => void;
   onGenerateCrForm: (id: number) => void;
   onPage: (page: number) => void;
@@ -5239,7 +5525,15 @@ function IssueDisplay({
             {detailIncompleteItems.length ? (
               <section className="issue-missing-box" style={{ margin: 0, borderRadius: "10px" }}>
                 <strong>Incomplete items</strong>
-                <IncompleteGroupCards groups={detailIncompleteGroups} />
+                <IncompleteGroupCards
+                  groups={detailIncompleteGroups}
+                  onItemClick={(item) => {
+                    if (selectedIssue) {
+                      onCloseDetail();
+                      onChangeIssue(selectedIssue.id, item);
+                    }
+                  }}
+                />
               </section>
             ) : null}
 
@@ -5580,6 +5874,9 @@ function IssueEditor({
   selectedBaseIssue,
   nextSubIssueNo = "01",
   layoutStyleOverride,
+  crTargetSystem: externalCrTargetSystem,
+  onTargetSystemChange,
+  sapSystems,
   onNotify,
   onSave,
   onCancel,
@@ -5595,6 +5892,9 @@ function IssueEditor({
   selectedBaseIssue?: IssueRow | null;
   nextSubIssueNo?: string;
   layoutStyleOverride?: "tabs" | "quick_toggle" | "classic";
+  crTargetSystem?: string;
+  onTargetSystemChange?: (val: string) => void;
+  sapSystems?: SapSystemRow[];
   onNotify?: (type: "success" | "error", message: string) => void;
   onSave: (payload: IssueSavePayload) => Promise<void>;
   onCancel?: (id: number, reason: string) => Promise<void>;
@@ -5628,6 +5928,16 @@ function IssueEditor({
   const fetchedGlpiTicketRef = useRef<number | null>(null);
   const [generatingAi, setGeneratingAi] = useState(false);
   const [showAiOverwriteModal, setShowAiOverwriteModal] = useState(false);
+  const [crTargetSystemState, setCrTargetSystemState] = useState<string>(() => {
+    try { return localStorage.getItem("cr_transport_target_system") || "DEV_NC"; } catch { return "DEV_NC"; }
+  });
+  const crTargetSystem = externalCrTargetSystem ?? crTargetSystemState;
+  const setCrTargetSystem = (val: string) => {
+    onTargetSystemChange?.(val);
+    setCrTargetSystemState(val);
+    try { localStorage.setItem("cr_transport_target_system", val); } catch {}
+  };
+  const [createCrModalOpen, setCreateCrModalOpen] = useState(false);
   const [aiOverwriteSelections, setAiOverwriteSelections] = useState<Record<string, boolean>>({});
   const [internalLayoutStyle, setInternalLayoutStyle] = useState<"tabs" | "quick_toggle" | "classic">(() => {
     try {
@@ -5642,6 +5952,8 @@ function IssueEditor({
   });
   const layoutStyle = layoutStyleOverride ?? internalLayoutStyle;
   const [editorTab, setEditorTab] = useState<"basic" | "team" | "timeline">("basic");
+  const [internalNav, setInternalNav] = useState<{ sequence: number; item: IncompleteItem } | null>(null);
+  const effectiveNav = navigationRequest || internalNav;
   const [isQuickMode, setIsQuickMode] = useState<boolean>(() => mode === "create");
   const incompleteItems = detail?.issue && detail.issue.issue_status !== "cancelled" ? getIncompleteItems(detail) : [];
   const incompleteGroups = groupIncompleteItems(incompleteItems);
@@ -5767,6 +6079,17 @@ function IssueEditor({
     if (form.issueName?.trim()) {
       list.push({ key: "issueName", label: "Issue Name", currentValue: form.issueName.trim(), category: "Analysis" });
     }
+    // Only include Request Description in AI generation list when currently EMPTY (prevents overwriting existing descriptions)
+    const currentReqDesc = form.requestDescription?.trim() || primaryCr?.cr_description_snapshot?.trim() || "";
+    if (!currentReqDesc) {
+      list.push({
+        key: "requestDescription",
+        label: "Request Description (CR SAP)",
+        currentValue: "",
+        category: "Analysis"
+      });
+    }
+
     if (form.problemAnalysis?.trim()) {
       list.push({ key: "problemAnalysis", label: "Problem Analysis", currentValue: form.problemAnalysis.trim(), category: "Analysis" });
     }
@@ -5885,6 +6208,13 @@ function IssueEditor({
         update("issueName", result.issueName);
         updatedCount++;
       }
+
+      const currentReqDesc = form.requestDescription?.trim() || primaryCr?.cr_description_snapshot?.trim() || "";
+      const canUpdateRequestDescription = !currentReqDesc && (selections.requestDescription !== false);
+      if (canUpdateRequestDescription && result.requestDescription) {
+        update("requestDescription", result.requestDescription);
+        updatedCount++;
+      }
       
       const canUpdateProblem = selections.problemAnalysis !== false || !form.problemAnalysis?.trim();
       if (canUpdateProblem && result.problemAnalysis) {
@@ -5970,6 +6300,39 @@ function IssueEditor({
   }
 
   const [templatePreview, setTemplatePreview] = useState<{ title: string; body: string; bodyHtml?: string } | null>(null);
+  const [copiedTemplate, setCopiedTemplate] = useState(false);
+
+  async function copyTemplateToClipboard(notify = true) {
+    if (!templatePreview) return;
+    try {
+      if (templatePreview.bodyHtml) {
+        const blobHtml = new Blob([templatePreview.bodyHtml], { type: "text/html" });
+        const blobText = new Blob([templatePreview.body], { type: "text/plain" });
+        const item = new ClipboardItem({ "text/html": blobHtml, "text/plain": blobText });
+        await navigator.clipboard.write([item]);
+      } else {
+        await navigator.clipboard.writeText(templatePreview.body);
+      }
+      setCopiedTemplate(true);
+      if (notify) onNotify?.("success", "Template copied to clipboard!");
+      setTimeout(() => setCopiedTemplate(false), 2500);
+    } catch {
+      try {
+        await navigator.clipboard.writeText(templatePreview.body);
+        setCopiedTemplate(true);
+        if (notify) onNotify?.("success", "Template text copied to clipboard!");
+        setTimeout(() => setCopiedTemplate(false), 2500);
+      } catch {
+        if (notify) onNotify?.("error", "Could not copy automatically. Please copy manually.");
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (templatePreview) {
+      void copyTemplateToClipboard(false);
+    }
+  }, [templatePreview]);
   const [templateBusy, setTemplateBusy] = useState<"" | "email" | "ticket" | "cr-transport">("");
   const [generateMenuOpen, setGenerateMenuOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -6178,19 +6541,52 @@ function IssueEditor({
   }, [detail?.issue?.id, hasCrAssigned, qaReady, prdReady]);
 
   useEffect(() => {
-    if (!navigationRequest) return;
-    setExpandedPhases((current) => expandSection(current, navigationRequest.item.section));
-    return afterIncompleteSectionRender(() => {
-      const target = document.querySelector<HTMLElement>(`[data-incomplete-target="${navigationRequest.item.targetId}"]`);
-      if (!target) return;
-      target.scrollIntoView({ behavior: "smooth", block: "center" });
-      markIncompleteTarget(target);
-      const focusTarget = target.matches("input, select, textarea, button")
-        ? target
-        : target.querySelector<HTMLElement>("input:not(:disabled), select:not(:disabled), textarea:not(:disabled), button:not(:disabled)");
-      focusTarget?.focus({ preventScroll: true });
-    });
-  }, [navigationRequest]);
+    if (!effectiveNav) return;
+    setExpandedPhases((current) => expandSection(current, effectiveNav.item.section));
+
+    const section = effectiveNav.item.section;
+    const targetId = effectiveNav.item.targetId;
+    if (layoutStyle === "tabs") {
+      if (["dev", "qa", "prd"].includes(section)) {
+        setEditorTab("timeline");
+      } else if (["issue-requesters", "issue-abapers", "issue-glpi", "issue-cr"].includes(targetId)) {
+        setEditorTab("team");
+      } else {
+        setEditorTab("basic");
+      }
+    }
+
+    let cancelled = false;
+    let attempts = 0;
+
+    const tryNavigate = () => {
+      if (cancelled) return;
+      const target = document.querySelector<HTMLElement>(`[data-incomplete-target="${targetId}"]`);
+      if (target) {
+        markIncompleteTarget(target);
+        target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+        const focusTarget = target.matches("input, select, textarea, button")
+          ? target
+          : target.querySelector<HTMLElement>("input:not(:disabled), select:not(:disabled), textarea:not(:disabled), button:not(:disabled)");
+        if (focusTarget) {
+          setTimeout(() => {
+            if (!cancelled) {
+              focusTarget.focus({ preventScroll: true });
+            }
+          }, 250);
+        }
+      } else if (attempts < 15) {
+        attempts++;
+        setTimeout(tryNavigate, 60);
+      }
+    };
+
+    const timer = setTimeout(tryNavigate, 60);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [effectiveNav, layoutStyle]);
 
   function togglePhase(phase: IssueSection) {
     setExpandedPhases((current) => ({ ...current, [phase]: !current[phase] }));
@@ -6267,7 +6663,8 @@ function IssueEditor({
   }
 
   return (
-    <form className="issue-editor-panel" onSubmit={submit}>
+    <>
+      <form className="issue-editor-panel" onSubmit={submit}>
 
       {/* Change Issue Top Summary Bar with AI Context Controls beside Status */}
       {mode === "change" && detail?.issue ? (
@@ -6337,14 +6734,7 @@ function IssueEditor({
             <details className="change-summary-details">
               <summary>{incompleteItems.length} incomplete item(s)</summary>
               <IncompleteGroupCards groups={incompleteGroups} onItemClick={(item) => {
-                setExpandedPhases((current) => expandSection(current, item.section));
-                setTimeout(() => {
-                  const target = document.querySelector<HTMLElement>(`[data-incomplete-target="${item.targetId}"]`);
-                  if (target) {
-                    target.scrollIntoView({ behavior: "smooth", block: "center" });
-                    target.focus();
-                  }
-                }, 100);
+                setInternalNav((prev) => ({ sequence: (prev?.sequence || 0) + 1, item }));
               }} />
             </details>
           ) : null}
@@ -6421,6 +6811,7 @@ function IssueEditor({
             <button
               key={idx}
               type="button"
+              className={`editor-nav-button ${modeItem.active ? "is-active" : ""}`}
               onClick={modeItem.onClick}
               style={{
                 display: "flex",
@@ -6429,9 +6820,6 @@ function IssueEditor({
                 gap: "8px",
                 padding: "10px 14px",
                 borderRadius: "10px",
-                border: modeItem.active ? "2px solid #0f766e" : "1px solid var(--color-border, #cbd5e1)",
-                background: modeItem.active ? "#f0fdf4" : "var(--color-bg, #ffffff)",
-                color: modeItem.active ? "#0f766e" : "var(--color-text-muted, #64748b)",
                 fontWeight: modeItem.active ? "700" : "600",
                 fontSize: "0.85rem",
                 cursor: "pointer",
@@ -6456,6 +6844,7 @@ function IssueEditor({
             <button
               key={tab.id}
               type="button"
+              className={`editor-nav-button ${editorTab === tab.id ? "is-active" : ""}`}
               onClick={() => setEditorTab(tab.id as any)}
               style={{
                 display: "flex",
@@ -6464,9 +6853,6 @@ function IssueEditor({
                 gap: "8px",
                 padding: "10px 14px",
                 borderRadius: "10px",
-                border: editorTab === tab.id ? "2px solid #0f766e" : "1px solid var(--color-border, #cbd5e1)",
-                background: editorTab === tab.id ? "#f0fdf4" : "var(--color-bg, #ffffff)",
-                color: editorTab === tab.id ? "#0f766e" : "var(--color-text-muted, #64748b)",
                 fontWeight: editorTab === tab.id ? "700" : "600",
                 fontSize: "0.85rem",
                 cursor: "pointer",
@@ -6681,26 +7067,56 @@ function IssueEditor({
                 </div>
               </div>
               <div className="incomplete-target" data-incomplete-target="issue-cr">
-                <ValueHelpField
-                  label={<FieldLabel label="CR SAP No." badge="optional" />}
-                  kind="cr"
-                  value={form.crLinks || ""}
-                  onChange={(value) => update("crLinks", value.toUpperCase())}
-                  onSelectRow={(row) => {
-                    const trkorr = String(row.trkorr || "");
-                    if (!trkorr) return;
-                    setCrPreview((current) => ({
-                      ...current,
-                      [trkorr]: {
-                        description: String(row.description || ""),
-                        status: String(row.status_group || ""),
-                        system: String(row.sap_system_code || "")
-                      }
-                    }));
-                  }}
-                  placeholder="TRDK..."
-                  disabled={formDisabled}
-                />
+                <div style={{ display: "flex", alignItems: "flex-end", gap: "8px" }}>
+                  <div style={{ flex: 1 }}>
+                    <ValueHelpField
+                      label={<FieldLabel label="CR SAP No." badge="optional" />}
+                      kind="cr"
+                      value={form.crLinks || ""}
+                      onChange={(value) => update("crLinks", value.toUpperCase())}
+                      onSelectRow={(row) => {
+                        const trkorr = String(row.trkorr || "");
+                        if (!trkorr) return;
+                        setCrPreview((current) => ({
+                          ...current,
+                          [trkorr]: {
+                            description: String(row.description || ""),
+                            status: String(row.status_group || ""),
+                            system: String(row.sap_system_code || "")
+                          }
+                        }));
+                      }}
+                      placeholder="TRDK..."
+                      disabled={formDisabled}
+                    />
+                  </div>
+                  {!form.crLinks?.trim() && !formDisabled ? (
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={() => setCreateCrModalOpen(true)}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        height: "38px",
+                        padding: "0 14px",
+                        borderRadius: "8px",
+                        background: "#0f766e",
+                        color: "#ffffff",
+                        border: "none",
+                        fontWeight: "600",
+                        fontSize: "0.825rem",
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                        marginBottom: "1px"
+                      }}
+                    >
+                      <Plus size={15} />
+                      <span>+ Create CR</span>
+                    </button>
+                  ) : null}
+                </div>
               </div>
               {crTokens.length ? (
                 <div className="reference-hints">
@@ -6892,16 +7308,46 @@ function IssueEditor({
         </div>
       </div>
       {templatePreview ? (
-        <div className="modal-backdrop" role="presentation">
-          <section className="modal-card template-preview-modal" role="dialog" aria-modal="true" aria-labelledby="template-preview-title">
-            <h2 id="template-preview-title">{templatePreview.title}</h2>
+        <div className="modal-backdrop" role="presentation" onClick={(e) => { if (e.target === e.currentTarget) setTemplatePreview(null); }}>
+          <section className="modal-card template-preview-modal" role="dialog" aria-modal="true" aria-labelledby="template-preview-title" style={{ width: "90%", maxWidth: "680px", padding: "24px", borderRadius: "16px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+              <h2 id="template-preview-title" style={{ margin: 0, fontSize: "1.25rem", fontWeight: 700 }}>{templatePreview.title}</h2>
+              <button type="button" onClick={() => setTemplatePreview(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)" }}>
+                <X size={18} />
+              </button>
+            </div>
+
             {templatePreview.bodyHtml ? (
               <div className="template-preview-body" dangerouslySetInnerHTML={{ __html: templatePreview.bodyHtml }} />
             ) : (
-              <pre>{templatePreview.body}</pre>
+              <pre className="template-preview-body" style={{ whiteSpace: "pre-wrap", fontFamily: "inherit" }}>{templatePreview.body}</pre>
             )}
-            <div className="modal-actions">
-              <button type="button" className="secondary" onClick={() => setTemplatePreview(null)}><X size={15} /> Close</button>
+
+            <div className="modal-actions" style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "10px", marginTop: "20px", flexWrap: "wrap" }}>
+              <button type="button" className="secondary" onClick={() => void copyTemplateToClipboard(true)} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                {copiedTemplate ? <CheckCircle2 size={15} color="#10b981" /> : <Copy size={15} />}
+                <span>{copiedTemplate ? "Copied!" : "Copy Template"}</span>
+              </button>
+
+              {templatePreview.title.includes("GLPI") && (
+                <button
+                  type="button"
+                  className="primary"
+                  style={{ display: "inline-flex", alignItems: "center", gap: "8px", background: "#0f766e", color: "white", padding: "8px 16px", borderRadius: "8px", fontWeight: 600, border: "none", cursor: "pointer" }}
+                  onClick={async () => {
+                    await copyTemplateToClipboard(false);
+                    onNotify?.("success", "Template copied! Paste (Ctrl+V) in GLPI Ticket form.");
+                    window.open("https://itsm.trst.co.id/front/ticket.form.php", "_blank");
+                  }}
+                >
+                  <ExternalLink size={15} />
+                  <span>Create Ticket in GLPI</span>
+                </button>
+              )}
+
+              <button type="button" className="secondary" onClick={() => setTemplatePreview(null)}>
+                <X size={15} /> Close
+              </button>
             </div>
           </section>
         </div>
@@ -6976,6 +7422,7 @@ function IssueEditor({
           </section>
         </div>
       ) : null}
+      </form>
       <UIModal
         isOpen={showAiOverwriteModal}
         onClose={() => setShowAiOverwriteModal(false)}
@@ -6992,29 +7439,13 @@ function IssueEditor({
       >
         {(() => {
           const fields = getExistingFormFields();
-          const selectedCount = fields.filter((f) => aiOverwriteSelections[f.key] !== false).length;
-
           return (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  borderBottom: "1px solid var(--color-border, #e2e8f0)",
-                  paddingBottom: "8px",
-                  position: "sticky",
-                  top: "-20px",
-                  background: "var(--color-bg-elevated, #ffffff)",
-                  zIndex: 10,
-                  paddingTop: "4px",
-                  marginTop: "-4px"
-                }}
-              >
-                <span style={{ fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)" }}>
-                  Fields to Replace ({selectedCount} of {fields.length} selected)
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", maxHeight: "360px", overflowY: "auto", paddingRight: "4px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #64748b)" }}>
+                  Select fields to replace with AI suggestions:
                 </span>
-                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <div style={{ display: "flex", gap: "10px" }}>
                   <button
                     type="button"
                     onClick={() => {
@@ -7022,11 +7453,10 @@ function IssueEditor({
                       fields.forEach((f) => { all[f.key] = true; });
                       setAiOverwriteSelections(all);
                     }}
-                    style={{ border: "none", background: "none", color: "#0f766e", fontSize: "0.75rem", fontWeight: "600", cursor: "pointer", padding: 0 }}
+                    style={{ border: "none", background: "none", color: "#6366f1", fontSize: "0.75rem", fontWeight: "600", cursor: "pointer", padding: 0 }}
                   >
                     Select All
                   </button>
-                  <span style={{ color: "var(--color-border, #cbd5e1)", fontSize: "0.75rem" }}>|</span>
                   <button
                     type="button"
                     onClick={() => {
@@ -7105,7 +7535,48 @@ function IssueEditor({
           );
         })()}
       </UIModal>
-    </form>
+      <UIModal
+        isOpen={createCrModalOpen}
+        onClose={() => setCreateCrModalOpen(false)}
+        title="Create CR Transport"
+        subtitle="Resolve SAP repository objects and create a controlled Workbench request."
+        maxWidth="920px"
+        hideFooter={true}
+        headerActions={
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "4px 10px",
+              borderRadius: "6px",
+              background: "#ecfdf5",
+              color: "#0f766e",
+              border: "1px solid #a7f3d0",
+              fontWeight: "600",
+              fontSize: "0.8rem",
+              marginRight: "4px"
+            }}
+          >
+            <Database size={13} />
+            <span>{sapSystems?.find((s) => s.code === crTargetSystem)?.description || sapSystems?.find((s) => s.code === crTargetSystem)?.code || transportTargetLabel(crTargetSystem)}</span>
+          </span>
+        }
+      >
+        <CrTransportCreate
+          initialDescription={form.requestDescription}
+          targetSystem={crTargetSystem}
+          onTargetSystemChange={setCrTargetSystem}
+          availableSystems={sapSystems}
+          isModal={true}
+          onRequestCreated={(requestNo) => {
+            update("crLinks", requestNo);
+            setCreateCrModalOpen(false);
+            onNotify?.("success", `Created and linked CR Transport ${requestNo}`);
+          }}
+        />
+      </UIModal>
+    </>
   );
 }
 
@@ -7115,6 +7586,9 @@ function ChangeIssue({
   initialIncompleteItem = null,
   refreshToken = 0,
   layoutStyleOverride,
+  crTargetSystem,
+  onTargetSystemChange,
+  sapSystems,
   onSave,
   onCancel,
   onDelete,
@@ -7126,6 +7600,9 @@ function ChangeIssue({
   initialIncompleteItem?: IncompleteItem | null;
   refreshToken?: number;
   layoutStyleOverride?: "tabs" | "quick_toggle" | "classic";
+  crTargetSystem?: string;
+  onTargetSystemChange?: (val: string) => void;
+  sapSystems?: SapSystemRow[];
   onSave: (payload: IssueSavePayload) => Promise<void>;
   onCancel: (id: number, reason: string) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
@@ -7198,7 +7675,7 @@ function ChangeIssue({
     setSearched(true);
     setShowCandidates(true);
     if (!selection.q.trim() && !selection.glpi.trim() && !selection.crHelpdesk.trim() && !selection.cr.trim()) {
-      onNotify("error", "Isi minimal Issue, CR Helpdesk, CR SAP, GLPI, atau deskripsi sebelum Search.");
+      onNotify("error", "Please enter at least Issue key, CR Helpdesk, CR SAP, GLPI, or description before searching.");
       setCandidates([]);
       return;
     }
@@ -7207,11 +7684,11 @@ function ChangeIssue({
       const rows = await fetchIssueCandidates(selection);
       setCandidates(rows);
       if (!rows.length) {
-        onNotify("error", "Issue tidak ditemukan.");
+        onNotify("error", "No matching issue found.");
         return;
       }
       await openIssue(rows[0]);
-      if (rows.length > 1) onNotify("success", `${rows.length} issue ditemukan. Issue pertama ditampilkan, pilih kandidat lain jika perlu.`);
+      if (rows.length > 1) onNotify("success", `${rows.length} issues found. First issue displayed; select another candidate if needed.`);
     } catch (err) {
       onNotify("error", err instanceof Error ? err.message : String(err));
     } finally {
@@ -7234,8 +7711,33 @@ function ChangeIssue({
 
   return (
     <div className="issue-change-layout">
-
-      {changeDetail ? <IssueEditor mode="change" detail={changeDetail} layoutStyleOverride={layoutStyleOverride} initialAction={initialAction} navigationRequest={navigationRequest} onNotify={onNotify} onSave={onSave} onCancel={onCancel} onDelete={onDelete} onDirtyChange={onDirtyChange} /> : null}
+      {changeDetail ? (
+        <IssueEditor
+          mode="change"
+          detail={changeDetail}
+          layoutStyleOverride={layoutStyleOverride}
+          initialAction={initialAction}
+          navigationRequest={navigationRequest}
+          crTargetSystem={crTargetSystem}
+          onTargetSystemChange={onTargetSystemChange}
+          sapSystems={sapSystems}
+          onNotify={onNotify}
+          onSave={onSave}
+          onCancel={onCancel}
+          onDelete={onDelete}
+          onDirtyChange={onDirtyChange}
+        />
+      ) : searching ? (
+        <section className="panel issue-editor-panel" style={{ display: "flex", alignItems: "center", gap: "10px", padding: "30px" }}>
+          <Loader2 className="spinner" size={20} color="var(--color-primary)" />
+          <span>Loading issue details...</span>
+        </section>
+      ) : (
+        <section className="panel issue-editor-panel" style={{ padding: "30px" }}>
+          <h2>Change Issue</h2>
+          <p className="empty">Pilih issue dari menu Report terlebih dahulu.</p>
+        </section>
+      )}
     </div>
   );
 }
@@ -7721,6 +8223,7 @@ function issueFormFromDetail(detail: IssueDetail | null): IssueSavePayload {
     issueNo: issue?.issue_no,
     subIssueNo: issue?.sub_issue_no || "01",
     issueName: issue?.issue_name || "",
+    requestDescription: detail?.crLinks?.[0]?.cr_description_snapshot || issue?.primary_cr_description || "",
     requesterNames: participants.requester || issue?.requester_name_snapshot || "",
     abaperNames: participants.abaper || issue?.abaper_name_snapshot || "",
     problemAnalysis: issue?.problem_analysis || "",
