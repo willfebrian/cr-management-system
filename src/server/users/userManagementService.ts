@@ -10,6 +10,7 @@ import type {
   ManagementActor,
   RestoreManagedUserPayload,
   UpdateManagedUserProfilePayload,
+  UserAuditAction,
   UserAuditEntry,
   UserRole
 } from "../../shared/userManagementTypes";
@@ -117,7 +118,11 @@ async function getTargetForUpdate(
   const result = await client.query(
     `SELECT u.id, u.username, u.role, u.is_active, u.must_change_password,
             u.last_login_at, u.created_at, u.updated_at, u.deleted_at,
-            u.deleted_by_snapshot, u.delete_reason
+            u.deleted_by_snapshot, u.delete_reason, u.person_id,
+            (SELECT p.full_name FROM issue_people p WHERE p.id = u.person_id) AS person_full_name,
+            (SELECT p.nickname FROM issue_people p WHERE p.id = u.person_id) AS person_nickname,
+            (SELECT p.email FROM issue_people p WHERE p.id = u.person_id) AS person_email,
+            (SELECT p.is_active FROM issue_people p WHERE p.id = u.person_id) AS person_is_active
        FROM app_users u
       WHERE u.id = $1
       FOR UPDATE`,
@@ -128,6 +133,74 @@ async function getTargetForUpdate(
     throw new UserManagementError("User tidak ditemukan", 404);
   }
   return target;
+}
+
+async function getManagedUserById(
+  client: Queryable,
+  userId: number
+): Promise<ManagedUser> {
+  const result = await client.query(
+    `SELECT u.id, u.username, u.role, u.is_active, u.must_change_password,
+            u.last_login_at, u.created_at, u.updated_at, u.deleted_at,
+            u.deleted_by_snapshot, u.delete_reason, u.person_id,
+            p.full_name AS person_full_name,
+            p.nickname AS person_nickname,
+            p.email AS person_email,
+            p.is_active AS person_is_active
+       FROM app_users u
+       LEFT JOIN issue_people p ON p.id = u.person_id
+      WHERE u.id = $1`,
+    [userId]
+  );
+  const row = result.rows[0];
+  if (!row) throw new UserManagementError("User tidak ditemukan", 404);
+  return toManagedUser(row);
+}
+
+async function insertUserAudit(
+  client: Queryable,
+  actor: ManagementActor,
+  targetUserId: number,
+  action: UserAuditAction,
+  metadata: Record<string, unknown>
+): Promise<void> {
+  await client.query(
+    `INSERT INTO app_user_audit_logs (
+       actor_user_id, target_user_id, action, metadata
+     ) VALUES ($1, $2, $3, $4::jsonb)`,
+    [
+      actor.id,
+      targetUserId,
+      action,
+      JSON.stringify({ ...metadata, actorUsername: actor.username })
+    ]
+  );
+}
+
+function personDisplayName(person: {
+  full_name?: string | null;
+  nickname?: string | null;
+}): string | null {
+  const fullName = String(person.full_name ?? "").trim();
+  const nickname = String(person.nickname ?? "").trim();
+  if (fullName && nickname) return `${fullName} (${nickname})`;
+  return fullName || nickname || null;
+}
+
+function assignmentMetadata(previous: any | null, next: any | null) {
+  return {
+    previousPersonId: previous?.id == null ? null : Number(previous.id),
+    previousPersonName: previous ? personDisplayName(previous) : null,
+    nextPersonId: next?.id == null ? null : Number(next.id),
+    nextPersonName: next ? personDisplayName(next) : null
+  };
+}
+
+function isPersonUniqueConflict(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; constraint?: unknown };
+  return candidate.code === "23505"
+    && candidate.constraint === "idx_app_users_person_unique";
 }
 
 async function getActiveAdminCount(client: Queryable): Promise<number> {
@@ -261,6 +334,128 @@ export function createUserManagementService(
       [userId]
     );
     return result.rows.map(toAuditEntry);
+  }
+
+  async function assignManagedUserPerson(
+    userId: number,
+    personId: number,
+    actor: ManagementActor
+  ): Promise<ManagedUser> {
+    assertAdmin(actor);
+    if (!Number.isSafeInteger(personId) || personId <= 0) {
+      throw new UserManagementError("Person ID tidak valid");
+    }
+    try {
+      return await inTransaction(database, async (client) => {
+        const target = await getTargetForUpdate(client, userId);
+        if (target.deleted_at) {
+          throw new UserManagementError(
+            "Archived user harus dipulihkan sebelum assignment diubah",
+            404,
+            "USER_ASSIGNMENT_UNAVAILABLE"
+          );
+        }
+        const personResult = await client.query(
+          `SELECT id, full_name, nickname, email, is_active
+             FROM issue_people
+            WHERE id = $1
+            FOR UPDATE`,
+          [personId]
+        );
+        const nextPerson = personResult.rows[0];
+        if (!nextPerson) {
+          throw new UserManagementError("Person tidak ditemukan", 404, "PERSON_NOT_FOUND");
+        }
+        if (!nextPerson.is_active) {
+          throw new UserManagementError(
+            "Person inactive tidak dapat di-assign",
+            409,
+            "PERSON_INACTIVE"
+          );
+        }
+        if (target.person_id != null && Number(target.person_id) === personId) {
+          return toManagedUser(target);
+        }
+        const ownerResult = await client.query(
+          `SELECT id, username
+             FROM app_users
+            WHERE person_id = $1 AND id <> $2`,
+          [personId, userId]
+        );
+        const owner = ownerResult.rows[0];
+        if (owner) {
+          throw new UserManagementError(
+            `Person sudah terhubung ke akun ${owner.username}`,
+            409,
+            "PERSON_ALREADY_ASSIGNED",
+            { assignedUserId: Number(owner.id), assignedUsername: owner.username }
+          );
+        }
+        const previous = target.person_id == null ? null : {
+          id: target.person_id,
+          full_name: target.person_full_name,
+          nickname: target.person_nickname
+        };
+        await client.query(
+          `UPDATE app_users SET person_id = $1, updated_at = now()
+            WHERE id = $2
+            RETURNING id`,
+          [personId, userId]
+        );
+        await insertUserAudit(
+          client,
+          actor,
+          userId,
+          previous ? "PERSON_REASSIGNED" : "PERSON_ASSIGNED",
+          assignmentMetadata(previous, nextPerson)
+        );
+        return getManagedUserById(client, userId);
+      });
+    } catch (error) {
+      if (isPersonUniqueConflict(error)) {
+        throw new UserManagementError(
+          "Person sudah terhubung ke akun lain",
+          409,
+          "PERSON_ALREADY_ASSIGNED"
+        );
+      }
+      throw error;
+    }
+  }
+
+  async function unassignManagedUserPerson(
+    userId: number,
+    actor: ManagementActor
+  ): Promise<ManagedUser> {
+    assertAdmin(actor);
+    return inTransaction(database, async (client) => {
+      const target = await getTargetForUpdate(client, userId);
+      if (target.deleted_at) {
+        throw new UserManagementError(
+          "Archived user harus dipulihkan sebelum assignment diubah",
+          404,
+          "USER_ASSIGNMENT_UNAVAILABLE"
+        );
+      }
+      if (target.person_id == null) return toManagedUser(target);
+      const previous = {
+        id: target.person_id,
+        full_name: target.person_full_name,
+        nickname: target.person_nickname
+      };
+      await client.query(
+        `UPDATE app_users SET person_id = NULL, updated_at = now() WHERE id = $1`,
+        [userId]
+      );
+      await insertUserAudit(
+        client,
+        actor,
+        userId,
+        "PERSON_UNASSIGNED",
+        assignmentMetadata(previous, null)
+      );
+      return getManagedUserById(client, userId);
+    });
   }
 
   async function createManagedUser(
@@ -695,6 +890,8 @@ export function createUserManagementService(
   return {
     listManagedUsers,
     listManagedUserPersonOptions,
+    assignManagedUserPerson,
+    unassignManagedUserPerson,
     getManagedUserAudit,
     createManagedUser,
     updateManagedUserProfile,
@@ -710,6 +907,8 @@ const defaultService = createUserManagementService();
 
 export const listManagedUsers = defaultService.listManagedUsers;
 export const listManagedUserPersonOptions = defaultService.listManagedUserPersonOptions;
+export const assignManagedUserPerson = defaultService.assignManagedUserPerson;
+export const unassignManagedUserPerson = defaultService.unassignManagedUserPerson;
 export const getManagedUserAudit = defaultService.getManagedUserAudit;
 export const createManagedUser = defaultService.createManagedUser;
 export const updateManagedUserProfile = defaultService.updateManagedUserProfile;
