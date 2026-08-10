@@ -163,8 +163,16 @@ export function renderMarkdownTemplate(
 }
 
 function processInlineFormatting(str: string): string {
-  return str
+  let res = str
     .replace(/\*\*(.*?)\*\*/g, "<b>$1</b>")
     .replace(/\*(.*?)\*/g, "<i>$1</i>")
+    .replace(/<u>(.*?)<\/u>/gi, "<u>$1</u>")
     .replace(/`(.*?)`/g, "<code style='background: var(--color-bg-subtle, #f1f5f9); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 0.85em;'>$1</code>");
+
+  // Auto-link URLs if not already wrapped in <a href>
+  res = res.replace(/(https?:\/\/[^\s<]+)/gi, (url) => {
+    return `<a href="${url}" target="_blank" style="color: var(--color-primary, #0f766e); text-decoration: underline;">${url}</a>`;
+  });
+
+  return res;
 }

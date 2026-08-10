@@ -68,17 +68,25 @@ Terima kasih.
 Regards,
 **{FULLNAME}**`;
 
-  const DEFAULT_EMAIL_TEMPLATE = `Dear Team,
+  const DEFAULT_EMAIL_TEMPLATE = `Dear All,
 
-Berikut update pengerjaan Issue & CR SAP:
+Email permintaan sudah dilayani pada ticket **[GLPI #{GLPI_NO}]**.
+Untuk selanjutnya silahkan berkomunikasi melalui ticket ini di aplikasi **ITSM GLPI** untuk update proses selanjutnya:
+
+>> {GLPI_LINK}
 
 - Issue no: **{ISSUE_KEY}** ({ISSUE_NAME})
 - CR no.: **{CR_SAP}**
-- Deskripsi: **{CR_DESCRIPTION}**
+- CR Description: **{CR_DESCRIPTION}**
+- SAP Object List:
+{OBJECT_LIST}
 
-Mohon dapat dilakukan verifikasi/testing.
+Terima kasih.
 
-Terima kasih.`;
+Regards,
+
+<u>{FULLNAME}</u>
+({USER_DEPARTMENT})`;
 
   const [settings, setSettings] = useState<Record<string, string>>({
     ai_instruction_glpi: "",
@@ -144,6 +152,14 @@ Terima kasih.`;
         return { ...prev, [key]: `${currentVal} ${token}` };
       });
     }
+  }
+
+  function resetTemplateToDefault() {
+    const isGlpi = activeTemplateTab === "glpi";
+    const key = isGlpi ? "template_body_glpi" : "template_body_email";
+    const defaultVal = isGlpi ? DEFAULT_GLPI_TEMPLATE : DEFAULT_EMAIL_TEMPLATE;
+    setSettings((prev) => ({ ...prev, [key]: defaultVal }));
+    showToast("success", `Reset ${isGlpi ? "GLPI Ticket" : "Email"} template to standard default format! Click Save Settings to store.`);
   }
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -218,6 +234,16 @@ Terima kasih.`;
         setPeople(peopleRes.rows || []);
         setGroupEmails(groupEmailsRes.rows || []);
         setSapSystems(sapSystemsRes.rows || []);
+        let emailTemplateVal = settingsRes.template_body_email;
+        if (!emailTemplateVal || emailTemplateVal.includes("Berikut update pengerjaan Issue & CR SAP")) {
+          emailTemplateVal = DEFAULT_EMAIL_TEMPLATE;
+        }
+
+        let glpiTemplateVal = settingsRes.template_body_glpi;
+        if (!glpiTemplateVal) {
+          glpiTemplateVal = DEFAULT_GLPI_TEMPLATE;
+        }
+
         const merged = {
           ai_instruction_glpi: settingsRes.ai_instruction_glpi || "",
           ai_instruction_email: settingsRes.ai_instruction_email || "",
@@ -232,10 +258,10 @@ Terima kasih.`;
           app_font_size: settingsRes.app_font_size || "14",
           filename_pattern_cr_transport: settingsRes.filename_pattern_cr_transport || "CR Transport {ISSUE_KEY}.docx",
           filename_pattern_project_cr_transport: settingsRes.filename_pattern_project_cr_transport || "CR Transport Project {PROJECT_KEY}.docx",
-          template_body_glpi: settingsRes.template_body_glpi || DEFAULT_GLPI_TEMPLATE,
-          template_body_email: settingsRes.template_body_email || DEFAULT_EMAIL_TEMPLATE,
           ...settingsRes,
           ...localAppearance,
+          template_body_glpi: glpiTemplateVal,
+          template_body_email: emailTemplateVal,
         };
         setSettings(merged);
       })
@@ -1269,20 +1295,31 @@ Terima kasih.`;
                   </div>
 
                   {/* Tab Switcher: GLPI vs Email */}
-                  <div style={{ display: "flex", gap: "4px", background: "var(--color-bg-subtle, #f1f5f9)", padding: "4px", borderRadius: "8px", border: "1px solid var(--color-border, #cbd5e1)" }}>
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", gap: "4px", background: "var(--color-bg-subtle, #f1f5f9)", padding: "4px", borderRadius: "8px", border: "1px solid var(--color-border, #cbd5e1)" }}>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTemplateTab("glpi")}
+                        style={{ padding: "6px 14px", borderRadius: "6px", border: "none", background: activeTemplateTab === "glpi" ? "var(--color-primary, #0f766e)" : "transparent", color: activeTemplateTab === "glpi" ? "#ffffff" : "var(--color-text-muted)", fontWeight: activeTemplateTab === "glpi" ? "700" : "500", fontSize: "0.85rem", cursor: "pointer" }}
+                      >
+                        GLPI Ticket Template
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTemplateTab("email")}
+                        style={{ padding: "6px 14px", borderRadius: "6px", border: "none", background: activeTemplateTab === "email" ? "var(--color-primary, #0f766e)" : "transparent", color: activeTemplateTab === "email" ? "#ffffff" : "var(--color-text-muted)", fontWeight: activeTemplateTab === "email" ? "700" : "500", fontSize: "0.85rem", cursor: "pointer" }}
+                      >
+                        Email Template
+                      </button>
+                    </div>
+
                     <button
                       type="button"
-                      onClick={() => setActiveTemplateTab("glpi")}
-                      style={{ padding: "6px 14px", borderRadius: "6px", border: "none", background: activeTemplateTab === "glpi" ? "var(--color-primary, #0f766e)" : "transparent", color: activeTemplateTab === "glpi" ? "#ffffff" : "var(--color-text-muted)", fontWeight: activeTemplateTab === "glpi" ? "700" : "500", fontSize: "0.85rem", cursor: "pointer" }}
+                      onClick={resetTemplateToDefault}
+                      style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", background: "var(--color-bg-elevated, #ffffff)", color: "var(--color-text, #475569)", fontSize: "0.8rem", fontWeight: "600", cursor: "pointer", transition: "all 0.15s" }}
+                      title="Reset active template to standard default format"
                     >
-                      GLPI Ticket Template
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTemplateTab("email")}
-                      style={{ padding: "6px 14px", borderRadius: "6px", border: "none", background: activeTemplateTab === "email" ? "var(--color-primary, #0f766e)" : "transparent", color: activeTemplateTab === "email" ? "#ffffff" : "var(--color-text-muted)", fontWeight: activeTemplateTab === "email" ? "700" : "500", fontSize: "0.85rem", cursor: "pointer" }}
-                    >
-                      Email Template
+                      ↺ Reset to Default
                     </button>
                   </div>
                 </div>
@@ -1361,7 +1398,7 @@ Terima kasih.`;
 
                   {/* Dynamic Tokens */}
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
-                    {["{ISSUE_KEY}", "{ISSUE_NAME}", "{CR_SAP}", "{CR_DESCRIPTION}", "{OBJECT_LIST}", "{GLPI_NO}", "{FULLNAME}", "{USER_NICKNAME}", "{REQUESTER}", "{ABAPER}"].map((token) => (
+                    {["{ISSUE_KEY}", "{ISSUE_NAME}", "{CR_SAP}", "{CR_DESCRIPTION}", "{OBJECT_LIST}", "{GLPI_NO}", "{GLPI_LINK}", "{FULLNAME}", "{USER_NICKNAME}", "{USER_DEPARTMENT}", "{REQUESTER}", "{ABAPER}"].map((token) => (
                       <button
                         key={token}
                         type="button"

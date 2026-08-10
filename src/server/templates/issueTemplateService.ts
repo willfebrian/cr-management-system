@@ -17,7 +17,7 @@ import { getAppSetting, renderMarkdownTemplate } from "../utils/namingPattern.js
 export async function buildIssueTemplatePreview(
   issueId: number,
   kind: IssueTemplateKind,
-  userContext?: { name?: string; nickname?: string }
+  userContext?: { name?: string; nickname?: string; department?: string }
 ) {
   const detail = await getIssueDetail(issueId);
   if (!detail.issue) throw new Error("Issue not found.");
@@ -41,6 +41,7 @@ export async function buildIssueTemplatePreview(
 
   const userName = userContext?.name || detail.issue.abaper_name || "User";
   const userNickname = userContext?.nickname || userName;
+  const userDept = userContext?.department || "IT";
   const requester = detail.issue.requester_name || "-";
   const abaper = detail.issue.abaper_name || "-";
 
@@ -59,6 +60,7 @@ export async function buildIssueTemplatePreview(
       USER_NAME: userName,
       FULLNAME: userName,
       USER_NICKNAME: userNickname,
+      USER_DEPARTMENT: userDept,
       REQUESTER: requester,
       ABAPER: abaper
     };
