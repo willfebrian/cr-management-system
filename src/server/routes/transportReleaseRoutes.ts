@@ -18,7 +18,8 @@ transportReleaseRoutes.use(requireAdmin);
 transportReleaseRoutes.get("/candidates", asyncHandler(async (req, res) => {
   const targetSystem = normalizeTargetSystem(req.query.targetSystem as string || "DEV_AIX");
   const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
-  const snapshot = await loadReleaseCandidateSnapshot(targetSystem, limit);
+  const query = String(req.query.q || "").trim().slice(0, 100);
+  const snapshot = await loadReleaseCandidateSnapshot(targetSystem, limit, query);
 
   res.json({ ok: true, ...snapshot });
 }));
@@ -36,10 +37,23 @@ const releaseCandidateDependencies: ReleaseCandidateDependencies = {
 export async function loadReleaseCandidateSnapshot(
   targetSystem: string,
   limit: number,
+  query = "",
   dependencies: ReleaseCandidateDependencies = releaseCandidateDependencies
 ) {
   const normalizedTargetSystem = normalizeTargetSystem(targetSystem);
   const sourceSystem = releaseCandidateSourceSystem(normalizedTargetSystem);
+  const normalizedQuery = query.trim();
+  const searchClause = normalizedQuery
+    ? `AND (
+         cr.trkorr ILIKE $2
+         OR COALESCE(cr.description, '') ILIKE $2
+         OR COALESCE(cr.owner, '') ILIKE $2
+       )`
+    : "";
+  const limitPlaceholder = normalizedQuery ? "$3" : "$2";
+  const queryParams = normalizedQuery
+    ? [sourceSystem, `%${normalizedQuery}%`, limit]
+    : [sourceSystem, limit];
   const [result, lastSync] = await Promise.all([
     dependencies.query(
     `SELECT cr.trkorr, cr.description, cr.owner, cr.status_group,
@@ -51,9 +65,10 @@ export async function loadReleaseCandidateSnapshot(
      WHERE cr.status_group = 'outstanding'
        AND cr.parent_request IS NULL
        AND cr.sap_system_code = $1
-     ORDER BY cr.changed_date DESC NULLS LAST, cr.trkorr DESC
-     LIMIT $2`,
-    [sourceSystem, limit]
+       ${searchClause}
+     ORDER BY cr.trkorr DESC
+     LIMIT ${limitPlaceholder}`,
+    queryParams
     ),
     dependencies.getLastSuccessfulSyncRun(sourceSystem)
   ]);

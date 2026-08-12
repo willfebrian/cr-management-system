@@ -36,8 +36,9 @@ export type ReleaseCandidatesResult = {
   rows: ReleaseCandidateRow[];
 };
 
-export async function fetchReleaseCandidates(targetSystem = "DEV_AIX", limit = 50): Promise<ReleaseCandidatesResult> {
-  return request(`/api/cr-transports/release/candidates?targetSystem=${encodeURIComponent(targetSystem)}&limit=${limit}`, undefined, "GET");
+export async function fetchReleaseCandidates(targetSystem = "DEV_AIX", limit = 50, query = ""): Promise<ReleaseCandidatesResult> {
+  const search = query.trim() ? `&q=${encodeURIComponent(query.trim())}` : "";
+  return request(`/api/cr-transports/release/candidates?targetSystem=${encodeURIComponent(targetSystem)}&limit=${limit}${search}`, undefined, "GET");
 }
 
 export async function testRunRelease(trkorr: string, targetSystem = "DEV_AIX"): Promise<ReleaseResult> {

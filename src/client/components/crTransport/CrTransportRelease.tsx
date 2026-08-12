@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { AlertTriangle, Check, CheckCircle2, Loader2, PlayCircle, RotateCcw, Search, Unlock, XCircle } from "lucide-react";
 import { UIModal } from "../common/UIModal";
 import {
@@ -77,6 +77,7 @@ export function CrTransportRelease({
   const [testRunResult, setTestRunResult] = useState<ReleaseResult | null>(null);
   const [releaseResult, setReleaseResult] = useState<ReleaseResult | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const candidateRequestRef = useRef(0);
 
   useEffect(() => {
     if (externalAvailableSystems) return;
@@ -90,9 +91,16 @@ export function CrTransportRelease({
       .catch(() => {});
   }, [externalAvailableSystems]);
 
-  useEffect(() => { void loadCandidates(); }, [targetSystem, refreshToken]);
+  useEffect(() => {
+    const delay = searchFilter.trim() ? 300 : 0;
+    const timeout = window.setTimeout(() => {
+      void loadCandidates(searchFilter);
+    }, delay);
+    return () => window.clearTimeout(timeout);
+  }, [targetSystem, refreshToken, searchFilter]);
 
-  async function loadCandidates() {
+  async function loadCandidates(query = searchFilter) {
+    const requestId = ++candidateRequestRef.current;
     setBusy("candidates");
     setError("");
     setCandidates([]);
@@ -100,12 +108,14 @@ export function CrTransportRelease({
     setTestRunResult(null);
     setReleaseResult(null);
     try {
-      const result = await fetchReleaseCandidates(targetSystem);
+      const result = await fetchReleaseCandidates(targetSystem, 50, query);
+      if (requestId !== candidateRequestRef.current) return;
       setCandidates(result.rows);
     } catch (e) {
+      if (requestId !== candidateRequestRef.current) return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setBusy("");
+      if (requestId === candidateRequestRef.current) setBusy("");
     }
   }
 
@@ -134,7 +144,7 @@ export function CrTransportRelease({
       setReleaseResult(result);
       if (result.ok) {
         setConfirmOpen(false);
-        void loadCandidates();
+        void loadCandidates(searchFilter);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -151,16 +161,6 @@ export function CrTransportRelease({
       try { localStorage.setItem(TARGET_SYSTEM_STORAGE_KEY, val); } catch {}
     }
   }
-
-  const filteredCandidates = useMemo(() => {
-    if (!searchFilter.trim()) return candidates;
-    const term = searchFilter.trim().toUpperCase();
-    return candidates.filter((c) =>
-      c.trkorr.toUpperCase().includes(term) ||
-      (c.description || "").toUpperCase().includes(term) ||
-      (c.owner || "").toUpperCase().includes(term)
-    );
-  }, [candidates, searchFilter]);
 
   const selectedCandidate = candidates.find((c) => c.trkorr === selectedTrkorr);
   const selectedTargetLabel = systemOptions.find((option) => option.code === targetSystem)?.label
@@ -189,10 +189,10 @@ export function CrTransportRelease({
 
         {busy === "candidates" ? (
           <div className="cr-release-empty"><Loader2 className="spin" size={18} /> Loading candidates...</div>
-        ) : filteredCandidates.length === 0 ? (
-          <div className="cr-release-empty">{candidates.length === 0
-            ? "No outstanding parent transport requests found for this target. Make sure the data has been synchronized from SAP."
-            : "No transport requests match the current filter."}</div>
+        ) : candidates.length === 0 ? (
+          <div className="cr-release-empty">{searchFilter.trim()
+            ? "No transport requests match the current filter."
+            : "No outstanding parent transport requests found for this target. Make sure the data has been synchronized from SAP."}</div>
         ) : (
           <div className="cr-release-table-wrap">
             <table className="cr-release-table">
@@ -205,7 +205,7 @@ export function CrTransportRelease({
                 </tr>
               </thead>
               <tbody>
-                {filteredCandidates.map((row) => (
+                {candidates.map((row) => (
                   <tr
                     key={row.trkorr}
                     className={selectedTrkorr === row.trkorr ? "selected" : ""}

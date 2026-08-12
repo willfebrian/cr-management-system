@@ -15,14 +15,14 @@ test("maps the TRD Development AIX target to the synced DEV request dataset", as
 test("returns the last successful source-system sync with release candidates", async () => {
   const releaseRoutes = await import("../src/server/routes/transportReleaseRoutes.js") as Record<string, unknown>;
   const loadSnapshot = releaseRoutes.loadReleaseCandidateSnapshot as
-    | ((targetSystem: string, limit: number, dependencies: {
+    | ((targetSystem: string, limit: number, query: string, dependencies: {
         query: (sql: string, params: unknown[]) => Promise<{ rows: unknown[] }>;
         getLastSuccessfulSyncRun: (sourceSystem: string) => Promise<Record<string, unknown> | null>;
       }) => Promise<Record<string, unknown>>)
     | undefined;
 
   assert.equal(typeof loadSnapshot, "function");
-  const snapshot = await loadSnapshot!("TRD", 50, {
+  const snapshot = await loadSnapshot!("TRD", 50, "", {
     query: async () => ({ rows: [] }),
     getLastSuccessfulSyncRun: async (sourceSystem) => ({
       sap_system_code: sourceSystem,
@@ -33,6 +33,63 @@ test("returns the last successful source-system sync with release candidates", a
 
   assert.equal(snapshot.targetSystem, "TRD");
   assert.equal(snapshot.lastSyncedAt, "2026-08-12T04:16:00.000Z");
+});
+
+test("searches all eligible Release candidates before applying the result limit", async () => {
+  const releaseRoutes = await import("../src/server/routes/transportReleaseRoutes.js") as Record<string, unknown>;
+  const loadSnapshot = releaseRoutes.loadReleaseCandidateSnapshot as
+    | ((targetSystem: string, limit: number, query: string, dependencies: {
+        query: (sql: string, params: unknown[]) => Promise<{ rows: unknown[] }>;
+        getLastSuccessfulSyncRun: (sourceSystem: string) => Promise<Record<string, unknown> | null>;
+      }) => Promise<Record<string, unknown>>)
+    | undefined;
+  let capturedSql = "";
+  let capturedParams: unknown[] = [];
+
+  assert.equal(typeof loadSnapshot, "function");
+  await loadSnapshot!("TRD", 50, "TRDK905650", {
+    query: async (sql, params) => {
+      capturedSql = sql;
+      capturedParams = params;
+      return { rows: [{
+        trkorr: "TRDK905650",
+        description: "Comment Exit Customer (jgn transport)",
+        owner: "TRSTDEV",
+        status_group: "outstanding",
+        changed_date: "2013-01-30",
+        target_system: "TRQ",
+        task_count: 1
+      }] };
+    },
+    getLastSuccessfulSyncRun: async () => null
+  });
+
+  assert.match(capturedSql, /cr\.trkorr ILIKE \$2/);
+  assert.ok(capturedSql.indexOf("ILIKE") < capturedSql.indexOf("LIMIT"));
+  assert.deepEqual(capturedParams, ["DEV", "%TRDK905650%", 50]);
+});
+
+test("orders the default Release list by the newest transport number", async () => {
+  const releaseRoutes = await import("../src/server/routes/transportReleaseRoutes.js") as Record<string, unknown>;
+  const loadSnapshot = releaseRoutes.loadReleaseCandidateSnapshot as
+    | ((targetSystem: string, limit: number, query: string, dependencies: {
+        query: (sql: string, params: unknown[]) => Promise<{ rows: unknown[] }>;
+        getLastSuccessfulSyncRun: (sourceSystem: string) => Promise<Record<string, unknown> | null>;
+      }) => Promise<Record<string, unknown>>)
+    | undefined;
+  let capturedSql = "";
+
+  assert.equal(typeof loadSnapshot, "function");
+  await loadSnapshot!("TRD", 50, "", {
+    query: async (sql) => {
+      capturedSql = sql;
+      return { rows: [] };
+    },
+    getLastSuccessfulSyncRun: async () => null
+  });
+
+  assert.match(capturedSql, /ORDER BY cr\.trkorr DESC\s+LIMIT \$2/);
+  assert.doesNotMatch(capturedSql, /ORDER BY cr\.changed_date/);
 });
 
 test("renders consistent target labels and informative English Release empty states", async () => {
