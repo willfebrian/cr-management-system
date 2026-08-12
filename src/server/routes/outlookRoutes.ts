@@ -62,13 +62,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "Invoke-WebRequest -Uri '${baseUrl}/api/outlook/agent-script' -OutFile $scriptPath -UseBasicParsing;" ^
   "$startupDir = [System.IO.Path]::Combine($env:APPDATA, 'Microsoft\\Windows\\Start Menu\\Programs\\Startup');" ^
   "$shortcutPath = Join-Path $startupDir 'CR_Outlook_Agent.lnk';" ^
-  "$WScriptShell = New-Object -ComObject WScript.Shell;" ^
-  "$Shortcut = $WScriptShell.CreateShortcut($shortcutPath);" ^
-  "$Shortcut.TargetPath = 'node.exe';" ^
-  "$Shortcut.Arguments = '\\\"' + $scriptPath + '\\\"';" ^
-  "$Shortcut.WindowStyle = 7;" ^
-  "$Shortcut.Description = 'CR Management System Local Outlook Agent';" ^
-  "$Shortcut.Save();" ^
+  "if (Test-Path $shortcutPath) { Remove-Item -Force $shortcutPath; }" ^
   "Start-Process 'node.exe' -ArgumentList ('\\\"' + $scriptPath + '\\\"') -WindowStyle Hidden;" ^
   "Write-Host 'Agent installed and running at http://127.0.0.1:18888' -ForegroundColor Green;"
 
@@ -84,7 +78,6 @@ if errorlevel 1 (
 echo.
 echo ========================================================
 echo   Installation Complete! Agent is running locally.
-echo   It will also start automatically on next Windows login.
 echo ========================================================
 pause
 `;
