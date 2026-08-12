@@ -1,7 +1,7 @@
 import { applyCustomStatusColors } from "../utils/tagColors";
 import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
-import { AlertTriangle, BarChart3, Ban, Calendar, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Copy, Database, ExternalLink, FileOutput, FileSearch, FileText, FolderKanban, GitPullRequest, KeyRound, LayoutGrid, Link as LinkIcon, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Tag, Trash2, User, Users, X, XCircle } from "lucide-react";
+import { AlertTriangle, BarChart3, Ban, Calendar, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Copy, Database, ExternalLink, FileOutput, FileSearch, FileText, FolderKanban, GitPullRequest, KeyRound, LayoutGrid, Link as LinkIcon, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Tag, Trash2, Unlock, User, Users, X, XCircle } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, downloadUserCrTemplate, fetchAdminSettings, fetchAdminPeople, fetchCrDetail, fetchCrList, fetchDashboard, fetchGlpiTicketDetail, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchSapSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind, type GlpiTicketDetail, type AdminPersonRow, type SapSystemRow } from "../api";
 import { IncompleteGroupCards } from "../components/IncompleteGroupCards";
@@ -15,7 +15,8 @@ import { UserManagementWorkspace } from "../components/users/UserManagementWorks
 import { MasterDataWorkspace } from "./MasterDataWorkspace";
 import { AuditLogReport } from "./AuditLogReport";
 import { CrTransportCreate } from "../components/crTransport/CrTransportCreate";
-import { TRANSPORT_TARGETS, transportTargetLabel } from "../components/crTransport/transportTarget";
+import { CrTransportRelease } from "../components/crTransport/CrTransportRelease";
+import { TRANSPORT_TARGETS, transportSystemOptionLabel, transportTargetLabel } from "../components/crTransport/transportTarget";
 import { UIModal, type ModalType } from "../components/common/UIModal";
 import { fetchProjectDetail } from "../api/projectApi";
 import { afterIncompleteSectionRender, expandSection, getIncompleteItems, getIssueRowMissingItems, groupIncompleteItems, markIncompleteTarget, type ExpandedIssueSections, type IncompleteItem, type IssueSection } from "../issueIncomplete";
@@ -24,11 +25,12 @@ import type { CrDetail, CrRequest, DashboardData, IssueDetail, IssueRow, SapSyst
 import { AppLoadingScreen, SkeletonDetailLoader, TableDataLoader } from "../components/InteractiveLoaders";
 import type { ProjectDetail as ProjectDetailModel, ProjectStatus } from "../../shared/projectTypes";
 
-type View = "dashboard" | "report" | "cr-transport-create" | "issue-display" | "issue-create" | "issue-change" | "user-management" | "project-report" | "project-create" | "project-change" | "master-data" | "settings" | "audit-log";
+type View = "dashboard" | "report" | "cr-transport-create" | "cr-transport-release" | "issue-display" | "issue-create" | "issue-change" | "user-management" | "project-report" | "project-create" | "project-change" | "master-data" | "settings" | "audit-log";
 const VIEW_META: Record<View, { title: string; description: string }> = {
   dashboard: { title: "Dashboard", description: "Monitor CR and Issue activity across connected source systems." },
   report: { title: "CR Transport", description: "Review SAP change requests ordered from the latest CR number." },
   "cr-transport-create": { title: "Create CR Transport", description: "Resolve SAP repository objects and create a controlled Workbench request in DEV NC." },
+  "cr-transport-release": { title: "Release CR Transport", description: "Release SAP transport requests (children first, then parent) with test-run validation." },
   "issue-display": { title: "Issue Report", description: "Search Issues and inspect their linked CR transports." },
   "issue-create": { title: "Create Issue", description: "Register a new Issue and its delivery information." },
   "issue-change": { title: "Change Issue", description: "Maintain Issue details, lifecycle, and linked CR transports." },
@@ -933,9 +935,9 @@ export function App() {
         <button className={view === "dashboard" ? "active" : ""} onClick={() => { setExpandedSidebarGroup(null); navigateTo("dashboard"); }}>
           <BarChart3 size={18} /> Dashboard
         </button>
-        <div className={`sidebar-group ${view === "report" || view === "cr-transport-create" ? "active" : ""}`}>
+        <div className={`sidebar-group ${view === "report" || view === "cr-transport-create" || view === "cr-transport-release" ? "active" : ""}`}>
           <button
-            className={view === "report" || view === "cr-transport-create" ? "active" : ""}
+            className={view === "report" || view === "cr-transport-create" || view === "cr-transport-release" ? "active" : ""}
             onClick={() => {
               setExpandedSidebarGroup(prev => nextExpandedSidebarGroup(prev, "cr-transport"));
               navigateTo("report");
@@ -946,6 +948,7 @@ export function App() {
           {expandedSidebarGroup === "cr-transport" ? <div className="sidebar-submenu">
             <button className={view === "report" ? "active" : ""} onClick={() => navigateTo("report")}><FileSearch size={15} /> Report</button>
             {authUser.role === "ADMIN" ? <button className={view === "cr-transport-create" ? "active" : ""} onClick={() => navigateTo("cr-transport-create")}><Plus size={15} /> Create</button> : null}
+            {authUser.role === "ADMIN" ? <button className={view === "cr-transport-release" ? "active" : ""} onClick={() => navigateTo("cr-transport-release")}><Unlock size={15} /> Release</button> : null}
           </div> : null}
         </div>
         <div className={`sidebar-group ${view.startsWith("issue-") ? "active" : ""}`}>
@@ -1389,7 +1392,7 @@ export function App() {
                   {sapSystems.length > 0 ? (
                     sapSystems.map((sys) => (
                       <option key={sys.id || sys.code} value={sys.code}>
-                        {sys.description ? `${sys.description} (${sys.code})` : sys.code}
+                        {transportSystemOptionLabel(sys.code, sys.description)}
                       </option>
                     ))
                   ) : (
@@ -3631,6 +3634,15 @@ export function App() {
           />
         ) : view === "cr-transport-create" ? (
           <CrTransportCreate
+            targetSystem={crTargetSystem}
+            onTargetSystemChange={(val) => {
+              setCrTargetSystem(val);
+              try { localStorage.setItem("cr_transport_target_system", val); } catch {}
+            }}
+            availableSystems={sapSystems}
+          />
+        ) : view === "cr-transport-release" ? (
+          <CrTransportRelease
             targetSystem={crTargetSystem}
             onTargetSystemChange={(val) => {
               setCrTargetSystem(val);

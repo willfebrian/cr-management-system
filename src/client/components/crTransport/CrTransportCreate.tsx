@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useRef, type FormEvent } from "react";
 import { AlertTriangle, Check, CheckCircle2, Database, Loader2, PackageCheck, Plus, Search, SearchX, ShieldCheck, Trash2, X } from "lucide-react";
 import { UIModal } from "../common/UIModal";
 import { createTransportRequest, preflightTransportRequest, resolveTransportObject, type ResolvedTransportObject, type TransportRequestResult } from "../../api/transportRequestApi";
-import { TRANSPORT_TARGETS, type TransportTargetSystem, normalizeTransportTarget, transportTargetLabel } from "./transportTarget";
+import { TRANSPORT_TARGETS, type TransportTargetSystem, normalizeTransportTarget, transportSystemOptionLabel, transportTargetLabel } from "./transportTarget";
 import { fetchSapSystems, type SapSystemRow } from "../../api";
 
 const PREFIX = "AB - ";
@@ -76,7 +76,7 @@ export function CrTransportCreate({
     if (availableSystems && availableSystems.length > 0) {
       return availableSystems.map((sys) => ({
         code: sys.code,
-        label: sys.description || sys.code
+        label: transportSystemOptionLabel(sys.code, sys.description)
       }));
     }
     return TRANSPORT_TARGETS.map((t) => ({ code: t.code, label: t.label }));

@@ -17,3 +17,12 @@ export function transportTargetLabel(value?: TransportTargetSystem) {
   if (str === "DEV_NC") return "DEV NC";
   return str;
 }
+
+export function transportSystemOptionLabel(code: string, description?: string | null) {
+  const normalizedCode = String(code || "").trim();
+  const normalizedDescription = String(description || "").trim();
+  if (!normalizedDescription || normalizedDescription.toUpperCase() === normalizedCode.toUpperCase()) {
+    return normalizedCode;
+  }
+  return `${normalizedDescription} \u00b7 ${normalizedCode}`;
+}
