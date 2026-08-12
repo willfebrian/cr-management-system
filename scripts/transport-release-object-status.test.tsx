@@ -38,6 +38,14 @@ test("RFC explains inactive REPT objects as program text and selection texts", (
   assert.match(source, /Inactive' LV_INACTIVE_DESC/);
 });
 
+test("RFC summarizes multiple inactive objects without counting the task row", () => {
+  const source = readFileSync(new URL("../sap/abap/zrfc_transport_request_release/ZRFC_TRANSPORT_REQUEST_RELEASE.abap", import.meta.url), "utf8");
+  assert.match(source, /LV_OBJECT_ERROR_COUNT/);
+  assert.match(source, /object errors found/);
+  assert.match(source, /See object details below/);
+  assert.match(source, /DELETE ADJACENT DUPLICATES/);
+});
+
 test("groups SAP object validation rows under their owning task", async () => {
   const service = new TransportReleaseService({
     targetSystem: "DEV_AIX",

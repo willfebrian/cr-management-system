@@ -31,3 +31,7 @@ Thumbs.db
 # Accidental shell scratch files
 console.log(JSON.stringify(m.listSapCrSystems()
 [{]console.error(e.message)
+sap/abap/zrfc_transport_request_release/ZRFC_TRANSPORT_REQUEST_RELEASE.abap
+sap/abap/zrfc_transport_request_release/backups/2026-08-12T10-46-22-559Z-DEV_AIX-LZFRFCU06.abap
+sap/abap/zrfc_transport_request_release/backups/2026-08-12T10-46-21-974Z-DEV_NC-LZFRFCU07.abap
+sap/abap/zrfc_transport_request_release/ZRFC_TRANSPORT_REQUEST_RELEASE.abap
