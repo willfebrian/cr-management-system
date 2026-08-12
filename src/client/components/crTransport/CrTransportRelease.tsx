@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, useRef } from "react";
-import { AlertTriangle, Check, CheckCircle2, Loader2, PlayCircle, RotateCcw, Search, Unlock, XCircle } from "lucide-react";
+import { Fragment, useState, useEffect, useMemo, useRef } from "react";
+import { AlertTriangle, Check, CheckCircle2, Loader2, PackageCheck, PlayCircle, RotateCcw, Search, Unlock, XCircle } from "lucide-react";
 import { UIModal } from "../common/UIModal";
 import {
   fetchReleaseCandidates,
@@ -11,6 +11,7 @@ import {
 } from "../../api/transportReleaseApi";
 import { fetchSapSystems, type SapSystemRow } from "../../api";
 import { transportSystemOptionLabel } from "./transportTarget";
+import { transportObjectLabel } from "../../../shared/transportObjectLabels";
 
 const TARGET_SYSTEM_STORAGE_KEY = "cr_release_target_system";
 
@@ -311,9 +312,15 @@ export function ReleaseConfirmationDialog({
   );
 }
 
-function ResultsPanel({ title, result }: { title: string; result: ReleaseResult }) {
+export function ReleaseResultsPanel({ title, result }: { title: string; result: ReleaseResult }) {
   const cls = result.ok ? "cr-release-result-ok" : "cr-release-result-error";
   const Icon = result.ok ? CheckCircle2 : XCircle;
+  const orderedTasks = [...result.tasks].sort((left, right) => {
+    const leftIsParent = left.trkorr === result.trkorr;
+    const rightIsParent = right.trkorr === result.trkorr;
+    if (leftIsParent !== rightIsParent) return leftIsParent ? -1 : 1;
+    return left.sequence - right.sequence;
+  });
 
   return (
     <div className={`cr-release-result ${cls}`}>
@@ -331,16 +338,39 @@ function ResultsPanel({ title, result }: { title: string; result: ReleaseResult 
           </tr>
         </thead>
         <tbody>
-          {result.tasks.map((task, i) => {
+          {orderedTasks.map((task, i) => {
             const badge = statusBadge(task.status);
             return (
-              <tr key={`${task.trkorr}-${i}`}>
-                <td className="center muted">{task.sequence}</td>
-                <td className="monospace">{task.trkorr}</td>
-                <td>{task.description || "-"}</td>
-                <td className="center"><span className={`cr-release-badge ${badge.cls}`}>{badge.icon} {badge.label}</span></td>
-                <td className="muted">{task.message}</td>
-              </tr>
+              <Fragment key={`${task.trkorr}-${i}`}>
+                <tr className="cr-release-task-row">
+                  <td className="center muted">{i + 1}</td>
+                  <td className="monospace">{task.trkorr}</td>
+                  <td>{task.description || "-"}</td>
+                  <td className="center"><span className={`cr-release-badge ${badge.cls}`}>{badge.icon} {badge.label}</span></td>
+                  <td className="muted">{task.message}</td>
+                </tr>
+                {(task.objects || []).map((object, objectIndex) => {
+                  const objectBadge = statusBadge(object.status);
+                  return (
+                    <tr className="cr-release-object-row" key={`${task.trkorr}-${object.pgmid}-${object.objectType}-${object.objectName}-${objectIndex}`}>
+                      <td className="center muted"><PackageCheck size={14} /></td>
+                      <td><span className="cr-release-object-type">{object.objectType || "Object"}</span></td>
+                      <td>
+                        <strong className="cr-release-object-name">{object.objectName || "-"}</strong>
+                        <small>{object.pgmid || "-"} · {transportObjectLabel(object.pgmid, object.objectType)} · {object.statusSource === "SAP" ? "Validated by SAP" : "Inherited from task"}</small>
+                      </td>
+                      <td className="center"><span className={`cr-release-badge ${objectBadge.cls}`}>{objectBadge.icon} {objectBadge.label}</span></td>
+                      <td className="muted">{object.message}</td>
+                    </tr>
+                  );
+                })}
+                {(task.objects || []).length === 0 ? (
+                  <tr className="cr-release-object-row cr-release-object-empty">
+                    <td />
+                    <td colSpan={4}>No synchronized objects found for this request.</td>
+                  </tr>
+                ) : null}
+              </Fragment>
             );
           })}
         </tbody>
@@ -348,3 +378,5 @@ function ResultsPanel({ title, result }: { title: string; result: ReleaseResult 
     </div>
   );
 }
+
+const ResultsPanel = ReleaseResultsPanel;

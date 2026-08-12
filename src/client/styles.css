@@ -6090,6 +6090,15 @@ body.dark-theme .template-editor-textarea {
 .cr-release-result-header { display: flex; align-items: center; gap: 8px; padding: 10px 14px; font-weight: 700; font-size: var(--font-size-caption); }
 .cr-release-result-header small { margin-left: auto; font-weight: 500; opacity: .8; }
 .cr-release-result .cr-release-table tbody tr { cursor: default; }
+.cr-release-task-row { background: var(--color-surface, #fff); }
+.cr-release-task-row td { font-weight: 600; }
+.cr-release-object-row { background: var(--surface-subtle); }
+.cr-release-object-row td { padding-top: 7px; padding-bottom: 7px; }
+.cr-release-object-row td:first-child { color: var(--color-text-muted); }
+.cr-release-object-type { display: inline-flex; padding: 2px 7px; border-radius: 8px; background: var(--color-surface, #fff); border: 1px solid var(--color-border); font-size: 0.7rem; font-weight: 700; }
+.cr-release-object-name { display: block; font-family: var(--font-mono, monospace); font-size: 0.78rem; }
+.cr-release-object-row small { display: block; margin-top: 2px; color: var(--color-text-muted); font-size: 0.7rem; }
+.cr-release-object-empty td { color: var(--color-text-muted); font-style: italic; font-size: 0.75rem; }
 .cr-release-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 10px; font-size: 0.725rem; font-weight: 700; white-space: nowrap; }
 .cr-release-badge-pass { background: #ecfdf5; color: #047857; }
 .cr-release-badge-warn { background: #fefce8; color: #a16207; }

@@ -48,15 +48,16 @@ export class TransportReleaseService {
         IV_MODE: mode,
         ET_RESULTS: []
       });
-      const rows = (result.ET_RESULTS || []).map((row) => parseResultRow(row.LINE || row));
+      const rows = parseReleaseRows(result.ET_RESULTS || []);
+      const hasObjectErrors = rows.some((task) => task.objects.some((object) => object.status === "ERROR"));
       const response = {
-        ok: result.EV_SUCCESS === "X",
+        ok: result.EV_SUCCESS === "X" && !hasObjectErrors,
         message: result.EV_MESSAGE || "",
         mode,
         trkorr,
         targetSystem: this.target.code,
         targetServer: this.target.server,
-        hasErrors: rows.some((r) => r.status === "ERROR"),
+        hasErrors: rows.some((r) => r.status === "ERROR") || hasObjectErrors,
         hasWarnings: rows.some((r) => r.status === "WARNING"),
         tasks: rows
       };
@@ -88,16 +89,65 @@ export class TransportReleaseService {
   }
 }
 
+export function parseReleaseRows(rawRows) {
+  const tasks = [];
+  const objectsByRequest = new Map();
+
+  for (const rawRow of rawRows) {
+    const line = rawRow?.LINE || rawRow;
+    const columns = String(line || "").split("|");
+    if ((columns[0] || "").trim().toUpperCase() === "OBJECT") {
+      const object = parseObjectResult(columns);
+      const objects = objectsByRequest.get(object.trkorr) || [];
+      objects.push(object);
+      objectsByRequest.set(object.trkorr, objects);
+      continue;
+    }
+    tasks.push(parseResultRow(line));
+  }
+
+  return tasks.map((task) => {
+    const objects = objectsByRequest.get(task.trkorr) || [];
+    const failedObject = objects.find((object) => object.status === "ERROR");
+    if (!failedObject || task.status === "ERROR") return { ...task, objects };
+    return {
+      ...task,
+      status: "ERROR",
+      message: `Object validation failed: ${failedObject.message || failedObject.objectName}`,
+      objects
+    };
+  });
+}
+
 function parseResultRow(line) {
+  const rawColumns = String(line || "").split("|");
+  const columns = (rawColumns[0] || "").trim().toUpperCase() === "TASK"
+    ? rawColumns.slice(1)
+    : rawColumns;
   const [trkorr, trfunction, description, status, message, seq] =
-    String(line || "").split("|");
+    columns;
   return {
     trkorr: (trkorr || "").trim(),
     trfunction: (trfunction || "").trim(),
     description: (description || "").trim(),
     status: (status || "").trim(),
     message: (message || "").trim(),
-    sequence: parseInt(seq, 10) || 0
+    sequence: parseInt(seq, 10) || 0,
+    objects: []
+  };
+}
+
+function parseObjectResult(columns) {
+  const [, trkorr, pgmid, objectType, objectName, status, message, seq] = columns;
+  return {
+    trkorr: (trkorr || "").trim(),
+    pgmid: (pgmid || "").trim(),
+    objectType: (objectType || "").trim(),
+    objectName: (objectName || "").trim(),
+    status: (status || "").trim(),
+    message: (message || "").trim(),
+    sequence: parseInt(seq, 10) || 0,
+    statusSource: "SAP"
   };
 }
 

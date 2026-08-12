@@ -5,6 +5,18 @@ export type ReleaseTaskResult = {
   status: "PASS" | "ERROR" | "WARNING" | "RELEASED" | "SKIPPED";
   message: string;
   sequence: number;
+  objects: ReleaseObjectResult[];
+};
+
+export type ReleaseObjectResult = {
+  trkorr: string;
+  pgmid: string;
+  objectType: string;
+  objectName: string;
+  status: "PASS" | "ERROR" | "WARNING" | "RELEASED" | "SKIPPED";
+  message: string;
+  sequence: number;
+  statusSource: "SAP" | "TASK";
 };
 
 export type ReleaseResult = {

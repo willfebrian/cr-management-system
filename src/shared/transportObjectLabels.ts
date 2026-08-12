@@ -103,5 +103,5 @@ export function transportObjectLabel(pgmid?: string, objectType?: string) {
   if (transportObjectPairLabels[key]) return transportObjectPairLabels[key];
   const normalizedObjectType = String(objectType || "").trim().toUpperCase();
   if (transportObjectTypeDescriptions[normalizedObjectType]) return transportObjectTypeDescriptions[normalizedObjectType];
-  return key || "Object";
+  return key ? `SAP transport object (${key})` : "SAP transport object";
 }

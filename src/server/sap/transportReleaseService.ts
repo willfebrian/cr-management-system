@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "../config.js";
+import { pool } from "../db/pool.js";
 import { findSapTransportTarget, type SapTransportTarget } from "./transportTargetRepository.js";
 import { transportTargetEnvironment, normalizeTargetSystem } from "./transportRequestService.js";
 
@@ -13,6 +14,18 @@ export type ReleaseTaskResult = {
   status: "PASS" | "ERROR" | "WARNING" | "RELEASED" | "SKIPPED";
   message: string;
   sequence: number;
+  objects: ReleaseObjectResult[];
+};
+
+export type ReleaseObjectResult = {
+  trkorr: string;
+  pgmid: string;
+  objectType: string;
+  objectName: string;
+  status: "PASS" | "ERROR" | "WARNING" | "RELEASED" | "SKIPPED";
+  message: string;
+  sequence: number;
+  statusSource: "SAP" | "TASK";
 };
 
 export type ReleaseResult = {
@@ -67,11 +80,11 @@ async function runReleasePlatform(
     child.stdout.on("data", (chunk) => { stdout += chunk; });
     child.stderr.on("data", (chunk) => { stderr += chunk; });
     child.on("error", (error) => { clearTimeout(timer); reject(error); });
-    child.on("close", (code) => {
+    child.on("close", async (code) => {
       clearTimeout(timer);
       try {
         const result = JSON.parse(stdout || "{}") as Record<string, unknown>;
-        if (code !== 0 || result.ok === false) {
+        if (classifyReleaseProcessResult(action, code, result) === "ERROR") {
           const error = serviceError(
             String(result.message || stderr || "SAP_CR_RELEASE_FAILED"),
             409
@@ -79,13 +92,106 @@ async function runReleasePlatform(
           error.code = String(result.code || "SAP_CR_RELEASE_FAILED");
           return reject(error);
         }
-        resolve(result as unknown as ReleaseResult);
+        const parsed = result as unknown as ReleaseResult;
+        try {
+          resolve(await enrichReleaseResultWithObjects(parsed, normalizedTarget));
+        } catch {
+          resolve(parsed);
+        }
       } catch (error) {
         reject(error);
       }
     });
     child.stdin.end(JSON.stringify({ trkorr, targetSystem: normalizedTarget }));
   });
+}
+
+export function classifyReleaseProcessResult(
+  action: "test-run" | "release",
+  exitCode: number | null,
+  result: Record<string, unknown>
+): "RESULT" | "ERROR" {
+  if (exitCode !== 0) return "ERROR";
+  if (result.ok !== false) return "RESULT";
+
+  const isCompleteValidationResult = action === "test-run"
+    && result.mode === "TEST_RUN"
+    && Array.isArray(result.tasks)
+    && result.tasks.length > 0;
+  return isCompleteValidationResult ? "RESULT" : "ERROR";
+}
+
+type ReleaseObjectQuery = (
+  sql: string,
+  params: unknown[]
+) => Promise<{ rows: Array<{ trkorr: string; pgmid: string | null; object_type: string | null; object_name: string | null }> }>;
+
+export async function enrichReleaseResultWithObjects(
+  result: ReleaseResult,
+  targetSystem: string,
+  query: ReleaseObjectQuery = (sql, params) => pool.query(sql, params)
+): Promise<ReleaseResult> {
+  const tasks = Array.isArray(result.tasks) ? result.tasks : [];
+  const requestNumbers = [...new Set(tasks.map((task) => String(task.trkorr || "").trim()).filter(Boolean))];
+  const sourceSystem = releaseObjectSourceSystem(targetSystem);
+  const synchronized = requestNumbers.length
+    ? await query(
+      `SELECT trkorr, pgmid, object_type, object_name
+       FROM cr_management.cr_objects
+       WHERE sap_system_code = $1
+         AND trkorr = ANY($2::text[])
+       ORDER BY trkorr, position`,
+      [sourceSystem, requestNumbers]
+    )
+    : { rows: [] };
+
+  const synchronizedByRequest = new Map<string, ReleaseObjectResult[]>();
+  for (const row of synchronized.rows) {
+    const owner = tasks.find((task) => task.trkorr === row.trkorr);
+    if (!owner) continue;
+    const objects = synchronizedByRequest.get(row.trkorr) || [];
+    objects.push({
+      trkorr: row.trkorr,
+      pgmid: String(row.pgmid || "").trim(),
+      objectType: String(row.object_type || "").trim(),
+      objectName: String(row.object_name || "").trim(),
+      status: owner.status,
+      message: `Inherited from task status: ${owner.message || owner.status}`,
+      sequence: objects.length + 1,
+      statusSource: "TASK"
+    });
+    synchronizedByRequest.set(row.trkorr, objects);
+  }
+
+  const enrichedTasks = tasks.map((task) => {
+    const sapObjects = Array.isArray(task.objects) ? task.objects : [];
+    const merged = new Map<string, ReleaseObjectResult>();
+    for (const object of synchronizedByRequest.get(task.trkorr) || []) {
+      merged.set(releaseObjectKey(object), object);
+    }
+    for (const object of sapObjects) {
+      merged.set(releaseObjectKey(object), { ...object, statusSource: "SAP" });
+    }
+    const objects = [...merged.values()];
+    const failedObject = objects.find((object) => object.status === "ERROR");
+    return failedObject && task.status !== "ERROR"
+      ? { ...task, status: "ERROR" as const, message: `Object validation failed: ${failedObject.message || failedObject.objectName}`, objects }
+      : { ...task, objects };
+  });
+  const hasErrors = enrichedTasks.some((task) => task.status === "ERROR" || task.objects.some((object) => object.status === "ERROR"));
+
+  return { ...result, ok: result.ok && !hasErrors, hasErrors, tasks: enrichedTasks };
+}
+
+function releaseObjectKey(object: Pick<ReleaseObjectResult, "trkorr" | "pgmid" | "objectType" | "objectName">) {
+  return [object.trkorr, object.pgmid, object.objectType, object.objectName].map((value) => String(value || "").trim().toUpperCase()).join("|");
+}
+
+function releaseObjectSourceSystem(targetSystem: string) {
+  const normalized = normalizeTargetSystem(targetSystem);
+  return normalized === "TRD" || normalized === "DEV_AIX" || normalized.replace("_", " ").includes("AIX")
+    ? "DEV"
+    : normalized;
 }
 
 function resolveReleaseRuntime() {
