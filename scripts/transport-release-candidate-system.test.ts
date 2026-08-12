@@ -43,10 +43,23 @@ test("renders consistent target labels and informative English Release empty sta
     availableSystems: [{ code: "TRD", description: "Development AIX", is_active: true }]
   }));
 
-  assert.match(html, /Development AIX · TRD/);
+  assert.doesNotMatch(html, /Target System/);
+  assert.doesNotMatch(html, />Refresh</);
+  assert.doesNotMatch(html, /Last synced:/);
   assert.match(html, /No outstanding parent transport requests found for this target/);
   assert.match(html, /Select a parent transport request to view its child tasks and run the pre-check before release/);
-  assert.match(html, /Not synced yet/);
+});
+
+test("refreshes Release candidates after a successful Sync CR operation", async () => {
+  const releaseModule = await import("../src/client/components/crTransport/CrTransportRelease.js") as Record<string, unknown>;
+  const nextReleaseRefreshToken = releaseModule.nextReleaseRefreshToken as
+    | ((current: number, view: string, syncSucceeded: boolean) => number)
+    | undefined;
+
+  assert.equal(typeof nextReleaseRefreshToken, "function");
+  assert.equal(nextReleaseRefreshToken!(4, "cr-transport-release", true), 5);
+  assert.equal(nextReleaseRefreshToken!(4, "cr-transport-create", true), 4);
+  assert.equal(nextReleaseRefreshToken!(4, "cr-transport-release", false), 4);
 });
 
 test("uses the shared confirmation modal pattern for Release", async () => {

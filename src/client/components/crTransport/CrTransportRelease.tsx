@@ -14,14 +14,8 @@ import { transportSystemOptionLabel } from "./transportTarget";
 
 const TARGET_SYSTEM_STORAGE_KEY = "cr_release_target_system";
 
-export function formatReleaseLastSyncedAt(value?: string | null) {
-  if (!value) return "Not synced yet";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "Not synced yet";
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short"
-  }).format(parsed);
+export function nextReleaseRefreshToken(current: number, view: string, syncSucceeded: boolean) {
+  return view === "cr-transport-release" && syncSucceeded ? current + 1 : current;
 }
 
 function statusBadge(status: string) {
@@ -45,12 +39,14 @@ interface CrTransportReleaseProps {
   targetSystem?: string;
   onTargetSystemChange?: (val: string) => void;
   availableSystems?: SapSystemRow[];
+  refreshToken?: number;
 }
 
 export function CrTransportRelease({
   targetSystem: externalTargetSystem,
   onTargetSystemChange,
-  availableSystems: externalAvailableSystems
+  availableSystems: externalAvailableSystems,
+  refreshToken = 0
 }: CrTransportReleaseProps) {
   const [internalTargetSystem, setInternalTargetSystem] = useState<string>(() => {
     try { return localStorage.getItem(TARGET_SYSTEM_STORAGE_KEY) || "DEV_AIX"; } catch { return "DEV_AIX"; }
@@ -81,7 +77,6 @@ export function CrTransportRelease({
   const [testRunResult, setTestRunResult] = useState<ReleaseResult | null>(null);
   const [releaseResult, setReleaseResult] = useState<ReleaseResult | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
 
   useEffect(() => {
     if (externalAvailableSystems) return;
@@ -95,20 +90,18 @@ export function CrTransportRelease({
       .catch(() => {});
   }, [externalAvailableSystems]);
 
-  useEffect(() => { loadCandidates(); }, [targetSystem]);
+  useEffect(() => { void loadCandidates(); }, [targetSystem, refreshToken]);
 
   async function loadCandidates() {
     setBusy("candidates");
     setError("");
     setCandidates([]);
-    setLastSyncedAt(null);
     setSelectedTrkorr("");
     setTestRunResult(null);
     setReleaseResult(null);
     try {
       const result = await fetchReleaseCandidates(targetSystem);
       setCandidates(result.rows);
-      setLastSyncedAt(result.lastSyncedAt);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -181,20 +174,6 @@ export function CrTransportRelease({
       <section className="card cr-release-card">
         <div className="cr-release-section-heading">
           <div><span className="cr-release-step">1</span><h3>Select Transport Request</h3><p>Select an outstanding parent request from the synchronized SAP data.</p></div>
-          <div className="cr-release-tools">
-            <div className="cr-target-picker">
-              <span>Target System</span>
-              <select value={targetSystem} onChange={(e) => handleTargetSystemChange(e.target.value)} disabled={!!busy}>
-                {systemOptions.map((opt) => <option key={opt.code} value={opt.code}>{opt.label}</option>)}
-              </select>
-            </div>
-            <div className="cr-release-refresh-group">
-              <button className="secondary cr-release-refresh" onClick={loadCandidates} disabled={!!busy}>
-                <RotateCcw size={14} /> Refresh
-              </button>
-              <small>Last synced: {formatReleaseLastSyncedAt(lastSyncedAt)}</small>
-            </div>
-          </div>
         </div>
 
         <div className="cr-release-search">

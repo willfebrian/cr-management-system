@@ -6057,11 +6057,6 @@ body.dark-theme .template-editor-textarea {
 .cr-release-section-heading h3 { margin: 0; font-size: var(--font-size-card-title); }
 .cr-release-section-heading p { margin: 5px 0 0; color: var(--color-text-muted); }
 .cr-release-step { position: absolute; left: 0; top: -2px; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 999px; background: #dff5ef; color: #0f766e; font-weight: 800; font-size: 13px; }
-.cr-release-tools { display: flex; align-items: flex-end; gap: 12px; }
-.cr-release-refresh-group { display: grid; justify-items: end; gap: 4px; }
-.cr-release-refresh-group small { color: var(--color-text-muted); font-size: var(--font-size-caption); white-space: nowrap; }
-.cr-release-refresh { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 40px; padding: 0 14px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--surface-card); color: var(--color-text); font: inherit; font-size: var(--font-size-control); cursor: pointer; }
-.cr-release-refresh:disabled { opacity: .55; cursor: not-allowed; }
 .cr-release-search { position: relative; margin-bottom: 14px; }
 .cr-release-search svg { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--color-text-muted); }
 .cr-release-search input { width: 100%; height: 42px; border: 1px solid var(--color-border); border-radius: var(--radius-control); padding: 0 13px 0 40px; background: var(--surface-card); color: var(--color-text); font: inherit; font-size: var(--font-size-control); }
@@ -6112,8 +6107,6 @@ body.dark-theme .cr-release-badge-skip { background: var(--surface-subtle); colo
 
 @media (max-width: 900px) {
   .cr-release-section-heading { flex-direction: column; }
-  .cr-release-tools { width: 100%; }
-  .cr-release-tools .cr-target-picker { flex: 1; }
   .cr-release-selected { align-items: stretch; }
   .cr-release-result { overflow-x: auto; }
   .cr-release-result .cr-release-table { min-width: 720px; }
@@ -6121,9 +6114,6 @@ body.dark-theme .cr-release-badge-skip { background: var(--surface-subtle); colo
 
 @media (max-width: 640px) {
   .cr-release-card { padding: 18px 16px; }
-  .cr-release-tools { align-items: stretch; flex-direction: column; }
-  .cr-release-refresh-group { justify-items: stretch; }
-  .cr-release-refresh-group small { text-align: right; }
   .cr-release-buttons { width: 100%; }
   .cr-release-buttons button { flex: 1; }
   .cr-release-table { min-width: 680px; }

@@ -15,7 +15,7 @@ import { UserManagementWorkspace } from "../components/users/UserManagementWorks
 import { MasterDataWorkspace } from "./MasterDataWorkspace";
 import { AuditLogReport } from "./AuditLogReport";
 import { CrTransportCreate } from "../components/crTransport/CrTransportCreate";
-import { CrTransportRelease } from "../components/crTransport/CrTransportRelease";
+import { CrTransportRelease, nextReleaseRefreshToken } from "../components/crTransport/CrTransportRelease";
 import { TRANSPORT_TARGETS, transportSystemOptionLabel, transportTargetLabel } from "../components/crTransport/transportTarget";
 import { UIModal, type ModalType } from "../components/common/UIModal";
 import { fetchProjectDetail } from "../api/projectApi";
@@ -444,6 +444,7 @@ export function App() {
     catch { return "DEV_NC"; }
   });
   const [sapSystems, setSapSystems] = useState<SapSystemRow[]>([]);
+  const [releaseRefreshToken, setReleaseRefreshToken] = useState(0);
 
   useEffect(() => {
     fetchSapSystems()
@@ -603,6 +604,7 @@ export function App() {
             await fetchIssueDetail(selectedIssueId).then(setIssueDetail);
           }
           setSyncRefreshToken((current) => current + 1);
+          setReleaseRefreshToken((current) => nextReleaseRefreshToken(current, view, true));
         } catch (err) {
           showToast("error", err instanceof Error ? err.message : String(err));
         } finally {
@@ -1364,7 +1366,7 @@ export function App() {
                 <span>{loading ? "Syncing..." : "Sync CR"}</span>
               </button>
             </div>
-          ) : view === "cr-transport-create" ? (
+          ) : view === "cr-transport-create" || view === "cr-transport-release" ? (
             <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
               {/* Target System Dropdown to the left of Sync CR button */}
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -3649,6 +3651,7 @@ export function App() {
               try { localStorage.setItem("cr_transport_target_system", val); } catch {}
             }}
             availableSystems={sapSystems}
+            refreshToken={releaseRefreshToken}
           />
         ) : view === "report" ? (
           <Report
