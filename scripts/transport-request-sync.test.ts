@@ -10,6 +10,10 @@ test("queues automatic sync only after a successful DEV AIX request", () => {
   assert.equal(shouldQueueTransportCreateSync("DEV_AIX", { ok: true, request: "" }), false);
 });
 
+test("queues automatic sync after a successful DEV AIX release using trkorr", () => {
+  assert.equal(shouldQueueTransportCreateSync("DEV_AIX", { ok: true, trkorr: "TRDK999002" }), true);
+});
+
 test("automatic sync uses the fixed DEV, QA, PRD incremental three-day scope", () => {
   assert.deepEqual(transportCreateSyncOptions(), {
     systemCodes: ["DEV", "QA", "PRD"],

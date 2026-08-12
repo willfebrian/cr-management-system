@@ -133,8 +133,9 @@ transportReleaseRoutes.post("/execute", asyncHandler(async (req, res) => {
   });
 
   // Queue a sync after successful release to update local database
+  let syncQueued = false;
   if (result.ok) {
-    const syncQueued = shouldQueueTransportCreateSync(targetSystem, result as unknown as Record<string, unknown>);
+    syncQueued = shouldQueueTransportCreateSync(targetSystem, result as unknown as Record<string, unknown>);
     if (syncQueued) {
       void runCrSync(transportCreateSyncOptions())
         .then((syncResult) => recordActivityLog({
@@ -149,7 +150,7 @@ transportReleaseRoutes.post("/execute", asyncHandler(async (req, res) => {
     }
   }
 
-  res.status(result.ok ? 200 : 409).json(result);
+  res.status(result.ok ? 200 : 409).json({ ...result, syncQueued });
 }));
 
 function asyncHandler(handler: (req: Request, res: Response) => Promise<void>) {

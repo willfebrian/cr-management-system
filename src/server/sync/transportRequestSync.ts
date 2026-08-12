@@ -1,9 +1,10 @@
 import { config } from "../config.js";
 
-export function shouldQueueTransportCreateSync(targetSystem: string, result: { ok?: boolean; request?: unknown }) {
+export function shouldQueueTransportCreateSync(targetSystem: string, result: { ok?: boolean; request?: unknown; trkorr?: unknown }) {
+  const requestId = result?.request ?? result?.trkorr;
   return String(targetSystem || "").trim().toUpperCase() === "DEV_AIX"
     && result?.ok === true
-    && Boolean(String(result?.request || "").trim());
+    && Boolean(String(requestId || "").trim());
 }
 
 export function transportCreateSyncOptions() {
