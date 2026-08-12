@@ -47,7 +47,6 @@ FUNCTION ZRFC_TRANSPORT_REQUEST_RELEASE.
         LV_OBJ_MESSAGE TYPE CHAR255,
         LV_MSG_TEXT   TYPE CHAR255,
         LV_INACTIVE_TEXT TYPE CHAR255,
-        LV_INACTIVE_DESC TYPE CHAR255,
         LV_OBJ_SEQ    TYPE I,
         LV_OBJ_SEQ_C(3) TYPE C.
 
@@ -336,19 +335,20 @@ FUNCTION ZRFC_TRANSPORT_REQUEST_RELEASE.
             WHERE SEVERITY = 'W'
                OR SEVERITY = 'E'
                OR SEVERITY = 'A'.
-            CLEAR: LV_INACTIVE_TEXT, LV_INACTIVE_DESC.
-            CASE LS_INACTIVE_LOG-VAR1.
-              WHEN 'REPT'.
-                LV_INACTIVE_DESC = 'Program Text / Selection Texts'.
-              WHEN 'REPS'.
-                LV_INACTIVE_DESC = 'ABAP Source/Include'.
-              WHEN OTHERS.
-                LV_INACTIVE_DESC = LS_INACTIVE_LOG-VAR1.
-            ENDCASE.
+            CLEAR LV_INACTIVE_TEXT.
+            MESSAGE ID LS_INACTIVE_LOG-AG TYPE 'S'
+              NUMBER LS_INACTIVE_LOG-MSGNR
+              WITH LS_INACTIVE_LOG-VAR1 LS_INACTIVE_LOG-VAR2
+                   LS_INACTIVE_LOG-VAR3 LS_INACTIVE_LOG-VAR4
+              INTO LV_INACTIVE_TEXT.
             LV_TASK_STATUS = 'ERROR'.
-            CONCATENATE 'Inactive' LV_INACTIVE_DESC ':'
-              LS_INACTIVE_LOG-VAR2
-              INTO LV_TASK_MESSAGE SEPARATED BY SPACE.
+            IF LV_INACTIVE_TEXT IS INITIAL.
+              CONCATENATE 'Inactive object:'
+                LS_INACTIVE_LOG-VAR1 LS_INACTIVE_LOG-VAR2
+                INTO LV_TASK_MESSAGE SEPARATED BY SPACE.
+            ELSE.
+              LV_TASK_MESSAGE = LV_INACTIVE_TEXT.
+            ENDIF.
             EXIT.
           ENDLOOP.
         ENDIF.
@@ -413,18 +413,9 @@ FUNCTION ZRFC_TRANSPORT_REQUEST_RELEASE.
               AND ( SEVERITY = 'W'
                  OR SEVERITY = 'E'
                  OR SEVERITY = 'A' ).
-            CLEAR LV_INACTIVE_DESC.
-            CASE LS_INACTIVE_LOG-VAR1.
-              WHEN 'REPT'.
-                LV_INACTIVE_DESC = 'Program Text / Selection Texts'.
-              WHEN 'REPS'.
-                LV_INACTIVE_DESC = 'ABAP Source/Include'.
-              WHEN OTHERS.
-                LV_INACTIVE_DESC = LS_INACTIVE_LOG-VAR1.
-            ENDCASE.
             LV_OBJ_STATUS = 'ERROR'.
-            CONCATENATE 'Inactive' LV_INACTIVE_DESC ':'
-              LS_INACTIVE_LOG-VAR2
+            CONCATENATE 'Inactive object:'
+              LS_INACTIVE_LOG-VAR1 LS_INACTIVE_LOG-VAR2
               INTO LV_OBJ_MESSAGE SEPARATED BY SPACE.
             EXIT.
           ENDLOOP.

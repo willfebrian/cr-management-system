@@ -17,7 +17,7 @@ test("RFC test run uses SAP's generic inactive-object release check", () => {
   assert.match(source, /CALL FUNCTION 'TRINT_CHECK_INACTIVE_OBJECTS'/);
   assert.match(source, /TYPE STANDARD TABLE OF SPROT_U/);
   assert.match(source, /LS_INACTIVE_LOG-VAR2/);
-  assert.match(source, /Inactive object:/);
+  assert.match(source, /Inactive' LV_INACTIVE_DESC/);
 });
 
 test("RFC test run uses SAP CTS preflight checks for repository, locks, and authorization", () => {
@@ -29,6 +29,13 @@ test("RFC test run uses SAP CTS preflight checks for repository, locks, and auth
   assert.match(source, /CALL FUNCTION 'TR_AUTHORITY_CHECK_TRFUNCTION'/);
   assert.match(source, /Authorization preflight failed/);
   assert.match(source, /Repository or lock consistency check failed/);
+});
+
+test("RFC explains inactive REPT objects as program text and selection texts", () => {
+  const source = readFileSync(new URL("../sap/abap/zrfc_transport_request_release/ZRFC_TRANSPORT_REQUEST_RELEASE.abap", import.meta.url), "utf8");
+  assert.match(source, /WHEN 'REPT'/);
+  assert.match(source, /Program Text \/ Selection Texts/);
+  assert.match(source, /Inactive' LV_INACTIVE_DESC/);
 });
 
 test("groups SAP object validation rows under their owning task", async () => {
