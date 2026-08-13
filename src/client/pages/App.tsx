@@ -4917,9 +4917,7 @@ function Report({
               items={[
                 { label: "Owner", value: displayRequest?.owner || "-" },
                 { label: "Target System", value: displayRequest?.target_system || "-" },
-                { label: "CR Type", value: displayRequest?.function_code || "-" },
-                { label: "Requester", value: <DisplayNameList value={displayRequest?.requester_name || ""} /> },
-                { label: "ABAPer", value: <DisplayNameList value={displayRequest?.abaper_name || ""} /> }
+                { label: "CR Type", value: displayRequest?.function_code || "-" }
               ]}
             />
           </div>

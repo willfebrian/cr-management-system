@@ -29,7 +29,6 @@ test("renders each display name on its own line with an empty fallback", () => {
 
 test("uses the shared hierarchy in CR and Issue detail", () => {
   assert.match(app, /<SummaryStrip\s+className="cr-summary-strip"/);
-  assert.match(app, /label:\s*"Requester",\s*value:\s*<DisplayNameList/);
-  assert.match(app, /label:\s*"ABAPer",\s*value:\s*<DisplayNameList/);
+  assert.match(app, /label:\s*"Owner",\s*value:\s*displayRequest\?\.owner/);
   assert.match(app, /className="cr-related-issue-chevron"/);
 });
