@@ -367,11 +367,20 @@ export type OutlookSearchEmailResult = {
   body: string;
 };
 
-export async function searchOutlookEmail(subject: string): Promise<{ rows: OutlookSearchEmailResult[] }> {
+export async function searchOutlookEmail(
+  subject: string,
+  limit?: number,
+  maxChars?: number
+): Promise<{ rows: OutlookSearchEmailResult[] }> {
+  const queryParams = new URLSearchParams({ q: subject });
+  if (limit && limit > 0) queryParams.set("limit", String(limit));
+  if (maxChars && maxChars > 0) queryParams.set("maxChars", String(maxChars));
+  const queryString = queryParams.toString();
+
   // 1. Try Local Client Agent on user's Windows laptop (Passwordless local MAPI)
   const agentUrls = [
-    `http://127.0.0.1:18888/api/fetch-outlook?q=${encodeURIComponent(subject)}`,
-    `http://localhost:18888/api/fetch-outlook?q=${encodeURIComponent(subject)}`
+    `http://127.0.0.1:18888/api/fetch-outlook?${queryString}`,
+    `http://localhost:18888/api/fetch-outlook?${queryString}`
   ];
 
   for (const url of agentUrls) {
@@ -404,7 +413,7 @@ export async function searchOutlookEmail(subject: string): Promise<{ rows: Outlo
   }
 
   // 2. Central Server Backend Fallback
-  return fetchJson(`/api/outlook/search-email?q=${encodeURIComponent(subject)}`);
+  return fetchJson(`/api/outlook/search-email?${queryString}`);
 }
 
 export type AiAnalysisResult = {
@@ -414,6 +423,7 @@ export type AiAnalysisResult = {
   impactAnalysis: string;
   participants?: Record<string, string>;
   timeline?: Record<string, string>;
+  providerUsed?: string;
 };
 
 export async function generateAnalysis(emailContext: string, emailSubject?: string, issueName?: string): Promise<AiAnalysisResult> {
@@ -421,6 +431,19 @@ export async function generateAnalysis(emailContext: string, emailSubject?: stri
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ emailContext, emailSubject, issueName })
+  });
+}
+
+export async function testAiConnection(params: {
+  provider: "9router" | "openrouter";
+  baseUrl?: string;
+  model?: string;
+  apiKey?: string;
+}): Promise<{ ok: boolean; message: string; output?: string }> {
+  return fetchJson("/api/ai/test-connection", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params)
   });
 }
 

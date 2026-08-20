@@ -6328,7 +6328,8 @@ function IssueEditor({
       }
 
       if (updatedCount > 0) {
-        onNotify?.("success", `Generated & filled AI data for ${updatedCount} field(s) successfully!`);
+        const providerLabel = result.providerUsed ? ` using ${result.providerUsed}` : "";
+        onNotify?.("success", `Generated & filled AI data${providerLabel} for ${updatedCount} field(s) successfully!`);
       } else {
         onNotify?.("error", "AI generation completed. No new changes were made to selected fields.");
       }

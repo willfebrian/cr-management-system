@@ -29,6 +29,8 @@ const server = http.createServer(async (req, res) => {
 
   if (reqUrl.pathname === "/api/fetch-outlook") {
     const querySubject = reqUrl.searchParams.get("q") || "";
+    const limit = parseInt(reqUrl.searchParams.get("limit") || "5", 10) || 5;
+    const maxChars = parseInt(reqUrl.searchParams.get("maxChars") || "15000", 10) || 15000;
 
     if (!querySubject.trim()) {
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -52,6 +54,12 @@ const server = http.createServer(async (req, res) => {
         
         try { $items.Sort("[ReceivedTime]", $true) } catch {}
 
+        $maxCount = [int]$env:MAX_EMAILS
+        if ($maxCount -le 0) { $maxCount = 5 }
+
+        $maxCharsLimit = [int]$env:MAX_BODY_CHARS
+        if ($maxCharsLimit -le 0) { $maxCharsLimit = 15000 }
+
         function Clean-Subject($str) {
           if (-not $str) { return "" }
           $cleaned = $str -replace '(?i)^\\s*(re|fw|fwd|fe|tr|vs|sv)\\s*:\\s*', ''
@@ -63,7 +71,7 @@ const server = http.createServer(async (req, res) => {
         function To-B64($str) {
           if (-not $str) { return "" }
           $s = [string]$str
-          if ($s.Length -gt 15000) { $s = $s.Substring(0, 15000) }
+          if ($s.Length -gt $maxCharsLimit) { $s = $s.Substring(0, $maxCharsLimit) }
           $bytes = [System.Text.Encoding]::UTF8.GetBytes($s)
           return [System.Convert]::ToBase64String($bytes)
         }
@@ -73,7 +81,7 @@ const server = http.createServer(async (req, res) => {
         $matches = @()
 
         foreach ($item in $items) {
-          if ($matches.Count -ge 5) { break }
+          if ($matches.Count -ge $maxCount) { break }
           try {
             $subject = ""
             try { $subject = $item.Subject } catch {}
@@ -137,7 +145,12 @@ const server = http.createServer(async (req, res) => {
         "-Command",
         script
       ], {
-        env: { ...process.env, SEARCH_SUBJECT: querySubject },
+        env: {
+          ...process.env,
+          SEARCH_SUBJECT: querySubject,
+          MAX_EMAILS: String(limit),
+          MAX_BODY_CHARS: String(maxChars)
+        },
         maxBuffer: 10 * 1024 * 1024
       });
 

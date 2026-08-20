@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
-import { fetchAdminPeople, fetchAdminSettings, updateAdminPerson, updateAdminSettings, createAdminPerson, deleteAdminPerson, fetchGroupEmails, createGroupEmail, updateGroupEmail, deleteGroupEmail, fetchSapSystems, createSapSystem, updateSapSystem, deleteSapSystem, testSapSystemConnection, fetchDocxTemplatesInfo, uploadDocxTemplate, resetDocxTemplate, downloadDocxTemplateUrl, type AdminPersonRow, type GroupEmailRow, type SapSystemRow, type DocxTemplatesInfo } from "../api";
-import { Check, Loader2, Save, X, Trash2, CheckCircle2, XCircle, AlertTriangle, Mail, Palette, Type, Sliders, User, Database, LayoutGrid, Server, Eye, EyeOff, Plus, Edit2, Activity, ShieldCheck, Radio, FileCode2, FileText, Upload, Download, RotateCcw, FileCheck } from "lucide-react";
+import { fetchAdminPeople, fetchAdminSettings, updateAdminPerson, updateAdminSettings, createAdminPerson, deleteAdminPerson, fetchGroupEmails, createGroupEmail, updateGroupEmail, deleteGroupEmail, fetchSapSystems, createSapSystem, updateSapSystem, deleteSapSystem, testSapSystemConnection, testAiConnection, fetchDocxTemplatesInfo, uploadDocxTemplate, resetDocxTemplate, downloadDocxTemplateUrl, type AdminPersonRow, type GroupEmailRow, type SapSystemRow, type DocxTemplatesInfo } from "../api";
+import { Check, Loader2, Save, X, Trash2, CheckCircle2, XCircle, AlertTriangle, Mail, Palette, Type, Sliders, User, Database, LayoutGrid, Server, Eye, EyeOff, Plus, Edit2, Activity, ShieldCheck, Radio, FileCode2, FileText, Upload, Download, RotateCcw, FileCheck, Zap, Globe } from "lucide-react";
 import { STATUS_COLOR_CONFIGS, applyCustomStatusColors } from "../utils/tagColors";
 import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
 import { TableDataLoader } from "../components/InteractiveLoaders";
@@ -89,22 +89,37 @@ Regards,
 ({USER_DEPARTMENT})`;
 
   const [settings, setSettings] = useState<Record<string, string>>({
+    ai_primary_provider: "9router",
+    ai_fallback_provider: "openrouter",
+    nine_router_enabled: "true",
+    nine_router_base_url: "http://192.168.88.83:20128/v1",
+    nine_router_model: "ag/gemini-3.7-flash-medium",
+    nine_router_api_key: "",
+    openrouter_enabled: "true",
+    openrouter_api_key: "",
+    openrouter_model: "openrouter/auto",
+    openrouter_fallback_model: "openrouter/free",
     ai_instruction_glpi: "",
     ai_instruction_email: "",
     ai_instruction_issue_name: "",
     ai_instruction_problem: "",
     ai_instruction_impact: "",
-    openrouter_api_key: "",
-    openrouter_model: "openrouter/auto",
     exchange_host: "",
     exchange_user: "",
     exchange_pass: "",
+    outlook_max_email_count: "5",
+    outlook_max_body_chars: "15000",
     app_font_size: "14",
     filename_pattern_cr_transport: "CR Transport {ISSUE_KEY}.docx",
     filename_pattern_project_cr_transport: "CR Transport Project {PROJECT_KEY}.docx",
     template_body_glpi: DEFAULT_GLPI_TEMPLATE,
     template_body_email: DEFAULT_EMAIL_TEMPLATE,
   });
+
+  const [showNineRouterKey, setShowNineRouterKey] = useState(false);
+  const [showOpenRouterKey, setShowOpenRouterKey] = useState(false);
+  const [testingNineRouter, setTestingNineRouter] = useState(false);
+  const [testingOpenRouter, setTestingOpenRouter] = useState(false);
 
   const glpiTextareaRef = useRef<HTMLTextAreaElement>(null);
   const emailTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -287,16 +302,26 @@ Regards,
         }
 
         const merged = {
+          ai_primary_provider: settingsRes.ai_primary_provider || "9router",
+          ai_fallback_provider: settingsRes.ai_fallback_provider || "openrouter",
+          nine_router_enabled: settingsRes.nine_router_enabled !== undefined ? settingsRes.nine_router_enabled : "true",
+          nine_router_base_url: settingsRes.nine_router_base_url || "http://192.168.88.83:20128/v1",
+          nine_router_model: settingsRes.nine_router_model || "ag/gemini-3.7-flash-medium",
+          nine_router_api_key: settingsRes.nine_router_api_key || "",
+          openrouter_enabled: settingsRes.openrouter_enabled !== undefined ? settingsRes.openrouter_enabled : "true",
+          openrouter_api_key: settingsRes.openrouter_api_key || "",
+          openrouter_model: settingsRes.openrouter_model || "openrouter/auto",
+          openrouter_fallback_model: settingsRes.openrouter_fallback_model || "openrouter/free",
           ai_instruction_glpi: settingsRes.ai_instruction_glpi || "",
           ai_instruction_email: settingsRes.ai_instruction_email || "",
           ai_instruction_issue_name: settingsRes.ai_instruction_issue_name || "",
           ai_instruction_problem: settingsRes.ai_instruction_problem || "",
           ai_instruction_impact: settingsRes.ai_instruction_impact || "",
-          openrouter_api_key: settingsRes.openrouter_api_key || "",
-          openrouter_model: settingsRes.openrouter_model || "openrouter/auto",
           exchange_host: settingsRes.exchange_host || "",
           exchange_user: settingsRes.exchange_user || "",
           exchange_pass: settingsRes.exchange_pass || "",
+          outlook_max_email_count: settingsRes.outlook_max_email_count || "5",
+          outlook_max_body_chars: settingsRes.outlook_max_body_chars || "15000",
           app_font_size: settingsRes.app_font_size || "14",
           filename_pattern_cr_transport: settingsRes.filename_pattern_cr_transport || "CR Transport {ISSUE_KEY}.docx",
           filename_pattern_project_cr_transport: settingsRes.filename_pattern_project_cr_transport || "CR Transport Project {PROJECT_KEY}.docx",
@@ -380,6 +405,43 @@ Regards,
       showToast("error", err instanceof Error ? err.message : String(err));
     } finally {
       setTestingConnection(false);
+    }
+  }
+
+  async function handleTestNineRouter() {
+    setTestingNineRouter(true);
+    try {
+      const res = await testAiConnection({
+        provider: "9router",
+        baseUrl: settings.nine_router_base_url || "http://192.168.88.83:20128/v1",
+        model: settings.nine_router_model || "ag/gemini-3.7-flash-medium",
+        apiKey: settings.nine_router_api_key || ""
+      });
+      showToast("success", res.message || "Connected to 9Router successfully!");
+    } catch (err) {
+      showToast("error", `9Router connection failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setTestingNineRouter(false);
+    }
+  }
+
+  async function handleTestOpenRouter() {
+    if (!settings.openrouter_api_key?.trim()) {
+      showToast("error", "Please provide an OpenRouter API Key before testing.");
+      return;
+    }
+    setTestingOpenRouter(true);
+    try {
+      const res = await testAiConnection({
+        provider: "openrouter",
+        model: settings.openrouter_model || "openrouter/auto",
+        apiKey: settings.openrouter_api_key || ""
+      });
+      showToast("success", res.message || "Connected to OpenRouter successfully!");
+    } catch (err) {
+      showToast("error", `OpenRouter connection failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setTestingOpenRouter(false);
     }
   }
 
@@ -1206,34 +1268,629 @@ Regards,
             </p>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-              <div>
-                <h4 style={{ margin: "0 0 1rem 0", fontSize: "1rem", color: "var(--color-text-heading, #111827)" }}>OpenRouter AI API Configuration</h4>
-                <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-                  <div>
-                    <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "600", color: "var(--color-text, #374151)", fontSize: "0.875rem" }}>
-                      OpenRouter API Key
+              {/* AI LLM Providers & Automatic Fallback */}
+              <div style={{
+                background: "var(--color-bg-elevated, #ffffff)",
+                padding: "1.5rem",
+                borderRadius: "12px",
+                border: "1px solid var(--color-border, #e5e7eb)",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "1.25rem"
+              }}>
+                {/* Header */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "1rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div style={{
+                      width: "36px",
+                      height: "36px",
+                      borderRadius: "10px",
+                      background: "linear-gradient(135deg, #f43f5e 0%, #ec4899 50%, #8b5cf6 100%)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#ffffff",
+                      fontSize: "1.2rem",
+                      boxShadow: "0 2px 8px rgba(236, 72, 153, 0.3)",
+                      flexShrink: 0
+                    }}>
+                      🧠
+                    </div>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 700, color: "var(--color-text-heading, #111827)" }}>
+                        AI LLM Providers &amp; Automatic Fallback
+                      </h4>
+                      <p style={{ margin: "2px 0 0 0", color: "var(--color-text-muted, #6b7280)", fontSize: "0.825rem" }}>
+                        Configure primary LLM provider (9Router local/remote proxy) and automatic fallback to OpenRouter when credits or limits are exhausted.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Status Badges */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                    <span style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      padding: "4px 12px",
+                      borderRadius: "9999px",
+                      fontSize: "0.75rem",
+                      fontWeight: 700,
+                      background: "rgba(59, 130, 246, 0.12)",
+                      color: "#3b82f6",
+                      border: "1px solid rgba(59, 130, 246, 0.3)"
+                    }}>
+                      Primary: {settings.ai_primary_provider === "openrouter" ? "OpenRouter" : settings.ai_primary_provider === "disabled" ? "Disabled" : "9Router"}
+                    </span>
+                    <span style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      padding: "4px 12px",
+                      borderRadius: "9999px",
+                      fontSize: "0.75rem",
+                      fontWeight: 700,
+                      background: "rgba(168, 85, 247, 0.12)",
+                      color: "#a855f7",
+                      border: "1px solid rgba(168, 85, 247, 0.3)"
+                    }}>
+                      Fallback: {settings.ai_fallback_provider === "9router" ? "9Router" : settings.ai_fallback_provider === "none" ? "None" : "OpenRouter"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Dropdown Selectors Row */}
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                  gap: "1.25rem"
+                }}>
+                  {/* Primary Provider Selector */}
+                  <div style={{
+                    background: "var(--color-bg-subtle, #f8fafc)",
+                    border: "1px solid var(--color-border, #e2e8f0)",
+                    borderRadius: "10px",
+                    padding: "1rem"
+                  }}>
+                    <label style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      fontSize: "0.75rem",
+                      fontWeight: 800,
+                      letterSpacing: "0.05em",
+                      textTransform: "uppercase",
+                      color: "var(--color-text-muted, #64748b)",
+                      marginBottom: "0.5rem"
+                    }}>
+                      <span style={{ color: "#ef4444" }}>🎯</span> PRIMARY AI PROVIDER
                     </label>
-                    <input
-                      type="password"
-                      value={settings.openrouter_api_key}
-                      onChange={(e) => setSettings({ ...settings, openrouter_api_key: e.target.value })}
-                      placeholder="sk-or-v1-..."
-                      style={{ width: "100%", padding: "0.625rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", fontSize: "0.875rem" }}
-                    />
-                    <small style={{ color: "var(--color-text-muted, #6b7280)", display: "block", marginTop: "0.25rem" }}>API key from OpenRouter.ai for auto generating Problem & Impact Analysis.</small>
+                    <select
+                      value={settings.ai_primary_provider || "9router"}
+                      onChange={(e) => setSettings({ ...settings, ai_primary_provider: e.target.value })}
+                      style={{
+                        width: "100%",
+                        padding: "0.625rem 0.875rem",
+                        borderRadius: "8px",
+                        border: "1px solid var(--color-border, #cbd5e1)",
+                        background: "var(--color-bg-elevated, #ffffff)",
+                        color: "var(--color-text, #1e293b)",
+                        fontSize: "0.875rem",
+                        fontWeight: 600,
+                        cursor: "pointer"
+                      }}
+                    >
+                      <option value="9router">⚡ 9Router (Local Proxy)</option>
+                      <option value="openrouter">🌐 OpenRouter</option>
+                      <option value="disabled">⛔ Disabled</option>
+                    </select>
+                  </div>
+
+                  {/* Fallback Provider Selector */}
+                  <div style={{
+                    background: "var(--color-bg-subtle, #f8fafc)",
+                    border: "1px solid var(--color-border, #e2e8f0)",
+                    borderRadius: "10px",
+                    padding: "1rem"
+                  }}>
+                    <label style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      fontSize: "0.75rem",
+                      fontWeight: 800,
+                      letterSpacing: "0.05em",
+                      textTransform: "uppercase",
+                      color: "var(--color-text-muted, #64748b)",
+                      marginBottom: "0.5rem"
+                    }}>
+                      <span style={{ color: "#3b82f6" }}>🔀</span> FALLBACK AI PROVIDER
+                    </label>
+                    <select
+                      value={settings.ai_fallback_provider || "openrouter"}
+                      onChange={(e) => setSettings({ ...settings, ai_fallback_provider: e.target.value })}
+                      style={{
+                        width: "100%",
+                        padding: "0.625rem 0.875rem",
+                        borderRadius: "8px",
+                        border: "1px solid var(--color-border, #cbd5e1)",
+                        background: "var(--color-bg-elevated, #ffffff)",
+                        color: "var(--color-text, #1e293b)",
+                        fontSize: "0.875rem",
+                        fontWeight: 600,
+                        cursor: "pointer"
+                      }}
+                    >
+                      <option value="openrouter">🌐 OpenRouter</option>
+                      <option value="9router">⚡ 9Router (Local Proxy)</option>
+                      <option value="none">⛔ None / Disabled</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Side-by-Side Configuration Cards */}
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
+                  gap: "1.25rem"
+                }}>
+                  {/* Left Card: 9Router (Primary / Local) */}
+                  <div style={{
+                    background: "var(--color-bg-subtle, #f8fafc)",
+                    border: "1px solid var(--color-border, #e2e8f0)",
+                    borderRadius: "12px",
+                    padding: "1.25rem",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "1rem"
+                  }}>
+                    {/* Header with Switch */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
+                        <Zap size={20} style={{ color: "#f59e0b", marginTop: "2px", flexShrink: 0 }} />
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--color-text-heading, #111827)" }}>
+                            9Router (Primary / Local)
+                          </div>
+                          <div style={{ fontSize: "0.775rem", color: "var(--color-text-muted, #64748b)" }}>
+                            OpenAI-compatible local AI gateway
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={settings.nine_router_enabled !== "false"}
+                        onClick={() => {
+                          const current = settings.nine_router_enabled !== "false";
+                          setSettings({ ...settings, nine_router_enabled: current ? "false" : "true" });
+                        }}
+                        style={{
+                          position: "relative",
+                          width: "44px",
+                          height: "24px",
+                          borderRadius: "12px",
+                          background: (settings.nine_router_enabled !== "false") ? "#6366f1" : "var(--color-border, #cbd5e1)",
+                          border: "none",
+                          cursor: "pointer",
+                          transition: "background 0.2s ease-in-out",
+                          padding: "2px"
+                        }}
+                      >
+                        <span style={{
+                          display: "block",
+                          width: "20px",
+                          height: "20px",
+                          borderRadius: "50%",
+                          background: "#ffffff",
+                          boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                          transform: (settings.nine_router_enabled !== "false") ? "translateX(20px)" : "translateX(0px)",
+                          transition: "transform 0.2s ease-in-out"
+                        }} />
+                      </button>
+                    </div>
+
+                    {/* BASE API ENDPOINT URL */}
+                    <div>
+                      <label style={{ display: "block", fontSize: "0.725rem", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--color-text-muted, #64748b)", marginBottom: "0.35rem" }}>
+                        BASE API ENDPOINT URL
+                      </label>
+                      <input
+                        type="text"
+                        value={settings.nine_router_base_url !== undefined ? settings.nine_router_base_url : "http://192.168.88.83:20128/v1"}
+                        onChange={(e) => setSettings({ ...settings, nine_router_base_url: e.target.value })}
+                        placeholder="http://192.168.88.83:20128/v1"
+                        style={{
+                          width: "100%",
+                          padding: "0.55rem 0.75rem",
+                          borderRadius: "6px",
+                          border: "1px solid var(--color-border, #cbd5e1)",
+                          background: "var(--color-bg-elevated, #ffffff)",
+                          color: "var(--color-text, #1e293b)",
+                          fontSize: "0.85rem",
+                          fontFamily: "monospace"
+                        }}
+                      />
+                    </div>
+
+                    {/* MODEL NAME & API KEY */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                      <div>
+                        <label style={{ display: "block", fontSize: "0.725rem", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--color-text-muted, #64748b)", marginBottom: "0.35rem" }}>
+                          MODEL NAME / IDENTIFIER
+                        </label>
+                        <input
+                          type="text"
+                          value={settings.nine_router_model !== undefined ? settings.nine_router_model : "ag/gemini-3.7-flash-medium"}
+                          onChange={(e) => setSettings({ ...settings, nine_router_model: e.target.value })}
+                          placeholder="ag/gemini-3.7-flash-medium"
+                          style={{
+                            width: "100%",
+                            padding: "0.55rem 0.75rem",
+                            borderRadius: "6px",
+                            border: "1px solid var(--color-border, #cbd5e1)",
+                            background: "var(--color-bg-elevated, #ffffff)",
+                            color: "var(--color-text, #1e293b)",
+                            fontSize: "0.85rem",
+                            fontFamily: "monospace"
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ display: "block", fontSize: "0.725rem", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--color-text-muted, #64748b)", marginBottom: "0.35rem" }}>
+                          API KEY (OPTIONAL FOR LOCAL PROXY)
+                        </label>
+                        <div style={{ position: "relative" }}>
+                          <input
+                            type={showNineRouterKey ? "text" : "password"}
+                            value={settings.nine_router_api_key || ""}
+                            onChange={(e) => setSettings({ ...settings, nine_router_api_key: e.target.value })}
+                            placeholder="••••••••••••••••"
+                            style={{
+                              width: "100%",
+                              padding: "0.55rem 2.25rem 0.55rem 0.75rem",
+                              borderRadius: "6px",
+                              border: "1px solid var(--color-border, #cbd5e1)",
+                              background: "var(--color-bg-elevated, #ffffff)",
+                              color: "var(--color-text, #1e293b)",
+                              fontSize: "0.85rem"
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowNineRouterKey(!showNineRouterKey)}
+                            style={{
+                              position: "absolute",
+                              right: "8px",
+                              top: "50%",
+                              transform: "translateY(-50%)",
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                              color: "var(--color-text-muted, #64748b)",
+                              padding: 0,
+                              display: "flex",
+                              alignItems: "center"
+                            }}
+                            title={showNineRouterKey ? "Hide API Key" : "Show API Key"}
+                          >
+                            {showNineRouterKey ? <EyeOff size={15} /> : <Eye size={15} />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Test Button */}
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "0.25rem" }}>
+                      <button
+                        type="button"
+                        onClick={handleTestNineRouter}
+                        disabled={testingNineRouter}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          padding: "5px 12px",
+                          borderRadius: "6px",
+                          border: "1px solid var(--color-border, #cbd5e1)",
+                          background: "var(--color-bg-elevated, #ffffff)",
+                          color: "var(--color-text, #334155)",
+                          fontSize: "0.775rem",
+                          fontWeight: 600,
+                          cursor: testingNineRouter ? "not-allowed" : "pointer"
+                        }}
+                      >
+                        {testingNineRouter ? <Loader2 size={13} className="spinner" /> : <Activity size={13} style={{ color: "#f59e0b" }} />}
+                        {testingNineRouter ? "Testing..." : "Test 9Router Connection"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Right Card: OpenRouter (Fallback / Cloud) */}
+                  <div style={{
+                    background: "var(--color-bg-subtle, #f8fafc)",
+                    border: "1px solid var(--color-border, #e2e8f0)",
+                    borderRadius: "12px",
+                    padding: "1.25rem",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "1rem"
+                  }}>
+                    {/* Header with Switch */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
+                        <Globe size={20} style={{ color: "#a855f7", marginTop: "2px", flexShrink: 0 }} />
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--color-text-heading, #111827)" }}>
+                            OpenRouter (Fallback / Cloud)
+                          </div>
+                          <div style={{ fontSize: "0.775rem", color: "var(--color-text-muted, #64748b)" }}>
+                            Multi-model cloud fallback router
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={settings.openrouter_enabled !== "false"}
+                        onClick={() => {
+                          const current = settings.openrouter_enabled !== "false";
+                          setSettings({ ...settings, openrouter_enabled: current ? "false" : "true" });
+                        }}
+                        style={{
+                          position: "relative",
+                          width: "44px",
+                          height: "24px",
+                          borderRadius: "12px",
+                          background: (settings.openrouter_enabled !== "false") ? "#a855f7" : "var(--color-border, #cbd5e1)",
+                          border: "none",
+                          cursor: "pointer",
+                          transition: "background 0.2s ease-in-out",
+                          padding: "2px"
+                        }}
+                      >
+                        <span style={{
+                          display: "block",
+                          width: "20px",
+                          height: "20px",
+                          borderRadius: "50%",
+                          background: "#ffffff",
+                          boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                          transform: (settings.openrouter_enabled !== "false") ? "translateX(20px)" : "translateX(0px)",
+                          transition: "transform 0.2s ease-in-out"
+                        }} />
+                      </button>
+                    </div>
+
+                    {/* API KEY */}
+                    <div>
+                      <label style={{ display: "block", fontSize: "0.725rem", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--color-text-muted, #64748b)", marginBottom: "0.35rem" }}>
+                        API KEY
+                      </label>
+                      <div style={{ position: "relative" }}>
+                        <input
+                          type={showOpenRouterKey ? "text" : "password"}
+                          value={settings.openrouter_api_key || ""}
+                          onChange={(e) => setSettings({ ...settings, openrouter_api_key: e.target.value })}
+                          placeholder="sk-or-v1-..."
+                          style={{
+                            width: "100%",
+                            padding: "0.55rem 2.25rem 0.55rem 0.75rem",
+                            borderRadius: "6px",
+                            border: "1px solid var(--color-border, #cbd5e1)",
+                            background: "var(--color-bg-elevated, #ffffff)",
+                            color: "var(--color-text, #1e293b)",
+                            fontSize: "0.85rem"
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowOpenRouterKey(!showOpenRouterKey)}
+                          style={{
+                            position: "absolute",
+                            right: "8px",
+                            top: "50%",
+                            transform: "translateY(-50%)",
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            color: "var(--color-text-muted, #64748b)",
+                            padding: 0,
+                            display: "flex",
+                            alignItems: "center"
+                          }}
+                          title={showOpenRouterKey ? "Hide API Key" : "Show API Key"}
+                        >
+                          {showOpenRouterKey ? <EyeOff size={15} /> : <Eye size={15} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* PRIMARY MODEL & FREE/FALLBACK MODEL */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                      <div>
+                        <label style={{ display: "block", fontSize: "0.725rem", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--color-text-muted, #64748b)", marginBottom: "0.35rem" }}>
+                          PRIMARY MODEL NAME
+                        </label>
+                        <input
+                          type="text"
+                          value={settings.openrouter_model || "openrouter/auto"}
+                          onChange={(e) => setSettings({ ...settings, openrouter_model: e.target.value })}
+                          placeholder="openrouter/auto"
+                          style={{
+                            width: "100%",
+                            padding: "0.55rem 0.75rem",
+                            borderRadius: "6px",
+                            border: "1px solid var(--color-border, #cbd5e1)",
+                            background: "var(--color-bg-elevated, #ffffff)",
+                            color: "var(--color-text, #1e293b)",
+                            fontSize: "0.85rem",
+                            fontFamily: "monospace"
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ display: "block", fontSize: "0.725rem", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--color-text-muted, #64748b)", marginBottom: "0.35rem" }}>
+                          FREE / FALLBACK MODEL NAME
+                        </label>
+                        <input
+                          type="text"
+                          value={settings.openrouter_fallback_model !== undefined ? settings.openrouter_fallback_model : "openrouter/free"}
+                          onChange={(e) => setSettings({ ...settings, openrouter_fallback_model: e.target.value })}
+                          placeholder="openrouter/free"
+                          style={{
+                            width: "100%",
+                            padding: "0.55rem 0.75rem",
+                            borderRadius: "6px",
+                            border: "1px solid var(--color-border, #cbd5e1)",
+                            background: "var(--color-bg-elevated, #ffffff)",
+                            color: "var(--color-text, #1e293b)",
+                            fontSize: "0.85rem",
+                            fontFamily: "monospace"
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Test Button */}
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "0.25rem" }}>
+                      <button
+                        type="button"
+                        onClick={handleTestOpenRouter}
+                        disabled={testingOpenRouter}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          padding: "5px 12px",
+                          borderRadius: "6px",
+                          border: "1px solid var(--color-border, #cbd5e1)",
+                          background: "var(--color-bg-elevated, #ffffff)",
+                          color: "var(--color-text, #334155)",
+                          fontSize: "0.775rem",
+                          fontWeight: 600,
+                          cursor: testingOpenRouter ? "not-allowed" : "pointer"
+                        }}
+                      >
+                        {testingOpenRouter ? <Loader2 size={13} className="spinner" /> : <Activity size={13} style={{ color: "#a855f7" }} />}
+                        {testingOpenRouter ? "Testing..." : "Test OpenRouter Connection"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Outlook Mail Extraction Configuration */}
+              <div style={{
+                background: "var(--color-bg-elevated, #ffffff)",
+                padding: "1.5rem",
+                borderRadius: "12px",
+                border: "1px solid var(--color-border, #e5e7eb)",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "1.25rem"
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <div style={{
+                    width: "36px",
+                    height: "36px",
+                    borderRadius: "10px",
+                    background: "linear-gradient(135deg, #0284c7 0%, #0369a1 100%)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#ffffff",
+                    flexShrink: 0,
+                    boxShadow: "0 2px 6px rgba(2, 132, 199, 0.3)"
+                  }}>
+                    <Mail size={20} />
                   </div>
                   <div>
-                    <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "600", color: "var(--color-text, #374151)", fontSize: "0.875rem" }}>
-                      OpenRouter Model
+                    <h4 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 700, color: "var(--color-text-heading, #111827)" }}>
+                      Outlook Mail Extraction Configuration
+                    </h4>
+                    <p style={{ margin: "2px 0 0 0", color: "var(--color-text-muted, #6b7280)", fontSize: "0.825rem" }}>
+                      Configure the maximum number of matching emails and character limit per email body retrieved for AI context analysis.
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                  gap: "1.25rem"
+                }}>
+                  {/* Max Emails */}
+                  <div style={{
+                    background: "var(--color-bg-subtle, #f8fafc)",
+                    border: "1px solid var(--color-border, #e2e8f0)",
+                    borderRadius: "10px",
+                    padding: "1rem"
+                  }}>
+                    <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--color-text-muted, #64748b)", marginBottom: "0.4rem" }}>
+                      MAXIMUM EMAILS TO FETCH
                     </label>
                     <input
-                      type="text"
-                      value={settings.openrouter_model}
-                      onChange={(e) => setSettings({ ...settings, openrouter_model: e.target.value })}
-                      placeholder="openrouter/auto"
-                      style={{ width: "100%", padding: "0.625rem", borderRadius: "6px", border: "1px solid var(--color-border, #d1d5db)", background: "var(--color-bg, #ffffff)", color: "var(--color-text, #1f2937)", fontSize: "0.875rem" }}
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={settings.outlook_max_email_count !== undefined ? settings.outlook_max_email_count : "5"}
+                      onChange={(e) => setSettings({ ...settings, outlook_max_email_count: e.target.value })}
+                      placeholder="5"
+                      style={{
+                        width: "100%",
+                        padding: "0.55rem 0.75rem",
+                        borderRadius: "6px",
+                        border: "1px solid var(--color-border, #cbd5e1)",
+                        background: "var(--color-bg-elevated, #ffffff)",
+                        color: "var(--color-text, #1e293b)",
+                        fontSize: "0.875rem",
+                        fontWeight: 600
+                      }}
                     />
-                    <small style={{ color: "var(--color-text-muted, #6b7280)", display: "block", marginTop: "0.25rem" }}>Default: <code>openrouter/auto</code> (or <code>anthropic/claude-3.5-sonnet</code>, <code>google/gemini-2.5-flash</code>, etc.)</small>
+                    <small style={{ color: "var(--color-text-muted, #64748b)", display: "block", marginTop: "0.35rem", fontSize: "0.75rem" }}>
+                      Default: <code>5</code> email(s). Limits the number of latest matching thread messages queried from Outlook.
+                    </small>
+                  </div>
+
+                  {/* Max Characters per Body */}
+                  <div style={{
+                    background: "var(--color-bg-subtle, #f8fafc)",
+                    border: "1px solid var(--color-border, #e2e8f0)",
+                    borderRadius: "10px",
+                    padding: "1rem"
+                  }}>
+                    <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--color-text-muted, #64748b)", marginBottom: "0.4rem" }}>
+                      MAXIMUM CHARACTERS PER BODY
+                    </label>
+                    <input
+                      type="number"
+                      min={1000}
+                      max={100000}
+                      step={1000}
+                      value={settings.outlook_max_body_chars !== undefined ? settings.outlook_max_body_chars : "15000"}
+                      onChange={(e) => setSettings({ ...settings, outlook_max_body_chars: e.target.value })}
+                      placeholder="15000"
+                      style={{
+                        width: "100%",
+                        padding: "0.55rem 0.75rem",
+                        borderRadius: "6px",
+                        border: "1px solid var(--color-border, #cbd5e1)",
+                        background: "var(--color-bg-elevated, #ffffff)",
+                        color: "var(--color-text, #1e293b)",
+                        fontSize: "0.875rem",
+                        fontWeight: 600
+                      }}
+                    />
+                    <small style={{ color: "var(--color-text-muted, #64748b)", display: "block", marginTop: "0.35rem", fontSize: "0.75rem" }}>
+                      Default: <code>15000</code> chars (~3,500 words). Truncates excessively long message bodies before JSON encoding.
+                    </small>
                   </div>
                 </div>
               </div>

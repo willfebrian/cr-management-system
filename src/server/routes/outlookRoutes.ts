@@ -23,7 +23,9 @@ outlookPublicRoutes.get("/agent-script", (_req, res) => {
 outlookRoutes.get("/search-email", async (req, res, next) => {
   try {
     const q = String(req.query.q || "");
-    const results = await searchOutlookEmails(q);
+    const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : undefined;
+    const maxChars = req.query.maxChars ? parseInt(String(req.query.maxChars), 10) : undefined;
+    const results = await searchOutlookEmails(q, limit, maxChars);
     res.json({ rows: results });
   } catch (error) {
     next(error);
