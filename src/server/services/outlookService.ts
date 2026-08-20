@@ -88,9 +88,12 @@ export async function searchOutlookEmails(
       $rawQuery = $env:SEARCH_SUBJECT.Trim().ToLower()
       $cleanQuery = Clean-Subject $env:SEARCH_SUBJECT
       $matches = @()
+      $scanCount = 0
+      $maxScan = 250
 
       foreach ($item in $items) {
-        if ($matches.Count -ge $maxCount) { break }
+        $scanCount++
+        if ($scanCount -gt $maxScan -or $matches.Count -ge $maxCount) { break }
         try {
           $subject = ""
           try { $subject = $item.Subject } catch {}

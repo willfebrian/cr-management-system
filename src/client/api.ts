@@ -367,14 +367,39 @@ export type OutlookSearchEmailResult = {
   body: string;
 };
 
+let cachedOutlookSettings: { limit: number; maxChars: number; timestamp: number } | null = null;
+
 export async function searchOutlookEmail(
   subject: string,
   limit?: number,
   maxChars?: number
 ): Promise<{ rows: OutlookSearchEmailResult[] }> {
+  let finalLimit = limit;
+  let finalMaxChars = maxChars;
+
+  if (!finalLimit || !finalMaxChars) {
+    const now = Date.now();
+    if (cachedOutlookSettings && now - cachedOutlookSettings.timestamp < 30000) {
+      finalLimit = finalLimit || cachedOutlookSettings.limit;
+      finalMaxChars = finalMaxChars || cachedOutlookSettings.maxChars;
+    } else {
+      try {
+        const settings = await fetchAdminSettings();
+        const dbLimit = parseInt(settings.outlook_max_email_count || "5", 10) || 5;
+        const dbMaxChars = parseInt(settings.outlook_max_body_chars || "15000", 10) || 15000;
+        cachedOutlookSettings = { limit: dbLimit, maxChars: dbMaxChars, timestamp: now };
+        finalLimit = finalLimit || dbLimit;
+        finalMaxChars = finalMaxChars || dbMaxChars;
+      } catch {
+        finalLimit = finalLimit || 5;
+        finalMaxChars = finalMaxChars || 15000;
+      }
+    }
+  }
+
   const queryParams = new URLSearchParams({ q: subject });
-  if (limit && limit > 0) queryParams.set("limit", String(limit));
-  if (maxChars && maxChars > 0) queryParams.set("maxChars", String(maxChars));
+  if (finalLimit && finalLimit > 0) queryParams.set("limit", String(finalLimit));
+  if (finalMaxChars && finalMaxChars > 0) queryParams.set("maxChars", String(finalMaxChars));
   const queryString = queryParams.toString();
 
   // 1. Try Local Client Agent on user's Windows laptop (Passwordless local MAPI)
@@ -386,7 +411,7 @@ export async function searchOutlookEmail(
   for (const url of agentUrls) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
       const localRes = await fetch(url, {
         signal: controller.signal
       });
@@ -413,7 +438,17 @@ export async function searchOutlookEmail(
   }
 
   // 2. Central Server Backend Fallback
-  return fetchJson(`/api/outlook/search-email?${queryString}`);
+  try {
+    return await fetchJson(`/api/outlook/search-email?${queryString}`);
+  } catch (serverErr: any) {
+    const msg = serverErr?.message || String(serverErr);
+    if (msg.includes("Agent lokal Outlook belum berjalan")) {
+      throw new Error(
+        "Agent Outlook lokal belum terhubung atau diblokir oleh browser. Pastikan Outlook Desktop terbuka dan buka http://127.0.0.1:18888 di tab baru untuk mengaktifkan koneksi."
+      );
+    }
+    throw serverErr;
+  }
 }
 
 export type AiAnalysisResult = {
