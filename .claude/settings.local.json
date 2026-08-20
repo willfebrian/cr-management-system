@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-NetTCPConnection -LocalPort 18888 -ErrorAction SilentlyContinue; try { $r = Invoke-WebRequest -Uri \"http://127.0.0.1:18888/health\" -TimeoutSec 3 -UseBasicParsing; $r.Content } catch { \"AGENT NOT REACHABLE: $\\($_.Exception.Message\\)\" })"
+    ]
+  }
+}

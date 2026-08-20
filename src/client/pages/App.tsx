@@ -4917,9 +4917,7 @@ function Report({
               items={[
                 { label: "Owner", value: displayRequest?.owner || "-" },
                 { label: "Target System", value: displayRequest?.target_system || "-" },
-                { label: "CR Type", value: displayRequest?.function_code || "-" },
-                { label: "Requester", value: <DisplayNameList value={displayRequest?.requester_name || ""} /> },
-                { label: "ABAPer", value: <DisplayNameList value={displayRequest?.abaper_name || ""} /> }
+                { label: "CR Type", value: displayRequest?.function_code || "-" }
               ]}
             />
           </div>
@@ -6321,7 +6319,8 @@ function IssueEditor({
       }
 
       if (updatedCount > 0) {
-        onNotify?.("success", `Generated & filled AI data for ${updatedCount} field(s) successfully!`);
+        const providerLabel = result.providerUsed ? ` using ${result.providerUsed}` : "";
+        onNotify?.("success", `Generated & filled AI data${providerLabel} for ${updatedCount} field(s) successfully!`);
       } else {
         onNotify?.("error", "AI generation completed. No new changes were made to selected fields.");
       }

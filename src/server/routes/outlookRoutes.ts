@@ -23,7 +23,9 @@ outlookPublicRoutes.get("/agent-script", (_req, res) => {
 outlookRoutes.get("/search-email", async (req, res, next) => {
   try {
     const q = String(req.query.q || "");
-    const results = await searchOutlookEmails(q);
+    const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : undefined;
+    const maxChars = req.query.maxChars ? parseInt(String(req.query.maxChars), 10) : undefined;
+    const results = await searchOutlookEmails(q, limit, maxChars);
     res.json({ rows: results });
   } catch (error) {
     next(error);
@@ -62,7 +64,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "Invoke-WebRequest -Uri '${baseUrl}/api/outlook/agent-script' -OutFile $scriptPath -UseBasicParsing;" ^
   "$startupDir = [System.IO.Path]::Combine($env:APPDATA, 'Microsoft\\Windows\\Start Menu\\Programs\\Startup');" ^
   "$shortcutPath = Join-Path $startupDir 'CR_Outlook_Agent.lnk';" ^
-  "if (Test-Path $shortcutPath) { Remove-Item -Force $shortcutPath; }" ^
+  "try {" ^
+  "  $wsh = New-Object -ComObject WScript.Shell;" ^
+  "  $shortcut = $wsh.CreateShortcut($shortcutPath);" ^
+  "  $nodeExe = (Get-Command node.exe).Source;" ^
+  "  $shortcut.TargetPath = $nodeExe;" ^
+  "  $shortcut.Arguments = '\\\"' + $scriptPath + '\\\"';" ^
+  "  $shortcut.WindowStyle = 7;" ^
+  "  $shortcut.Save();" ^
+  "} catch {};" ^
   "Start-Process 'node.exe' -ArgumentList ('\\\"' + $scriptPath + '\\\"') -WindowStyle Hidden;" ^
   "Write-Host 'Agent installed and running at http://127.0.0.1:18888' -ForegroundColor Green;"
 

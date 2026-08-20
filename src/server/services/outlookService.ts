@@ -1,5 +1,6 @@
 import { execFile } from "child_process";
 import { promisify } from "util";
+import { pool } from "../db/pool.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -12,7 +13,11 @@ export type OutlookEmailMatch = {
   body: string;
 };
 
-export async function searchOutlookEmails(querySubject: string): Promise<OutlookEmailMatch[]> {
+export async function searchOutlookEmails(
+  querySubject: string,
+  limit?: number,
+  maxChars?: number
+): Promise<OutlookEmailMatch[]> {
   if (!querySubject || !querySubject.trim()) return [];
 
   // Server runs on Linux and has no access to Outlook COM — this path only
@@ -23,6 +28,7 @@ export async function searchOutlookEmails(querySubject: string): Promise<Outlook
     );
   }
 
+<<<<<<< HEAD
   // Windows Desktop MAPI COM Object Implementation
   // Limits: 30 days lookback, max 3 results, body capped at 10.000 chars
     const script = `
@@ -117,8 +123,128 @@ export async function searchOutlookEmails(querySubject: string): Promise<Outlook
         $matches | ConvertTo-Json -Compress
       } catch {
         Write-Error $_.Exception.Message
+=======
+  let finalLimit = limit;
+  let finalMaxChars = maxChars;
+
+  if (!finalLimit || !finalMaxChars) {
+    try {
+      const { rows } = await pool.query<{ setting_key: string; setting_value: string }>(
+        `SELECT setting_key, setting_value FROM app_settings WHERE setting_key IN ('outlook_max_email_count', 'outlook_max_body_chars')`
+      );
+      for (const r of rows) {
+        if (r.setting_key === "outlook_max_email_count" && !finalLimit) {
+          finalLimit = parseInt(r.setting_value, 10);
+        }
+        if (r.setting_key === "outlook_max_body_chars" && !finalMaxChars) {
+          finalMaxChars = parseInt(r.setting_value, 10);
+        }
+>>>>>>> fe9fa9e02d9c9d07958062b6e651aa014cf55069
       }
-    `;
+    } catch (e) {
+      console.warn("Could not query outlook limits from DB:", e);
+    }
+  }
+
+  finalLimit = finalLimit && finalLimit > 0 ? finalLimit : 5;
+  finalMaxChars = finalMaxChars && finalMaxChars > 0 ? finalMaxChars : 15000;
+
+  // Windows Desktop MAPI COM Object Implementation
+  const script = `
+    $ErrorActionPreference = 'Stop'
+    try {
+      $outlook = New-Object -ComObject Outlook.Application
+      $namespace = $outlook.GetNamespace("MAPI")
+      $inbox = $namespace.GetDefaultFolder(6)
+      $items = $inbox.Items
+      
+      try { $items.Sort("[ReceivedTime]", $true) } catch {}
+
+      $maxCount = [int]$env:MAX_EMAILS
+      if ($maxCount -le 0) { $maxCount = 5 }
+
+      $maxCharsLimit = [int]$env:MAX_BODY_CHARS
+      if ($maxCharsLimit -le 0) { $maxCharsLimit = 15000 }
+
+      function Clean-Subject($str) {
+        if (-not $str) { return "" }
+        $cleaned = $str -replace '(?i)^\\s*(re|fw|fwd|fe|tr|vs|sv)\\s*:\\s*', ''
+        $cleaned = $cleaned -replace '(?i)^\\s*\\[(external|balas|forward)\\]\\s*', ''
+        $cleaned = $cleaned -replace '(?i)^\\s*(re|fw|fwd|fe|tr|vs|sv)\\s*:\\s*', ''
+        return $cleaned.Trim().ToLower()
+      }
+
+      function To-B64($str) {
+        if (-not $str) { return "" }
+        $s = [string]$str
+        if ($s.Length -gt $maxCharsLimit) { $s = $s.Substring(0, $maxCharsLimit) }
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($s)
+        return [System.Convert]::ToBase64String($bytes)
+      }
+
+      $rawQuery = $env:SEARCH_SUBJECT.Trim().ToLower()
+      $cleanQuery = Clean-Subject $env:SEARCH_SUBJECT
+      $matches = @()
+      $scanCount = 0
+      $maxScan = 250
+
+      foreach ($item in $items) {
+        $scanCount++
+        if ($scanCount -gt $maxScan -or $matches.Count -ge $maxCount) { break }
+        try {
+          $subject = ""
+          try { $subject = $item.Subject } catch {}
+          if (-not $subject) { continue }
+
+          $subLower = $subject.ToLower()
+          $cleanSub = Clean-Subject $subject
+
+          $isMatch = $subLower.Contains($rawQuery) -or $cleanSub.Contains($cleanQuery) -or ($cleanQuery.Length -gt 3 -and $cleanQuery.Contains($cleanSub))
+
+          if (-not $isMatch -and $cleanQuery.Length -gt 3) {
+            $words = $cleanQuery -split '\\s+' | Where-Object { $_.Length -gt 2 }
+            if ($words.Count -gt 0) {
+              $allWordsFound = $true
+              foreach ($w in $words) {
+                if (-not $cleanSub.Contains($w)) {
+                  $allWordsFound = $false
+                  break
+                }
+              }
+              if ($allWordsFound) { $isMatch = $true }
+            }
+          }
+
+          if ($isMatch) {
+            $to = ""
+            try { $to = $item.To } catch {}
+            $senderEmail = ""
+            try { $senderEmail = $item.SenderEmailAddress } catch {}
+            $senderName = ""
+            try { $senderName = $item.SenderName } catch {}
+            $body = ""
+            try { $body = $item.Body } catch {}
+            $recTime = ""
+            try { $recTime = $item.ReceivedTime.ToString("yyyy-MM-dd HH:mm:ss") } catch { $recTime = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss") }
+
+            $matches += [PSCustomObject]@{
+              receivedAt = $recTime
+              senderName = To-B64 $senderName
+              senderEmail = To-B64 $senderEmail
+              to = To-B64 $to
+              subject = To-B64 $subject
+              body = To-B64 $body
+            }
+          }
+        } catch {
+          # Skip any item that throws COM exception
+        }
+      }
+      $matches | ConvertTo-Json -Compress
+    } catch {
+      Write-Error $_.Exception.Message
+    }
+  `;
 
   try {
     const { stdout } = await execFileAsync("powershell", [
@@ -128,7 +254,12 @@ export async function searchOutlookEmails(querySubject: string): Promise<Outlook
       "-Command",
       script
     ], {
-      env: { ...process.env, SEARCH_SUBJECT: querySubject },
+      env: {
+        ...process.env,
+        SEARCH_SUBJECT: querySubject,
+        MAX_EMAILS: String(finalLimit),
+        MAX_BODY_CHARS: String(finalMaxChars)
+      },
       maxBuffer: 10 * 1024 * 1024
     });
 

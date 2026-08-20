@@ -21,14 +21,55 @@ const server = http.createServer(async (req, res) => {
 
   const reqUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 
-  if (reqUrl.pathname === "/health") {
+  if (reqUrl.pathname === "/" || reqUrl.pathname === "/health") {
+    const isHtml = (req.headers.accept || "").includes("text/html");
+    if (isHtml) {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>CR Outlook Agent</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+    .card { background: #1e293b; padding: 2rem; border-radius: 12px; border: 1px solid #334155; box-shadow: 0 4px 20px rgba(0,0,0,0.5); max-width: 460px; text-align: center; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981; padding: 4px 14px; border-radius: 9999px; font-weight: bold; font-size: 0.85rem; margin-bottom: 1rem; }
+    h2 { margin: 0 0 0.5rem 0; color: #ffffff; }
+    p { color: #94a3b8; font-size: 0.9rem; margin: 0 0 1rem 0; }
+    code { background: #0f172a; padding: 3px 8px; border-radius: 4px; color: #38bdf8; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge">&#9679; Running Active</div>
+    <h2>CR Outlook Agent</h2>
+    <p>The agent is running and ready on port <code>18888</code> for passwordless Outlook email extraction.</p>
+    <p style="font-size: 0.8rem; color: #64748b; margin-top: 1.5rem;">You can now close this tab and return to CR Management System.</p>
+  </div>
+</body>
+</html>`);
+      return;
+    }
+
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok", agent: "cr-outlook-agent", platform: process.platform }));
+    res.end(JSON.stringify({
+      status: "ok",
+      message: "CR Outlook Agent is active and running.",
+      agent: "cr-outlook-agent",
+      platform: process.platform,
+      port: PORT,
+      endpoints: {
+        health: "/health",
+        fetchOutlook: "/api/fetch-outlook?q=<subject>&limit=5&maxChars=15000"
+      }
+    }));
     return;
   }
 
   if (reqUrl.pathname === "/api/fetch-outlook") {
     const querySubject = reqUrl.searchParams.get("q") || "";
+    const limit = parseInt(reqUrl.searchParams.get("limit") || "5", 10) || 5;
+    const maxChars = parseInt(reqUrl.searchParams.get("maxChars") || "15000", 10) || 15000;
 
     if (!querySubject.trim()) {
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -53,8 +94,16 @@ const server = http.createServer(async (req, res) => {
         
         try { $items.Sort("[ReceivedTime]", $true) } catch {}
 
+<<<<<<< HEAD
         # Only scan emails from the last 30 days
         $cutoffDate = (Get-Date).AddDays(-30)
+=======
+        $maxCount = [int]$env:MAX_EMAILS
+        if ($maxCount -le 0) { $maxCount = 5 }
+
+        $maxCharsLimit = [int]$env:MAX_BODY_CHARS
+        if ($maxCharsLimit -le 0) { $maxCharsLimit = 15000 }
+>>>>>>> fe9fa9e02d9c9d07958062b6e651aa014cf55069
 
         function Clean-Subject($str) {
           if (-not $str) { return "" }
@@ -67,7 +116,11 @@ const server = http.createServer(async (req, res) => {
         function To-B64($str) {
           if (-not $str) { return "" }
           $s = [string]$str
+<<<<<<< HEAD
           if ($s.Length -gt 10000) { $s = $s.Substring(0, 10000) }
+=======
+          if ($s.Length -gt $maxCharsLimit) { $s = $s.Substring(0, $maxCharsLimit) }
+>>>>>>> fe9fa9e02d9c9d07958062b6e651aa014cf55069
           $bytes = [System.Text.Encoding]::UTF8.GetBytes($s)
           return [System.Convert]::ToBase64String($bytes)
         }
@@ -75,9 +128,16 @@ const server = http.createServer(async (req, res) => {
         $rawQuery = $env:SEARCH_SUBJECT.Trim().ToLower()
         $cleanQuery = Clean-Subject $env:SEARCH_SUBJECT
         $matches = @()
+        $scanCount = 0
+        $maxScan = 250
 
         foreach ($item in $items) {
+<<<<<<< HEAD
           if ($matches.Count -ge 3) { break }
+=======
+          $scanCount++
+          if ($scanCount -gt $maxScan -or $matches.Count -ge $maxCount) { break }
+>>>>>>> fe9fa9e02d9c9d07958062b6e651aa014cf55069
           try {
             # Stop scanning if email is older than 30 days (items sorted newest first)
             $recTime = $null
@@ -146,7 +206,12 @@ const server = http.createServer(async (req, res) => {
         "-Command",
         script
       ], {
-        env: { ...process.env, SEARCH_SUBJECT: querySubject },
+        env: {
+          ...process.env,
+          SEARCH_SUBJECT: querySubject,
+          MAX_EMAILS: String(limit),
+          MAX_BODY_CHARS: String(maxChars)
+        },
         maxBuffer: 10 * 1024 * 1024
       });
 
