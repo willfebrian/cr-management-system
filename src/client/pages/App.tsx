@@ -6126,16 +6126,7 @@ function IssueEditor({
     }
   }
 
-  // Auto-fetch Outlook email context when editing an existing issue (mode !== "create")
-  useEffect(() => {
-    if (mode !== "create" && form.emailSubject?.trim()) {
-      const subject = form.emailSubject.trim();
-      if (fetchedEmailSubjectRef.current !== subject) {
-        fetchedEmailSubjectRef.current = subject;
-        handleFetchEmailContent(subject);
-      }
-    }
-  }, [mode, form.emailSubject]);
+  // No longer auto-fetch email on edit — user must click "Fetch Email" manually to save AI tokens
 
   function getExistingFormFields() {
     const list: Array<{ key: string; label: string; currentValue: string; category: "Analysis" | "People" | "Timeline" }> = [];

@@ -24,6 +24,7 @@ export async function searchOutlookEmails(querySubject: string): Promise<Outlook
   }
 
   // Windows Desktop MAPI COM Object Implementation
+  // Limits: 30 days lookback, max 3 results, body capped at 10.000 chars
     const script = `
       $ErrorActionPreference = 'Stop'
       try {
@@ -33,6 +34,9 @@ export async function searchOutlookEmails(querySubject: string): Promise<Outlook
         $items = $inbox.Items
         
         try { $items.Sort("[ReceivedTime]", $true) } catch {}
+
+        # Only scan emails from the last 30 days
+        $cutoffDate = (Get-Date).AddDays(-30)
 
         function Clean-Subject($str) {
           if (-not $str) { return "" }
@@ -45,7 +49,7 @@ export async function searchOutlookEmails(querySubject: string): Promise<Outlook
         function To-B64($str) {
           if (-not $str) { return "" }
           $s = [string]$str
-          if ($s.Length -gt 15000) { $s = $s.Substring(0, 15000) }
+          if ($s.Length -gt 10000) { $s = $s.Substring(0, 10000) }
           $bytes = [System.Text.Encoding]::UTF8.GetBytes($s)
           return [System.Convert]::ToBase64String($bytes)
         }
@@ -55,8 +59,13 @@ export async function searchOutlookEmails(querySubject: string): Promise<Outlook
         $matches = @()
 
         foreach ($item in $items) {
-          if ($matches.Count -ge 5) { break }
+          if ($matches.Count -ge 3) { break }
           try {
+            # Stop scanning if email is older than 30 days (items sorted newest first)
+            $recTime = $null
+            try { $recTime = $item.ReceivedTime } catch {}
+            if ($recTime -and $recTime -lt $cutoffDate) { break }
+
             $subject = ""
             try { $subject = $item.Subject } catch {}
             if (-not $subject) { continue }
@@ -89,11 +98,11 @@ export async function searchOutlookEmails(querySubject: string): Promise<Outlook
               try { $senderName = $item.SenderName } catch {}
               $body = ""
               try { $body = $item.Body } catch {}
-              $recTime = ""
-              try { $recTime = $item.ReceivedTime.ToString("yyyy-MM-dd HH:mm:ss") } catch { $recTime = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss") }
+              $recTimeStr = ""
+              try { $recTimeStr = $item.ReceivedTime.ToString("yyyy-MM-dd HH:mm:ss") } catch { $recTimeStr = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss") }
 
               $matches += [PSCustomObject]@{
-                receivedAt = $recTime
+                receivedAt = $recTimeStr
                 senderName = To-B64 $senderName
                 senderEmail = To-B64 $senderEmail
                 to = To-B64 $to
