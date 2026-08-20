@@ -26,6 +26,15 @@ const systems = Object.fromEntries(systemCodes.map((code) => [
   }
 ]));
 
+const autoSyncSystemCodes = listEnv(process.env.SAP_CR_AUTO_SYNC_SYSTEMS, systemCodes);
+const autoSyncDefaultIntervalMinutes = Math.max(Number(process.env.SAP_CR_AUTO_SYNC_INTERVAL_MINUTES || 60), 5);
+const autoSyncIntervalMinutesBySystem = Object.fromEntries(
+  autoSyncSystemCodes.map((code) => [
+    code,
+    Number(process.env[`SAP_CR_AUTO_SYNC_${code}_INTERVAL_MINUTES`] || autoSyncDefaultIntervalMinutes)
+  ])
+);
+
 if (systems.DEV && !systems.DEV.server) systems.DEV.server = "SAP_DEV_AIX";
 if (systems.DEV && !systems.DEV.owner) systems.DEV.owner = "TRSTDEV";
 
@@ -78,11 +87,11 @@ export const config = {
   },
   autoSync: {
     enabled: boolEnv(process.env.SAP_CR_AUTO_SYNC_ENABLED, false),
-    intervalMinutes: Math.max(Number(process.env.SAP_CR_AUTO_SYNC_INTERVAL_MINUTES || 60), 5),
-    systemCodes: listEnv(process.env.SAP_CR_AUTO_SYNC_SYSTEMS, systemCodes),
+    intervalMinutes: autoSyncDefaultIntervalMinutes,
+    intervalMinutesBySystem: autoSyncIntervalMinutesBySystem,
+    systemCodes: autoSyncSystemCodes,
     lookbackDays: Math.min(Math.max(Number(process.env.SAP_CR_AUTO_SYNC_LOOKBACK_DAYS || 3), 0), 30),
-    rowCount: Number(process.env.SAP_CR_AUTO_SYNC_ROW_COUNT || 5000),
-    staleHours: Math.max(Number(process.env.SAP_CR_AUTO_SYNC_STALE_HOURS || 24), 1)
+    rowCount: Number(process.env.SAP_CR_AUTO_SYNC_ROW_COUNT || 5000)
   },
   orphanRecovery: {
     enabled: boolEnv(process.env.SAP_CR_ORPHAN_RECOVERY_ENABLED, true),

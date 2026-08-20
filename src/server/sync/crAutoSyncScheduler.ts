@@ -12,9 +12,20 @@ export function startCrAutoSyncScheduler() {
     return;
   }
 
-  const intervalMs = config.autoSync.intervalMinutes * 60 * 1000;
+  const intervals = config.autoSync.systemCodes.map((systemCode) =>
+    resolveSystemIntervalMinutes(
+      systemCode,
+      config.autoSync.intervalMinutes,
+      config.autoSync.intervalMinutesBySystem
+    )
+  );
+  const schedulerIntervalMinutes = Math.min(...intervals);
+  const intervalMs = schedulerIntervalMinutes * 60 * 1000;
+  const scheduleDescription = config.autoSync.systemCodes
+    .map((systemCode) => `${systemCode}=${resolveSystemIntervalMinutes(systemCode, config.autoSync.intervalMinutes, config.autoSync.intervalMinutesBySystem)}m`)
+    .join(", ");
   console.log(
-    `CR auto sync scheduler enabled: every ${config.autoSync.intervalMinutes} minute(s), stale after ${config.autoSync.staleHours} hour(s), systems ${config.autoSync.systemCodes.join(", ")}.`
+    `CR auto sync scheduler enabled: ${scheduleDescription}; scheduler check every ${schedulerIntervalMinutes} minute(s).`
   );
 
   const run = async () => {
@@ -25,14 +36,23 @@ export function startCrAutoSyncScheduler() {
     running = true;
     try {
       await assertDatabaseConfigured();
-      const staleSystems = await getStaleSystems();
-      if (!staleSystems.length) {
-        console.log("CR auto sync skipped because all configured systems are still fresh.");
+      const dueSystems = await findDueAutoSyncSystems({
+        systemCodes: config.autoSync.systemCodes,
+        defaultIntervalMinutes: config.autoSync.intervalMinutes,
+        intervalMinutesBySystem: config.autoSync.intervalMinutesBySystem,
+        nowMs: Date.now(),
+        getLastSuccessfulAt: async (systemCode) => {
+          const lastSync = await getLastSuccessfulSyncRun(systemCode);
+          return lastSync?.finished_at || null;
+        }
+      });
+      if (!dueSystems.length) {
+        console.log("CR auto sync skipped because no configured system is due.");
         return;
       }
 
       const result = await runCrSync({
-        systemCodes: staleSystems,
+        systemCodes: dueSystems,
         syncMode: "incremental",
         lookbackDays: config.autoSync.lookbackDays,
         rowCount: config.autoSync.rowCount
@@ -41,8 +61,8 @@ export function startCrAutoSyncScheduler() {
         activityType: "sync",
         action: "auto_sync_cr",
         username: "SYSTEM_SCHEDULER",
-        description: `Auto-scheduled SAP CR sync for systems [${staleSystems.join(", ")}] (Result: ${result.ok ? "Success" : "Failed"}, Requests: ${result.requestCount || 0})`,
-        metadata: { ok: result.ok, requestCount: result.requestCount, systems: staleSystems }
+        description: `Auto-scheduled SAP CR sync for systems [${dueSystems.join(", ")}] (Result: ${result.ok ? "Success" : "Failed"}, Requests: ${result.requestCount || 0})`,
+        metadata: { ok: result.ok, requestCount: result.requestCount, systems: dueSystems }
       });
       console.log(`CR auto sync finished: ${result.requestCount} request(s), ok=${result.ok}.`);
     } catch (error) {
@@ -56,18 +76,36 @@ export function startCrAutoSyncScheduler() {
   windowlessDelay(run, 5000);
 }
 
-async function getStaleSystems() {
-  const staleAfterMs = config.autoSync.staleHours * 60 * 60 * 1000;
-  const now = Date.now();
-  const staleSystems: string[] = [];
-  for (const systemCode of config.autoSync.systemCodes) {
-    const lastSync = await getLastSuccessfulSyncRun(systemCode);
-    const lastSyncTime = lastSync?.finished_at ? new Date(lastSync.finished_at).getTime() : 0;
-    if (!lastSyncTime || now - lastSyncTime >= staleAfterMs) {
-      staleSystems.push(systemCode);
+export function resolveSystemIntervalMinutes(
+  systemCode: string,
+  defaultIntervalMinutes: number,
+  intervalMinutesBySystem: Record<string, number>
+) {
+  const configured = Number(intervalMinutesBySystem[systemCode] ?? defaultIntervalMinutes);
+  return Number.isFinite(configured) ? Math.max(configured, 5) : Math.max(defaultIntervalMinutes, 5);
+}
+
+export async function findDueAutoSyncSystems(options: {
+  systemCodes: string[];
+  defaultIntervalMinutes: number;
+  intervalMinutesBySystem: Record<string, number>;
+  nowMs: number;
+  getLastSuccessfulAt: (systemCode: string) => Promise<string | Date | null>;
+}) {
+  const dueSystems: string[] = [];
+  for (const systemCode of options.systemCodes) {
+    const lastSuccessfulAt = await options.getLastSuccessfulAt(systemCode);
+    const lastSuccessfulMs = lastSuccessfulAt ? new Date(lastSuccessfulAt).getTime() : 0;
+    const intervalMinutes = resolveSystemIntervalMinutes(
+      systemCode,
+      options.defaultIntervalMinutes,
+      options.intervalMinutesBySystem
+    );
+    if (!lastSuccessfulMs || options.nowMs - lastSuccessfulMs >= intervalMinutes * 60 * 1000) {
+      dueSystems.push(systemCode);
     }
   }
-  return staleSystems;
+  return dueSystems;
 }
 
 function windowlessDelay(callback: () => void | Promise<void>, ms: number) {

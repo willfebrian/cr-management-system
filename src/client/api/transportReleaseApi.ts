@@ -29,6 +29,7 @@ export type ReleaseResult = {
   hasErrors: boolean;
   hasWarnings: boolean;
   tasks: ReleaseTaskResult[];
+  syncQueued?: boolean;
 };
 
 export type ReleaseCandidateRow = {

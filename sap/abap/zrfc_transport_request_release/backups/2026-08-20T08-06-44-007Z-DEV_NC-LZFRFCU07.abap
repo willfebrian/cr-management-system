@@ -22,9 +22,6 @@ FUNCTION ZRFC_TRANSPORT_REQUEST_RELEASE.
         LV_SEQ_C(3)   TYPE C,
         LV_HAS_ERROR  TYPE C,
         LV_SUBRC      TYPE SY-SUBRC,
-        LV_VERIFIED_STATUS TYPE E070-TRSTATUS,
-        LV_RELEASE_ATTEMPTS TYPE I,
-        LV_WAIT_COUNT TYPE I,
         LV_CHILD_TEXT TYPE E07T-AS4TEXT,
         LV_OBJ_CNT    TYPE I,
         LV_RC_C(2)    TYPE C,
@@ -495,71 +492,37 @@ FUNCTION ZRFC_TRANSPORT_REQUEST_RELEASE.
       CONTINUE.
     ENDIF.
 
-*   --- RELEASE: start task release, retry transient CTS races ---
-    CLEAR: LV_SUBRC, LV_VERIFIED_STATUS.
-    LV_RELEASE_ATTEMPTS = 0.
-    DO 3 TIMES.
-      LV_RELEASE_ATTEMPTS = LV_RELEASE_ATTEMPTS + 1.
-      CALL FUNCTION 'TR_RELEASE_REQUEST'
-        EXPORTING
-          IV_TRKORR             = LS_CHILD-TRKORR
-          IV_DIALOG             = ' '
-          IV_AS_BACKGROUND_JOB  = 'X'
-          IV_SUCCESS_MESSAGE    = ' '
-          IV_DISPLAY_EXPORT_LOG = ' '
-        EXCEPTIONS
-          ACTION_ABORTED_BY_USER     = 1
-          CTS_INITIALIZATION_FAILURE = 2
-          DB_ACCESS_ERROR            = 3
-          DOCU_MISSING               = 4
-          ENQUEUE_FAILED             = 5
-          ERROR_IN_EXPORT_METHODS    = 6
-          EXPORT_FAILED              = 7
-          INVALID_REQUEST            = 8
-          NO_AUTHORIZATION           = 9
-          OBJECT_CHECK_ERROR         = 10
-          REPEAT_TOO_EARLY           = 11
-          REQUEST_ALREADY_RELEASED   = 12
-          OTHERS                     = 13.
-      LV_SUBRC = SY-SUBRC.
-      IF LV_SUBRC = 0 OR LV_SUBRC = 12.
-        EXIT.
-      ENDIF.
-      IF LV_SUBRC = 5 OR LV_SUBRC = 11.
-        WAIT UP TO 2 SECONDS.
-      ELSE.
-        EXIT.
-      ENDIF.
-    ENDDO.
-
-*   A successful background-job submission is not final release success.
-*   Wait until SAP confirms the task status before processing the parent.
-    IF LV_SUBRC = 0 OR LV_SUBRC = 12.
-      LV_WAIT_COUNT = 0.
-      DO 15 TIMES.
-        LV_WAIT_COUNT = LV_WAIT_COUNT + 1.
-        CLEAR LV_VERIFIED_STATUS.
-        SELECT SINGLE TRSTATUS INTO LV_VERIFIED_STATUS
-          FROM E070
-          WHERE TRKORR = LS_CHILD-TRKORR.
-        IF LV_VERIFIED_STATUS = 'R'
-          OR LV_VERIFIED_STATUS = 'N'.
-          EXIT.
-        ENDIF.
-        WAIT UP TO 2 SECONDS.
-      ENDDO.
-    ENDIF.
+*   --- RELEASE: release this task ---
+    CALL FUNCTION 'TR_RELEASE_REQUEST'
+      EXPORTING
+        IV_TRKORR             = LS_CHILD-TRKORR
+        IV_DIALOG             = ' '
+        IV_AS_BACKGROUND_JOB  = 'X'
+        IV_SUCCESS_MESSAGE    = ' '
+        IV_DISPLAY_EXPORT_LOG = ' '
+      EXCEPTIONS
+        ACTION_ABORTED_BY_USER     = 1
+        CTS_INITIALIZATION_FAILURE = 2
+        DB_ACCESS_ERROR            = 3
+        DOCU_MISSING               = 4
+        ENQUEUE_FAILED             = 5
+        ERROR_IN_EXPORT_METHODS    = 6
+        EXPORT_FAILED              = 7
+        INVALID_REQUEST            = 8
+        NO_AUTHORIZATION           = 9
+        OBJECT_CHECK_ERROR         = 10
+        REPEAT_TOO_EARLY           = 11
+        REQUEST_ALREADY_RELEASED   = 12
+        OTHERS                     = 13.
+    LV_SUBRC = SY-SUBRC.
 
     CLEAR: LV_BUF, LV_TASK_STATUS, LV_TASK_MESSAGE.
-    IF LV_VERIFIED_STATUS = 'R'
-      OR LV_VERIFIED_STATUS = 'N'.
+    IF LV_SUBRC = 0.
       LV_TASK_STATUS = 'RELEASED'.
-      LV_TASK_MESSAGE = 'Released successfully'.
-    ELSEIF LV_SUBRC = 0 OR LV_SUBRC = 12.
-      LV_TASK_STATUS = 'ERROR'.
-      LV_TASK_MESSAGE =
-        'Release confirmation timeout; check SAP status'.
-      LV_HAS_ERROR = 'X'.
+      LV_TASK_MESSAGE = 'Released'.
+    ELSEIF LV_SUBRC = 12.
+      LV_TASK_STATUS = 'SKIPPED'.
+      LV_TASK_MESSAGE = 'Already released'.
     ELSE.
       LV_RC_C = LV_SUBRC.
       CONDENSE LV_RC_C.
@@ -628,78 +591,47 @@ FUNCTION ZRFC_TRANSPORT_REQUEST_RELEASE.
     RETURN.
   ENDIF.
 
-* --- Release parent and retry transient CTS races ---
-  CLEAR: LV_SUBRC, LV_VERIFIED_STATUS.
-  LV_RELEASE_ATTEMPTS = 0.
-  DO 3 TIMES.
-    LV_RELEASE_ATTEMPTS = LV_RELEASE_ATTEMPTS + 1.
-    CALL FUNCTION 'TR_RELEASE_REQUEST'
-      EXPORTING
-        IV_TRKORR             = IV_TRKORR
-        IV_DIALOG             = ' '
-        IV_AS_BACKGROUND_JOB  = 'X'
-        IV_SUCCESS_MESSAGE    = ' '
-        IV_DISPLAY_EXPORT_LOG = ' '
-      EXCEPTIONS
-        ACTION_ABORTED_BY_USER     = 1
-        CTS_INITIALIZATION_FAILURE = 2
-        DB_ACCESS_ERROR            = 3
-        DOCU_MISSING               = 4
-        ENQUEUE_FAILED             = 5
-        ERROR_IN_EXPORT_METHODS    = 6
-        EXPORT_FAILED              = 7
-        INVALID_REQUEST            = 8
-        NO_AUTHORIZATION           = 9
-        OBJECT_CHECK_ERROR         = 10
-        REPEAT_TOO_EARLY           = 11
-        REQUEST_ALREADY_RELEASED   = 12
-        OTHERS                     = 13.
-    LV_SUBRC = SY-SUBRC.
-    IF LV_SUBRC = 0 OR LV_SUBRC = 12.
-      EXIT.
-    ENDIF.
-    IF LV_SUBRC = 5 OR LV_SUBRC = 11.
-      WAIT UP TO 2 SECONDS.
-    ELSE.
-      EXIT.
-    ENDIF.
-  ENDDO.
-
-* Confirm that SAP completed the parent release before reporting success.
-  IF LV_SUBRC = 0 OR LV_SUBRC = 12.
-    LV_WAIT_COUNT = 0.
-    DO 15 TIMES.
-      LV_WAIT_COUNT = LV_WAIT_COUNT + 1.
-      CLEAR LV_VERIFIED_STATUS.
-      SELECT SINGLE TRSTATUS INTO LV_VERIFIED_STATUS
-        FROM E070
-        WHERE TRKORR = IV_TRKORR.
-      IF LV_VERIFIED_STATUS = 'R'
-        OR LV_VERIFIED_STATUS = 'N'.
-        EXIT.
-      ENDIF.
-      WAIT UP TO 2 SECONDS.
-    ENDDO.
-  ENDIF.
+* --- Release parent ---
+  CALL FUNCTION 'TR_RELEASE_REQUEST'
+    EXPORTING
+      IV_TRKORR             = IV_TRKORR
+      IV_DIALOG             = ' '
+      IV_AS_BACKGROUND_JOB  = 'X'
+      IV_SUCCESS_MESSAGE    = ' '
+      IV_DISPLAY_EXPORT_LOG = ' '
+    EXCEPTIONS
+      ACTION_ABORTED_BY_USER     = 1
+      CTS_INITIALIZATION_FAILURE = 2
+      DB_ACCESS_ERROR            = 3
+      DOCU_MISSING               = 4
+      ENQUEUE_FAILED             = 5
+      ERROR_IN_EXPORT_METHODS    = 6
+      EXPORT_FAILED              = 7
+      INVALID_REQUEST            = 8
+      NO_AUTHORIZATION           = 9
+      OBJECT_CHECK_ERROR         = 10
+      REPEAT_TOO_EARLY           = 11
+      REQUEST_ALREADY_RELEASED   = 12
+      OTHERS                     = 13.
+  LV_SUBRC = SY-SUBRC.
 
   CLEAR LV_BUF.
-  IF LV_VERIFIED_STATUS = 'R'
-    OR LV_VERIFIED_STATUS = 'N'.
+  IF LV_SUBRC = 0.
     CONCATENATE IV_TRKORR LV_TRFUNCTION LV_AS4TEXT
-      'RELEASED' 'Released successfully' LV_SEQ_C
+      'RELEASED' 'Released' LV_SEQ_C
       INTO LV_BUF SEPARATED BY '|'.
     LV_LINE-LINE = LV_BUF.
     APPEND LV_LINE TO ET_RESULTS.
     EV_SUCCESS = 'X'.
     EV_MESSAGE = 'RELEASE_COMPLETE'.
-  ELSEIF LV_SUBRC = 0 OR LV_SUBRC = 12.
+  ELSEIF LV_SUBRC = 12.
     CONCATENATE IV_TRKORR LV_TRFUNCTION LV_AS4TEXT
-      'ERROR' 'Release confirmation timeout; check SAP status'
-      LV_SEQ_C
+      'SKIPPED' 'Already released' LV_SEQ_C
       INTO LV_BUF SEPARATED BY '|'.
     LV_LINE-LINE = LV_BUF.
     APPEND LV_LINE TO ET_RESULTS.
-    EV_MESSAGE = 'RELEASE_CONFIRMATION_TIMEOUT'.
+    EV_SUCCESS = 'X'.
+    EV_MESSAGE = 'RELEASE_COMPLETE'.
   ELSE.
     LV_RC_C = LV_SUBRC.
     CONDENSE LV_RC_C.

@@ -114,6 +114,9 @@ Use these `.env` values to enable it:
 SAP_CR_AUTO_SYNC_ENABLED=true
 SAP_CR_AUTO_SYNC_SYSTEMS=DEV,QA,PRD
 SAP_CR_AUTO_SYNC_INTERVAL_MINUTES=60
+SAP_CR_AUTO_SYNC_DEV_INTERVAL_MINUTES=10
+SAP_CR_AUTO_SYNC_QA_INTERVAL_MINUTES=20
+SAP_CR_AUTO_SYNC_PRD_INTERVAL_MINUTES=30
 SAP_CR_AUTO_SYNC_LOOKBACK_DAYS=3
 SAP_CR_AUTO_SYNC_ROW_COUNT=5000
 ```
@@ -121,6 +124,8 @@ SAP_CR_AUTO_SYNC_ROW_COUNT=5000
 Notes:
 
 - Auto sync runs in the web server process.
+- Each listed system uses `SAP_CR_AUTO_SYNC_<SYSTEM>_INTERVAL_MINUTES`; when omitted, it falls back to `SAP_CR_AUTO_SYNC_INTERVAL_MINUTES`.
+- Systems omitted from `SAP_CR_AUTO_SYNC_SYSTEMS` remain available for manual sync but are never scheduled automatically.
 - It will not start a second sync if a previous auto sync is still running.
 - Keep it disabled unless this app is intended to poll SAP continuously.
 

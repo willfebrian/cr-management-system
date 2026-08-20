@@ -75,7 +75,7 @@ async function runReleasePlatform(
     const timer = setTimeout(() => {
       child.kill();
       reject(serviceError("SAP_CR_RELEASE_TIMEOUT", 504));
-    }, config.sap.transportRequestTimeoutMs);
+    }, releaseRuntimeTimeoutMs(action, config.sap.transportRequestTimeoutMs));
 
     child.stdout.on("data", (chunk) => { stdout += chunk; });
     child.stderr.on("data", (chunk) => { stderr += chunk; });
@@ -104,6 +104,13 @@ async function runReleasePlatform(
     });
     child.stdin.end(JSON.stringify({ trkorr, targetSystem: normalizedTarget }));
   });
+}
+
+export function releaseRuntimeTimeoutMs(
+  action: "test-run" | "release",
+  baseTimeoutMs: number
+) {
+  return action === "release" ? Math.max(baseTimeoutMs, 180_000) : baseTimeoutMs;
 }
 
 export function classifyReleaseProcessResult(

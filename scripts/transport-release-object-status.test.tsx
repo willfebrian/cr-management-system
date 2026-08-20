@@ -46,6 +46,15 @@ test("RFC summarizes multiple inactive objects without counting the task row", (
   assert.match(source, /DELETE ADJACENT DUPLICATES/);
 });
 
+test("RFC verifies each background release in E070 before continuing to the next request", () => {
+  const source = readFileSync(new URL("../sap/abap/zrfc_transport_request_release/ZRFC_TRANSPORT_REQUEST_RELEASE.abap", import.meta.url), "utf8");
+  assert.match(source, /Release confirmation timeout/);
+  assert.match(source, /SELECT SINGLE TRSTATUS INTO LV_VERIFIED_STATUS/);
+  assert.match(source, /LV_VERIFIED_STATUS = 'R'/);
+  assert.match(source, /LV_SUBRC = 5 OR LV_SUBRC = 11/);
+  assert.match(source, /WAIT UP TO 2 SECONDS/);
+});
+
 test("groups SAP object validation rows under their owning task", async () => {
   const service = new TransportReleaseService({
     targetSystem: "DEV_AIX",
@@ -191,6 +200,15 @@ test("returns a complete failed Test Run payload instead of converting it into a
   assert.equal(classify!("test-run", 1, { ok: false, message: "RFC_FAILURE", tasks: [] }), "ERROR");
 });
 
+test("keeps the release worker alive long enough for SAP background confirmation", async () => {
+  const releaseService = await import("../src/server/sap/transportReleaseService.js") as Record<string, unknown>;
+  const timeoutFor = releaseService.releaseRuntimeTimeoutMs as undefined | ((action: "test-run" | "release", baseTimeoutMs: number) => number);
+  assert.equal(typeof timeoutFor, "function");
+  assert.equal(timeoutFor!("test-run", 60_000), 60_000);
+  assert.equal(timeoutFor!("release", 60_000), 180_000);
+  assert.equal(timeoutFor!("release", 240_000), 240_000);
+});
+
 test("renders object statuses beneath the owning Test Run task", async () => {
   const releaseModule = await import("../src/client/components/crTransport/CrTransportRelease.js") as Record<string, unknown>;
   const ResultsPanel = releaseModule.ReleaseResultsPanel as React.ComponentType<any> | undefined;
@@ -247,4 +265,31 @@ test("renders the parent task before child tasks without changing object groupin
   assert.ok(html.indexOf("ZCHILD") > html.indexOf("TRDK924683"));
   assert.match(html, /<td class="center muted">1<\/td><td class="monospace">TRDK924682/);
   assert.match(html, /<td class="center muted">2<\/td><td class="monospace">TRDK924683/);
+});
+
+test("renders clear release progress and final outcome notifications", async () => {
+  const releaseModule = await import("../src/client/components/crTransport/CrTransportRelease.js") as Record<string, unknown>;
+  const OperationStatus = releaseModule.ReleaseOperationStatus as React.ComponentType<any> | undefined;
+  assert.equal(typeof OperationStatus, "function");
+
+  const progress = renderToStaticMarkup(React.createElement(OperationStatus!, {
+    isReleasing: true,
+    result: null
+  }));
+  assert.match(progress, /Release in progress/);
+  assert.match(progress, /Waiting for SAP to confirm/);
+
+  const success = renderToStaticMarkup(React.createElement(OperationStatus!, {
+    isReleasing: false,
+    result: { ok: true, message: "RELEASE_COMPLETE", syncQueued: true }
+  }));
+  assert.match(success, /Released successfully/);
+  assert.match(success, /CR sync has been queued/);
+
+  const failed = renderToStaticMarkup(React.createElement(OperationStatus!, {
+    isReleasing: false,
+    result: { ok: false, message: "PARENT_RELEASE_FAILED" }
+  }));
+  assert.match(failed, /Release failed/);
+  assert.match(failed, /PARENT_RELEASE_FAILED/);
 });

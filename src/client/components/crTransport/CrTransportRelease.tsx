@@ -75,6 +75,7 @@ export function CrTransportRelease({
   const [searchFilter, setSearchFilter] = useState("");
   const [busy, setBusy] = useState<"candidates" | "test-run" | "release" | "">("");
   const [error, setError] = useState("");
+  const [releaseError, setReleaseError] = useState("");
   const [testRunResult, setTestRunResult] = useState<ReleaseResult | null>(null);
   const [releaseResult, setReleaseResult] = useState<ReleaseResult | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -100,14 +101,15 @@ export function CrTransportRelease({
     return () => window.clearTimeout(timeout);
   }, [targetSystem, refreshToken, searchFilter]);
 
-  async function loadCandidates(query = searchFilter) {
+  async function loadCandidates(query = searchFilter, preserveReleaseOutcome = false) {
     const requestId = ++candidateRequestRef.current;
     setBusy("candidates");
     setError("");
+    if (!preserveReleaseOutcome) setReleaseError("");
     setCandidates([]);
     setSelectedTrkorr("");
     setTestRunResult(null);
-    setReleaseResult(null);
+    if (!preserveReleaseOutcome) setReleaseResult(null);
     try {
       const result = await fetchReleaseCandidates(targetSystem, 50, query);
       if (requestId !== candidateRequestRef.current) return;
@@ -124,6 +126,7 @@ export function CrTransportRelease({
     if (!selectedTrkorr) return;
     setBusy("test-run");
     setError("");
+    setReleaseError("");
     setTestRunResult(null);
     setReleaseResult(null);
     try {
@@ -140,15 +143,16 @@ export function CrTransportRelease({
     if (!selectedTrkorr) return;
     setBusy("release");
     setError("");
+    setReleaseError("");
     try {
       const result = await executeRelease(selectedTrkorr, targetSystem);
       setReleaseResult(result);
       if (result.ok) {
         setConfirmOpen(false);
-        void loadCandidates(searchFilter);
+        void loadCandidates(searchFilter, true);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setReleaseError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy("");
     }
@@ -210,7 +214,7 @@ export function CrTransportRelease({
                   <tr
                     key={row.trkorr}
                     className={selectedTrkorr === row.trkorr ? "selected" : ""}
-                    onClick={() => { setSelectedTrkorr(row.trkorr); setTestRunResult(null); setReleaseResult(null); setError(""); }}
+                    onClick={() => { setSelectedTrkorr(row.trkorr); setTestRunResult(null); setReleaseResult(null); setError(""); setReleaseError(""); }}
                   >
                     <td className="monospace">{row.trkorr}</td>
                     <td>{row.description || "-"}</td>
@@ -242,13 +246,19 @@ export function CrTransportRelease({
                 {busy === "test-run" ? <Loader2 className="spin" size={15} /> : <PlayCircle size={15} />} Test Run
               </button>
               <button className="primary" onClick={() => setConfirmOpen(true)} disabled={!canRelease}>
-                {busy === "release" ? <Loader2 className="spin" size={15} /> : <Unlock size={15} />} Release
+                {busy === "release" ? <Loader2 className="spin" size={15} /> : <Unlock size={15} />} {busy === "release" ? "Release in progress" : "Release"}
               </button>
             </div>
           </div>
         ) : (
           <div className="cr-release-empty">Select a parent transport request to view its child tasks and run the pre-check before release.</div>
         )}
+
+        <ReleaseOperationStatus
+          isReleasing={busy === "release"}
+          result={releaseResult}
+          error={releaseError}
+        />
 
         {error && (
           <div className="cr-release-error"><XCircle size={15} /> {error}</div>
@@ -263,7 +273,7 @@ export function CrTransportRelease({
         busy={busy === "release"}
         candidate={selectedCandidate}
         targetLabel={selectedTargetLabel}
-        error={confirmOpen ? error : ""}
+        error={confirmOpen ? releaseError : ""}
         onClose={() => setConfirmOpen(false)}
         onConfirm={handleRelease}
       />
@@ -380,3 +390,39 @@ export function ReleaseResultsPanel({ title, result }: { title: string; result: 
 }
 
 const ResultsPanel = ReleaseResultsPanel;
+
+export function ReleaseOperationStatus({
+  isReleasing,
+  result,
+  error = ""
+}: {
+  isReleasing: boolean;
+  result: (Pick<ReleaseResult, "ok" | "message" | "syncQueued">) | null;
+  error?: string;
+}) {
+  if (isReleasing) {
+    return (
+      <div className="cr-release-operation cr-release-operation-progress" role="status">
+        <Loader2 className="spin" size={16} />
+        <div><strong>Release in progress</strong><span>Waiting for SAP to confirm the child tasks and parent request.</span></div>
+      </div>
+    );
+  }
+  if (result?.ok) {
+    return (
+      <div className="cr-release-operation cr-release-operation-success" role="status">
+        <CheckCircle2 size={16} />
+        <div><strong>Released successfully</strong><span>{result.syncQueued ? "CR sync has been queued." : "SAP confirmed the request as released."}</span></div>
+      </div>
+    );
+  }
+  if (error || result?.ok === false) {
+    return (
+      <div className="cr-release-operation cr-release-operation-failed" role="alert">
+        <XCircle size={16} />
+        <div><strong>Release failed</strong><span>{error || result?.message || "SAP did not confirm the release."}</span></div>
+      </div>
+    );
+  }
+  return null;
+}
