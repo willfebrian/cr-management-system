@@ -68,7 +68,12 @@ export async function buildIssueTemplatePreview(
       ABAPER: abaper
     };
 
-    const renderedMarkdown = renderMarkdownTemplate(customTemplate, tokens, objectListHtml);
+    const renderedMarkdown = renderMarkdownTemplate(
+      customTemplate,
+      tokens,
+      objectListHtml,
+      { htmlProfile: kind === "ticket" ? "glpi" : "default" }
+    );
     return {
       kind,
       title: kind === "email" ? "Generate Email Template" : "Generate GLPI Ticket Template",

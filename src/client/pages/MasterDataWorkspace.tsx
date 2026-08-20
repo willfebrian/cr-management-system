@@ -66,7 +66,9 @@ Mohon dibantu melengkapi kelengkapan dokumen sebagai berikut:
 Terima kasih.
 
 Regards,
-**{FULLNAME}**`;
+
+<u>**{FULLNAME}**</u>
+**({USER_DEPARTMENT})**`;
 
   const DEFAULT_EMAIL_TEMPLATE = `Dear All,
 

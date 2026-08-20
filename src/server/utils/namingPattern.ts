@@ -58,9 +58,11 @@ export async function getAppSetting(key: string, defaultValue: string): Promise<
 export function renderMarkdownTemplate(
   template: string,
   tokens: Record<string, string>,
-  htmlObjectList?: string
+  htmlObjectList?: string,
+  options: { htmlProfile?: "default" | "glpi" } = {}
 ): { body: string; bodyHtml: string } {
   if (!template) return { body: "", bodyHtml: "" };
+  const isGlpi = options.htmlProfile === "glpi";
 
   let text = template;
   for (const [key, value] of Object.entries(tokens)) {
@@ -114,8 +116,8 @@ export function renderMarkdownTemplate(
     const olMatch = trimmed.match(/^(\d+)\.\s+(.+)$/);
     if (olMatch) {
       if (inUl) { htmlLines.push("</ul>"); inUl = false; }
-      if (!inOl) { htmlLines.push("<ol style='margin: 4px 0; padding-left: 24px;'>"); inOl = true; }
-      htmlLines.push(`<li>${processInlineFormatting(olMatch[2])}</li>`);
+      if (!inOl) { htmlLines.push(isGlpi ? "<ol>" : "<ol style='margin: 4px 0; padding-left: 24px;'>"); inOl = true; }
+      htmlLines.push(`<li>${processInlineFormatting(olMatch[2], isGlpi)}</li>`);
       continue;
     }
 
@@ -123,7 +125,7 @@ export function renderMarkdownTemplate(
     const ulMatch = trimmed.match(/^[-•]\s+(.+)$/);
     if (ulMatch) {
       if (inOl) { htmlLines.push("</ol>"); inOl = false; }
-      if (!inUl) { htmlLines.push("<ul style='margin: 4px 0; padding-left: 20px;'>"); inUl = true; }
+      if (!inUl) { htmlLines.push(isGlpi ? "<ul>" : "<ul style='margin: 4px 0; padding-left: 20px;'>"); inUl = true; }
       
       let itemContent = ulMatch[1];
 
@@ -131,9 +133,9 @@ export function renderMarkdownTemplate(
       if (itemContent.includes("{OBJECT_LIST}")) {
         const cleanContent = itemContent.replace("{OBJECT_LIST}", "").trim();
         const formattedObjList = htmlObjectList || `<ul style="margin: 4px 0; padding-left: 20px;"><li>${tokens["OBJECT_LIST"] || "-"}</li></ul>`;
-        htmlLines.push(`<li>${processInlineFormatting(cleanContent)}${formattedObjList}</li>`);
+        htmlLines.push(`<li>${processInlineFormatting(cleanContent, isGlpi)}${formattedObjList}</li>`);
       } else {
-        htmlLines.push(`<li>${processInlineFormatting(itemContent)}</li>`);
+        htmlLines.push(`<li>${processInlineFormatting(itemContent, isGlpi)}</li>`);
       }
       continue;
     }
@@ -143,13 +145,19 @@ export function renderMarkdownTemplate(
     if (inOl) { htmlLines.push("</ol>"); inOl = false; }
 
     if (trimmed.startsWith("### ")) {
-      htmlLines.push(`<h3 style="margin: 12px 0 6px 0; font-size: 1.05rem; font-weight: 700; color: var(--color-text-heading, #111827);">${processInlineFormatting(trimmed.substring(4))}</h3>`);
+      htmlLines.push(isGlpi
+        ? `<h3>${processInlineFormatting(trimmed.substring(4), true)}</h3>`
+        : `<h3 style="margin: 12px 0 6px 0; font-size: 1.05rem; font-weight: 700; color: var(--color-text-heading, #111827);">${processInlineFormatting(trimmed.substring(4))}</h3>`);
     } else if (trimmed.startsWith("## ")) {
-      htmlLines.push(`<h2 style="margin: 14px 0 8px 0; font-size: 1.2rem; font-weight: 700; color: var(--color-text-heading, #111827);">${processInlineFormatting(trimmed.substring(3))}</h2>`);
+      htmlLines.push(isGlpi
+        ? `<h2>${processInlineFormatting(trimmed.substring(3), true)}</h2>`
+        : `<h2 style="margin: 14px 0 8px 0; font-size: 1.2rem; font-weight: 700; color: var(--color-text-heading, #111827);">${processInlineFormatting(trimmed.substring(3))}</h2>`);
     } else if (trimmed === "") {
-      htmlLines.push("<div style='height: 6px;'></div>");
+      htmlLines.push(isGlpi ? "<div>&nbsp;</div>" : "<div style='height: 6px;'></div>");
     } else {
-      htmlLines.push(`<p style="margin: 4px 0; line-height: 1.5;">${processInlineFormatting(trimmed)}</p>`);
+      htmlLines.push(isGlpi
+        ? `<p>${processInlineFormatting(trimmed, true)}</p>`
+        : `<p style="margin: 4px 0; line-height: 1.5;">${processInlineFormatting(trimmed)}</p>`);
     }
   }
 
@@ -162,16 +170,22 @@ export function renderMarkdownTemplate(
   };
 }
 
-function processInlineFormatting(str: string): string {
+function processInlineFormatting(str: string, isGlpi = false): string {
+  const strongOpen = isGlpi ? "<strong>" : "<b>";
+  const strongClose = isGlpi ? "</strong>" : "</b>";
   let res = str
-    .replace(/\*\*(.*?)\*\*/g, "<b>$1</b>")
+    .replace(/\*\*(.*?)\*\*/g, `${strongOpen}$1${strongClose}`)
     .replace(/\*(.*?)\*/g, "<i>$1</i>")
     .replace(/<u>(.*?)<\/u>/gi, "<u>$1</u>")
-    .replace(/`(.*?)`/g, "<code style='background: var(--color-bg-subtle, #f1f5f9); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 0.85em;'>$1</code>");
+    .replace(/`(.*?)`/g, isGlpi
+      ? "<code>$1</code>"
+      : "<code style='background: var(--color-bg-subtle, #f1f5f9); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 0.85em;'>$1</code>");
 
   // Auto-link URLs if not already wrapped in <a href>
   res = res.replace(/(https?:\/\/[^\s<]+)/gi, (url) => {
-    return `<a href="${url}" target="_blank" style="color: var(--color-primary, #0f766e); text-decoration: underline;">${url}</a>`;
+    return isGlpi
+      ? `<a href="${url}" target="_blank">${url}</a>`
+      : `<a href="${url}" target="_blank" style="color: var(--color-primary, #0f766e); text-decoration: underline;">${url}</a>`;
   });
 
   return res;

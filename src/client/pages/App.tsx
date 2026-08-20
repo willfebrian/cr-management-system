@@ -5,6 +5,8 @@ import { AlertTriangle, BarChart3, Ban, Calendar, CheckCircle2, ChevronDown, Che
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, downloadUserCrTemplate, fetchAdminSettings, fetchAdminPeople, fetchCrDetail, fetchCrList, fetchDashboard, fetchGlpiPrefillActors, fetchGlpiTicketDetail, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchSapSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind, type GlpiTicketDetail, type AdminPersonRow, type SapSystemRow } from "../api";
 import { buildGlpiPrefillSubmission, formatGlpiOpeningDate, submitGlpiPrefill } from "../glpiPrefill";
+import { runTemplatePreviewAction } from "../templatePreviewActions";
+import { ModalAwareActionDock } from "../components/ModalAwareActionDock";
 import { IncompleteGroupCards } from "../components/IncompleteGroupCards";
 import { DisplayNameList } from "../components/DisplayNameList";
 import { DEFAULT_ISSUE_COLUMNS, IssueColumnMenu, type IssueColumnKey } from "../components/IssueColumnMenu";
@@ -6388,11 +6390,6 @@ function IssueEditor({
     }
   }
 
-  useEffect(() => {
-    if (templatePreview) {
-      void copyTemplateToClipboard(false);
-    }
-  }, [templatePreview]);
   const [templateBusy, setTemplateBusy] = useState<"" | "email" | "ticket" | "cr-transport" | "cr-user">("");
   const [generateMenuOpen, setGenerateMenuOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -7314,7 +7311,7 @@ function IssueEditor({
 
       <div className="editor-safe-space" aria-hidden="true" />
       <div className="issue-save-bar">
-        <div className="sticky-actions">
+        <ModalAwareActionDock modalOpen={Boolean(templatePreview)}>
           {mode === "change" ? (
             <>
               <div className="sticky-action-menu">
@@ -7400,7 +7397,7 @@ function IssueEditor({
               <span>{saving ? "Saving..." : "Save Issue"}</span>
             </button>
           ) : null}
-        </div>
+        </ModalAwareActionDock>
       </div>
       {templatePreview ? (
         <div className="modal-backdrop" role="presentation" onClick={(e) => { if (e.target === e.currentTarget) setTemplatePreview(null); }}>
@@ -7419,7 +7416,10 @@ function IssueEditor({
             )}
 
             <div className="modal-actions" style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "10px", marginTop: "20px", flexWrap: "wrap" }}>
-              <button type="button" className="secondary" onClick={() => void copyTemplateToClipboard(true)} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+              <button type="button" className="secondary" onClick={() => void runTemplatePreviewAction("copy", {
+                copy: () => copyTemplateToClipboard(true),
+                openGlpi: () => undefined
+              })} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
                 {copiedTemplate ? <CheckCircle2 size={15} color="#10b981" /> : <Copy size={15} />}
                 <span>{copiedTemplate ? "Copied!" : "Copy Template"}</span>
               </button>
@@ -7431,14 +7431,20 @@ function IssueEditor({
                   style={{ display: "inline-flex", alignItems: "center", gap: "8px", background: "#0f766e", color: "white", padding: "8px 16px", borderRadius: "8px", fontWeight: 600, border: "none", cursor: "pointer" }}
                   onClick={() => {
                     if (!detail?.issue || !templatePreview) return;
-                    void copyTemplateToClipboard(false);
-                    submitGlpiPrefill(window, buildGlpiPrefillSubmission({
-                      title: `Issue no: ${issueKey} (${detail.issue.issue_name})`,
-                      descriptionHtml: templatePreview.bodyHtml || templatePreview.body,
-                      openedAt: formatGlpiOpeningDate(),
-                      abaperGlpiUserIds: templatePreview.abaperGlpiUserIds || []
-                    }));
-                    onNotify?.("success", "GLPI preview opened. Review the pre-filled form before clicking Add.");
+                    const currentIssue = detail.issue;
+                    const currentTemplate = templatePreview;
+                    void runTemplatePreviewAction("open-glpi", {
+                      copy: () => copyTemplateToClipboard(false),
+                      openGlpi: () => {
+                        submitGlpiPrefill(window, buildGlpiPrefillSubmission({
+                          title: `Issue no: ${issueKey} (${currentIssue.issue_name})`,
+                          descriptionHtml: currentTemplate.bodyHtml || currentTemplate.body,
+                          openedAt: formatGlpiOpeningDate(),
+                          abaperGlpiUserIds: currentTemplate.abaperGlpiUserIds || []
+                        }));
+                        onNotify?.("success", "GLPI preview opened. Review the pre-filled form before clicking Add.");
+                      }
+                    });
                   }}
                 >
                   <ExternalLink size={15} />
