@@ -21,9 +21,48 @@ const server = http.createServer(async (req, res) => {
 
   const reqUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 
-  if (reqUrl.pathname === "/health") {
+  if (reqUrl.pathname === "/" || reqUrl.pathname === "/health") {
+    const isHtml = (req.headers.accept || "").includes("text/html");
+    if (isHtml) {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>CR Outlook Agent</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+    .card { background: #1e293b; padding: 2rem; border-radius: 12px; border: 1px solid #334155; box-shadow: 0 4px 20px rgba(0,0,0,0.5); max-width: 460px; text-align: center; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981; padding: 4px 14px; border-radius: 9999px; font-weight: bold; font-size: 0.85rem; margin-bottom: 1rem; }
+    h2 { margin: 0 0 0.5rem 0; color: #ffffff; }
+    p { color: #94a3b8; font-size: 0.9rem; margin: 0 0 1rem 0; }
+    code { background: #0f172a; padding: 3px 8px; border-radius: 4px; color: #38bdf8; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge">&#9679; Running Active</div>
+    <h2>CR Outlook Agent</h2>
+    <p>The agent is running and ready on port <code>18888</code> for passwordless Outlook email extraction.</p>
+    <p style="font-size: 0.8rem; color: #64748b; margin-top: 1.5rem;">You can now close this tab and return to CR Management System.</p>
+  </div>
+</body>
+</html>`);
+      return;
+    }
+
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok", agent: "cr-outlook-agent", platform: process.platform }));
+    res.end(JSON.stringify({
+      status: "ok",
+      message: "CR Outlook Agent is active and running.",
+      agent: "cr-outlook-agent",
+      platform: process.platform,
+      port: PORT,
+      endpoints: {
+        health: "/health",
+        fetchOutlook: "/api/fetch-outlook?q=<subject>&limit=5&maxChars=15000"
+      }
+    }));
     return;
   }
 
