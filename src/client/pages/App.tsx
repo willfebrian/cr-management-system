@@ -3,7 +3,8 @@ import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { AlertTriangle, BarChart3, Ban, Calendar, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Copy, Database, ExternalLink, FileOutput, FileSearch, FileText, FolderKanban, GitPullRequest, KeyRound, LayoutGrid, Link as LinkIcon, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Tag, Trash2, Unlock, User, Users, X, XCircle } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, downloadUserCrTemplate, fetchAdminSettings, fetchAdminPeople, fetchCrDetail, fetchCrList, fetchDashboard, fetchGlpiTicketDetail, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchSapSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind, type GlpiTicketDetail, type AdminPersonRow, type SapSystemRow } from "../api";
+import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, downloadUserCrTemplate, fetchAdminSettings, fetchAdminPeople, fetchCrDetail, fetchCrList, fetchDashboard, fetchGlpiPrefillActors, fetchGlpiTicketDetail, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchSapSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind, type GlpiTicketDetail, type AdminPersonRow, type SapSystemRow } from "../api";
+import { buildGlpiPrefillSubmission, formatGlpiOpeningDate, submitGlpiPrefill } from "../glpiPrefill";
 import { IncompleteGroupCards } from "../components/IncompleteGroupCards";
 import { DisplayNameList } from "../components/DisplayNameList";
 import { DEFAULT_ISSUE_COLUMNS, IssueColumnMenu, type IssueColumnKey } from "../components/IssueColumnMenu";
@@ -6353,7 +6354,12 @@ function IssueEditor({
     await executeAiGeneration({});
   }
 
-  const [templatePreview, setTemplatePreview] = useState<{ title: string; body: string; bodyHtml?: string } | null>(null);
+  const [templatePreview, setTemplatePreview] = useState<{
+    title: string;
+    body: string;
+    bodyHtml?: string;
+    abaperGlpiUserIds?: number[];
+  } | null>(null);
   const [copiedTemplate, setCopiedTemplate] = useState(false);
 
   async function copyTemplateToClipboard(notify = true) {
@@ -6680,7 +6686,15 @@ function IssueEditor({
     }
     setTemplateBusy(kind);
     try {
-      setTemplatePreview(await fetchIssueTemplate(detail.issue.id, kind));
+      if (kind === "ticket") {
+        const [preview, actors] = await Promise.all([
+          fetchIssueTemplate(detail.issue.id, kind),
+          fetchGlpiPrefillActors(detail.issue.id)
+        ]);
+        setTemplatePreview({ ...preview, ...actors });
+      } else {
+        setTemplatePreview(await fetchIssueTemplate(detail.issue.id, kind));
+      }
     } catch (err) {
       setTemplatePreview({
         title: kind === "email" ? "Generate Email Template" : "Generate GLPI Ticket Template",
@@ -7415,10 +7429,16 @@ function IssueEditor({
                   type="button"
                   className="primary"
                   style={{ display: "inline-flex", alignItems: "center", gap: "8px", background: "#0f766e", color: "white", padding: "8px 16px", borderRadius: "8px", fontWeight: 600, border: "none", cursor: "pointer" }}
-                  onClick={async () => {
-                    await copyTemplateToClipboard(false);
-                    onNotify?.("success", "Template copied! Paste (Ctrl+V) in GLPI Ticket form.");
-                    window.open("https://itsm.trst.co.id/front/ticket.form.php", "_blank");
+                  onClick={() => {
+                    if (!detail?.issue || !templatePreview) return;
+                    void copyTemplateToClipboard(false);
+                    submitGlpiPrefill(window, buildGlpiPrefillSubmission({
+                      title: `Issue no: ${issueKey} (${detail.issue.issue_name})`,
+                      descriptionHtml: templatePreview.bodyHtml || templatePreview.body,
+                      openedAt: formatGlpiOpeningDate(),
+                      abaperGlpiUserIds: templatePreview.abaperGlpiUserIds || []
+                    }));
+                    onNotify?.("success", "GLPI preview opened. Review the pre-filled form before clicking Add.");
                   }}
                 >
                   <ExternalLink size={15} />

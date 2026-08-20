@@ -100,6 +100,12 @@ export async function fetchIssueTemplate(id: number, kind: "email" | "ticket"): 
   return fetchJson(`/api/issues/${id}/templates/${kind}`);
 }
 
+export async function fetchGlpiPrefillActors(id: number): Promise<{
+  abaperGlpiUserIds: number[];
+}> {
+  return fetchJson(`/api/issues/${id}/glpi-prefill-actors`);
+}
+
 export async function downloadCrTransportTemplate(id: number) {
   const response = await fetch(`/api/issues/${id}/templates/cr-transport`);
   if (!response.ok) {

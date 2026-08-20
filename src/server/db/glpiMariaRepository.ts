@@ -55,6 +55,35 @@ export function isGlpiMariaConfigured() {
   return Boolean(getPool());
 }
 
+type GlpiEmailLookupDb = {
+  query(sql: string, params: unknown[]): Promise<[any[], unknown]>;
+};
+
+export async function findGlpiUserIdsByEmails(
+  emails: string[],
+  database?: GlpiEmailLookupDb
+): Promise<number[]> {
+  const normalized = [...new Set(
+    emails.map((email) => email.trim().toLowerCase()).filter(Boolean)
+  )];
+  if (!normalized.length) return [];
+
+  const db = database || getPool();
+  if (!db) return [];
+  const [queryRows] = await db.query(
+    `SELECT DISTINCT u.id AS user_id
+     FROM glpi_useremails ue
+     JOIN glpi_users u ON u.id = ue.users_id
+     WHERE LOWER(TRIM(ue.email)) IN (?)
+       AND u.is_active = 1
+       AND u.is_deleted = 0
+     ORDER BY u.id`,
+    [normalized]
+  );
+  const rows = queryRows as Array<{ user_id: number | string }>;
+  return rows.map((row) => Number(row.user_id)).filter(Number.isFinite);
+}
+
 export async function searchGlpiTicketsFromMaria(q = ""): Promise<GlpiTicketRow[]> {
   const db = getPool();
   if (!db) return [];

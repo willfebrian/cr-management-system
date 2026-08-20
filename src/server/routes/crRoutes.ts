@@ -7,7 +7,7 @@ import {
   listCrRequests,
 } from "../db/crRepository.js";
 import { cancelIssue, deleteIssue, getIssueDashboardInsights, getIssueDetail, getIssueStatusOptions, getLeaderDashboardInsights, getNextIssueNumber, getNextSubIssueNumber, listIssues, registerIssuePeople, saveIssue, searchIssueCrHelpdesk, searchIssueCrLinks, searchIssuePeople, validateIssuePeople } from "../db/issueRepository.js";
-import { getGlpiTicketDetailFromMaria, searchGlpiTicketsFromMaria } from "../db/glpiMariaRepository.js";
+import { findGlpiUserIdsByEmails, getGlpiTicketDetailFromMaria, searchGlpiTicketsFromMaria } from "../db/glpiMariaRepository.js";
 import { getSapCrSystem, listSapCrSystems } from "../config.js";
 import { normalizeLookbackDays, normalizeSyncMode, normalizeSystemCodes, runCrSync } from "../sync/crSyncRunner.js";
 import { buildCrTransportDocument, buildUserCrDocument } from "../templates/crTransportTemplateService.js";
@@ -204,6 +204,29 @@ crRoutes.get("/issues/:id", async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     res.json(await getIssueDetail(numberQuery(req.params.id, 0)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+crRoutes.get("/issues/:id/glpi-prefill-actors", async (req, res, next) => {
+  try {
+    await assertDatabaseConfigured();
+    const issueId = numberQuery(req.params.id, 0);
+    const { rows } = await pool.query(
+      `SELECT people.email
+       FROM issue_participants participant
+       JOIN issue_people people ON people.id = participant.person_id
+       WHERE participant.issue_id = $1
+         AND participant.role = 'abaper'
+         AND NULLIF(TRIM(COALESCE(people.email, '')), '') IS NOT NULL`,
+      [issueId]
+    );
+    res.json({
+      abaperGlpiUserIds: await findGlpiUserIdsByEmails(
+        rows.map((row) => String(row.email || ""))
+      )
+    });
   } catch (error) {
     next(error);
   }
