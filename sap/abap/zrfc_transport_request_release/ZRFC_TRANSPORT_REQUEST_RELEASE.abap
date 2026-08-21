@@ -94,7 +94,26 @@ FUNCTION ZRFC_TRANSPORT_REQUEST_RELEASE.
   ENDIF.
   IF LV_TRSTATUS <> 'D'.
     IF LV_TRSTATUS = 'R' OR LV_TRSTATUS = 'N'.
-      EV_MESSAGE = 'ALREADY_RELEASED'.
+      IF IV_MODE = 'RELEASE'.
+        SELECT SINGLE AS4TEXT INTO LV_AS4TEXT
+          FROM E07T
+          WHERE TRKORR = IV_TRKORR AND LANGU = 'E'.
+        IF SY-SUBRC <> 0.
+          SELECT SINGLE AS4TEXT INTO LV_AS4TEXT
+            FROM E07T WHERE TRKORR = IV_TRKORR.
+        ENDIF.
+        LV_SEQ_C = '1'.
+        CLEAR LV_BUF.
+        CONCATENATE IV_TRKORR LV_TRFUNCTION LV_AS4TEXT
+          'RELEASED' 'Already released' LV_SEQ_C
+          INTO LV_BUF SEPARATED BY '|'.
+        LV_LINE-LINE = LV_BUF.
+        APPEND LV_LINE TO ET_RESULTS.
+        EV_SUCCESS = 'X'.
+        EV_MESSAGE = 'RELEASE_COMPLETE'.
+      ELSE.
+        EV_MESSAGE = 'ALREADY_RELEASED'.
+      ENDIF.
     ELSE.
       EV_MESSAGE = 'REQUEST_NOT_MODIFIABLE'.
     ENDIF.
@@ -532,23 +551,22 @@ FUNCTION ZRFC_TRANSPORT_REQUEST_RELEASE.
       ENDIF.
     ENDDO.
 
-*   A successful background-job submission is not final release success.
-*   Wait until SAP confirms the task status before processing the parent.
-    IF LV_SUBRC = 0 OR LV_SUBRC = 12.
-      LV_WAIT_COUNT = 0.
-      DO 15 TIMES.
-        LV_WAIT_COUNT = LV_WAIT_COUNT + 1.
-        CLEAR LV_VERIFIED_STATUS.
-        SELECT SINGLE TRSTATUS INTO LV_VERIFIED_STATUS
-          FROM E070
-          WHERE TRKORR = LS_CHILD-TRKORR.
-        IF LV_VERIFIED_STATUS = 'R'
-          OR LV_VERIFIED_STATUS = 'N'.
-          EXIT.
-        ENDIF.
-        WAIT UP TO 2 SECONDS.
-      ENDDO.
-    ENDIF.
+*   The immediate return code is not final release status. SAP can keep
+*   processing the background export after returning a non-zero code.
+*   Always wait for the authoritative E070 state before deciding.
+    LV_WAIT_COUNT = 0.
+    DO 15 TIMES.
+      LV_WAIT_COUNT = LV_WAIT_COUNT + 1.
+      CLEAR LV_VERIFIED_STATUS.
+      SELECT SINGLE TRSTATUS INTO LV_VERIFIED_STATUS
+        FROM E070
+        WHERE TRKORR = LS_CHILD-TRKORR.
+      IF LV_VERIFIED_STATUS = 'R'
+        OR LV_VERIFIED_STATUS = 'N'.
+        EXIT.
+      ENDIF.
+      WAIT UP TO 2 SECONDS.
+    ENDDO.
 
     CLEAR: LV_BUF, LV_TASK_STATUS, LV_TASK_MESSAGE.
     IF LV_VERIFIED_STATUS = 'R'
@@ -666,21 +684,21 @@ FUNCTION ZRFC_TRANSPORT_REQUEST_RELEASE.
   ENDDO.
 
 * Confirm that SAP completed the parent release before reporting success.
-  IF LV_SUBRC = 0 OR LV_SUBRC = 12.
-    LV_WAIT_COUNT = 0.
-    DO 15 TIMES.
-      LV_WAIT_COUNT = LV_WAIT_COUNT + 1.
-      CLEAR LV_VERIFIED_STATUS.
-      SELECT SINGLE TRSTATUS INTO LV_VERIFIED_STATUS
-        FROM E070
-        WHERE TRKORR = IV_TRKORR.
-      IF LV_VERIFIED_STATUS = 'R'
-        OR LV_VERIFIED_STATUS = 'N'.
-        EXIT.
-      ENDIF.
-      WAIT UP TO 2 SECONDS.
-    ENDDO.
-  ENDIF.
+* Poll even after a non-zero immediate return code because the background
+* export may still be running.
+  LV_WAIT_COUNT = 0.
+  DO 15 TIMES.
+    LV_WAIT_COUNT = LV_WAIT_COUNT + 1.
+    CLEAR LV_VERIFIED_STATUS.
+    SELECT SINGLE TRSTATUS INTO LV_VERIFIED_STATUS
+      FROM E070
+      WHERE TRKORR = IV_TRKORR.
+    IF LV_VERIFIED_STATUS = 'R'
+      OR LV_VERIFIED_STATUS = 'N'.
+      EXIT.
+    ENDIF.
+    WAIT UP TO 2 SECONDS.
+  ENDDO.
 
   CLEAR LV_BUF.
   IF LV_VERIFIED_STATUS = 'R'

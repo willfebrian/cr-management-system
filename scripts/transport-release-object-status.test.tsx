@@ -55,6 +55,36 @@ test("RFC verifies each background release in E070 before continuing to the next
   assert.match(source, /WAIT UP TO 2 SECONDS/);
 });
 
+test("RFC verifies SAP status even when the immediate release return code is non-zero", () => {
+  const source = readFileSync(new URL("../sap/abap/zrfc_transport_request_release/ZRFC_TRANSPORT_REQUEST_RELEASE.abap", import.meta.url), "utf8");
+  const childConfirmation = source.slice(
+    source.indexOf("*   The immediate return code is not final release status."),
+    source.indexOf("CLEAR: LV_BUF, LV_TASK_STATUS, LV_TASK_MESSAGE.")
+  );
+  const parentConfirmation = source.slice(
+    source.indexOf("* Confirm that SAP completed the parent release before reporting success."),
+    source.indexOf("CLEAR LV_BUF.", source.indexOf("* Confirm that SAP completed the parent release before reporting success."))
+  );
+
+  assert.match(childConfirmation, /LV_WAIT_COUNT = 0\.\s+DO 15 TIMES\./);
+  assert.doesNotMatch(childConfirmation, /IF LV_SUBRC = 0 OR LV_SUBRC = 12\.\s+LV_WAIT_COUNT/);
+  assert.match(parentConfirmation, /LV_WAIT_COUNT = 0\.\s+DO 15 TIMES\./);
+  assert.doesNotMatch(parentConfirmation, /IF LV_SUBRC = 0 OR LV_SUBRC = 12\.\s+LV_WAIT_COUNT/);
+});
+
+test("RFC treats an already released parent as idempotent release success", () => {
+  const source = readFileSync(new URL("../sap/abap/zrfc_transport_request_release/ZRFC_TRANSPORT_REQUEST_RELEASE.abap", import.meta.url), "utf8");
+  const statusGuard = source.slice(
+    source.indexOf("IF LV_TRSTATUS <> 'D'."),
+    source.indexOf("CALL FUNCTION 'TR_AUTHORITY_CHECK_TRFUNCTION'")
+  );
+
+  assert.match(statusGuard, /IF IV_MODE = 'RELEASE'/);
+  assert.match(statusGuard, /EV_SUCCESS = 'X'/);
+  assert.match(statusGuard, /EV_MESSAGE = 'RELEASE_COMPLETE'/);
+  assert.match(statusGuard, /'RELEASED' 'Already released'/);
+});
+
 test("groups SAP object validation rows under their owning task", async () => {
   const service = new TransportReleaseService({
     targetSystem: "DEV_AIX",
