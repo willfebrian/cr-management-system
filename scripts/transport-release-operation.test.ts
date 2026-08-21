@@ -235,3 +235,48 @@ test("startReleaseOperation does not schedule a duplicate active operation", asy
   assert.equal(returned.id, "42");
   assert.equal(scheduled, 0);
 });
+
+test("client API starts and polls a release operation", async () => {
+  const api = await import("../src/client/api/transportReleaseApi.js");
+  assert.equal(typeof api.startReleaseOperation, "function");
+  assert.equal(typeof api.fetchReleaseOperation, "function");
+  assert.equal(typeof api.isReleaseOperationTerminal, "function");
+
+  const urls: string[] = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    urls.push(String(input));
+    return new Response(JSON.stringify({
+      ok: true,
+      operation: {
+        id: "42",
+        trkorr: "TRDK924752",
+        targetSystem: "DEV_AIX",
+        status: urls.length === 1 ? "queued" : "succeeded",
+        phase: "verifying",
+        message: "RELEASE_COMPLETE",
+        result: null,
+        syncStatus: "queued",
+        syncMessage: null,
+        createdAt: "",
+        startedAt: null,
+        finishedAt: null,
+        updatedAt: ""
+      }
+    }), { status: urls.length === 1 ? 202 : 200, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+
+  try {
+    const started = await api.startReleaseOperation("TRDK924752", "DEV_AIX");
+    const completed = await api.fetchReleaseOperation(started.id);
+    assert.equal(started.status, "queued");
+    assert.equal(completed.status, "succeeded");
+    assert.equal(api.isReleaseOperationTerminal(completed.status), true);
+    assert.deepEqual(urls, [
+      "/api/cr-transports/release/operations",
+      "/api/cr-transports/release/operations/42"
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

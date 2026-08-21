@@ -329,3 +329,30 @@ test("renders clear release progress and final outcome notifications", async () 
   assert.match(failed, /Release failed/);
   assert.match(failed, /PARENT_RELEASE_FAILED/);
 });
+
+test("renders tracked release phase, timeout, and non-blocking sync status", async () => {
+  const releaseModule = await import("../src/client/components/crTransport/CrTransportRelease.js") as Record<string, unknown>;
+  const OperationStatus = releaseModule.ReleaseOperationStatus as React.ComponentType<any>;
+
+  const progress = renderToStaticMarkup(React.createElement(OperationStatus, {
+    isReleasing: true,
+    result: null,
+    operation: { status: "running", phase: "releasing_children", message: "Waiting for SAP confirmation", syncStatus: "not_queued" }
+  }));
+  assert.match(progress, /Releasing child tasks/);
+
+  const timeout = renderToStaticMarkup(React.createElement(OperationStatus, {
+    isReleasing: false,
+    result: null,
+    operation: { status: "timed_out", phase: "verifying", message: "SAP_CR_RELEASE_TIMEOUT", syncStatus: "not_queued" }
+  }));
+  assert.match(timeout, /Release confirmation timed out/);
+
+  const success = renderToStaticMarkup(React.createElement(OperationStatus, {
+    isReleasing: false,
+    result: { ok: true, message: "RELEASE_COMPLETE" },
+    operation: { status: "succeeded", phase: "verifying", message: "RELEASE_COMPLETE", syncStatus: "running" }
+  }));
+  assert.match(success, /Released successfully/);
+  assert.match(success, /synchronization is running in the background/i);
+});

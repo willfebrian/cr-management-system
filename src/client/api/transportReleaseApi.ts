@@ -32,6 +32,26 @@ export type ReleaseResult = {
   syncQueued?: boolean;
 };
 
+export type ReleaseOperationStatus = "queued" | "running" | "succeeded" | "failed" | "timed_out";
+export type ReleaseOperationPhase = "queued" | "releasing_children" | "releasing_parent" | "verifying";
+export type ReleaseOperationSyncStatus = "not_queued" | "queued" | "running" | "succeeded" | "failed";
+
+export type ReleaseOperation = {
+  id: string;
+  trkorr: string;
+  targetSystem: string;
+  status: ReleaseOperationStatus;
+  phase: ReleaseOperationPhase;
+  message: string | null;
+  result: ReleaseResult | null;
+  syncStatus: ReleaseOperationSyncStatus;
+  syncMessage: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  updatedAt: string;
+};
+
 export type ReleaseCandidateRow = {
   trkorr: string;
   description: string;
@@ -60,6 +80,27 @@ export async function testRunRelease(trkorr: string, targetSystem = "DEV_AIX"): 
 
 export async function executeRelease(trkorr: string, targetSystem = "DEV_AIX"): Promise<ReleaseResult> {
   return request("/api/cr-transports/release/execute", { trkorr, targetSystem });
+}
+
+export async function startReleaseOperation(trkorr: string, targetSystem = "DEV_AIX"): Promise<ReleaseOperation> {
+  const response = await request<{ ok: boolean; operation: ReleaseOperation }>(
+    "/api/cr-transports/release/operations",
+    { trkorr, targetSystem }
+  );
+  return response.operation;
+}
+
+export async function fetchReleaseOperation(id: string): Promise<ReleaseOperation> {
+  const response = await request<{ ok: boolean; operation: ReleaseOperation }>(
+    `/api/cr-transports/release/operations/${encodeURIComponent(id)}`,
+    undefined,
+    "GET"
+  );
+  return response.operation;
+}
+
+export function isReleaseOperationTerminal(status: ReleaseOperationStatus) {
+  return status === "succeeded" || status === "failed" || status === "timed_out";
 }
 
 async function request<T>(url: string, body: unknown, method: "GET" | "POST" = "POST"): Promise<T> {

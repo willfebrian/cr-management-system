@@ -4,8 +4,11 @@ import { UIModal } from "../common/UIModal";
 import {
   fetchReleaseCandidates,
   testRunRelease,
-  executeRelease,
+  startReleaseOperation,
+  fetchReleaseOperation,
+  isReleaseOperationTerminal,
   type ReleaseCandidateRow,
+  type ReleaseOperation,
   type ReleaseResult,
   type ReleaseTaskResult
 } from "../../api/transportReleaseApi";
@@ -14,6 +17,7 @@ import { transportSystemOptionLabel } from "./transportTarget";
 import { transportObjectLabel } from "../../../shared/transportObjectLabels";
 
 const TARGET_SYSTEM_STORAGE_KEY = "cr_release_target_system";
+const RELEASE_OPERATION_POLL_MS = 2000;
 
 export function nextReleaseRefreshToken(current: number, view: string, syncSucceeded: boolean) {
   return view === "cr-transport-release" && syncSucceeded ? current + 1 : current;
@@ -78,8 +82,10 @@ export function CrTransportRelease({
   const [releaseError, setReleaseError] = useState("");
   const [testRunResult, setTestRunResult] = useState<ReleaseResult | null>(null);
   const [releaseResult, setReleaseResult] = useState<ReleaseResult | null>(null);
+  const [releaseOperation, setReleaseOperation] = useState<ReleaseOperation | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const candidateRequestRef = useRef(0);
+  const releasePollGenerationRef = useRef(0);
 
   useEffect(() => {
     if (externalAvailableSystems) return;
@@ -110,6 +116,7 @@ export function CrTransportRelease({
     setSelectedTrkorr("");
     setTestRunResult(null);
     if (!preserveReleaseOutcome) setReleaseResult(null);
+    if (!preserveReleaseOutcome) setReleaseOperation(null);
     try {
       const result = await fetchReleaseCandidates(targetSystem, 50, query);
       if (requestId !== candidateRequestRef.current) return;
@@ -129,6 +136,7 @@ export function CrTransportRelease({
     setReleaseError("");
     setTestRunResult(null);
     setReleaseResult(null);
+    setReleaseOperation(null);
     try {
       const result = await testRunRelease(selectedTrkorr, targetSystem);
       setTestRunResult(result);
@@ -141,24 +149,61 @@ export function CrTransportRelease({
 
   async function handleRelease() {
     if (!selectedTrkorr) return;
+    const generation = ++releasePollGenerationRef.current;
     setBusy("release");
     setError("");
     setReleaseError("");
     try {
-      const result = await executeRelease(selectedTrkorr, targetSystem);
-      setReleaseResult(result);
-      if (result.ok) {
+      let operation = await startReleaseOperation(selectedTrkorr, targetSystem);
+      setReleaseOperation(operation);
+      while (!isReleaseOperationTerminal(operation.status)) {
+        await waitForReleasePoll();
+        if (generation !== releasePollGenerationRef.current) return;
+        operation = await fetchReleaseOperation(operation.id);
+        setReleaseOperation(operation);
+      }
+
+      if (operation.status === "succeeded" && operation.result?.ok) {
+        setReleaseResult(operation.result);
         setConfirmOpen(false);
-        void loadCandidates(searchFilter, true);
+        if (operation.syncStatus === "queued" || operation.syncStatus === "running") {
+          void monitorBackgroundSync(operation, generation);
+        } else {
+          void loadCandidates(searchFilter, true);
+        }
+      } else {
+        if (operation.result) setReleaseResult(operation.result);
+        setReleaseError(operation.status === "timed_out"
+          ? "Release confirmation timed out. Check SAP transport status."
+          : operation.message || operation.result?.message || "SAP did not confirm the release.");
       }
     } catch (e) {
       setReleaseError(e instanceof Error ? e.message : String(e));
     } finally {
-      setBusy("");
+      if (generation === releasePollGenerationRef.current) setBusy("");
+    }
+  }
+
+  async function monitorBackgroundSync(initial: ReleaseOperation, generation: number) {
+    let operation = initial;
+    while (operation.syncStatus === "queued" || operation.syncStatus === "running") {
+      await waitForReleasePoll();
+      if (generation !== releasePollGenerationRef.current) return;
+      try {
+        operation = await fetchReleaseOperation(operation.id);
+        setReleaseOperation(operation);
+      } catch {
+        return;
+      }
+    }
+    if (operation.syncStatus === "succeeded" && generation === releasePollGenerationRef.current) {
+      void loadCandidates(searchFilter, true);
     }
   }
 
   function handleTargetSystemChange(val: string) {
+    releasePollGenerationRef.current += 1;
+    setReleaseOperation(null);
     if (onTargetSystemChange) {
       onTargetSystemChange(val);
     } else {
@@ -214,7 +259,7 @@ export function CrTransportRelease({
                   <tr
                     key={row.trkorr}
                     className={selectedTrkorr === row.trkorr ? "selected" : ""}
-                    onClick={() => { setSelectedTrkorr(row.trkorr); setTestRunResult(null); setReleaseResult(null); setError(""); setReleaseError(""); }}
+                    onClick={() => { releasePollGenerationRef.current += 1; setSelectedTrkorr(row.trkorr); setTestRunResult(null); setReleaseResult(null); setReleaseOperation(null); setError(""); setReleaseError(""); }}
                   >
                     <td className="monospace">{row.trkorr}</td>
                     <td>{row.description || "-"}</td>
@@ -258,6 +303,7 @@ export function CrTransportRelease({
           isReleasing={busy === "release"}
           result={releaseResult}
           error={releaseError}
+          operation={releaseOperation}
         />
 
         {error && (
@@ -394,25 +440,49 @@ const ResultsPanel = ReleaseResultsPanel;
 export function ReleaseOperationStatus({
   isReleasing,
   result,
-  error = ""
+  error = "",
+  operation = null
 }: {
   isReleasing: boolean;
   result: (Pick<ReleaseResult, "ok" | "message" | "syncQueued">) | null;
   error?: string;
+  operation?: Pick<ReleaseOperation, "status" | "phase" | "message" | "syncStatus" | "syncMessage"> | null;
 }) {
   if (isReleasing) {
+    const phaseMessage = operation?.phase === "releasing_children"
+      ? "Releasing child tasks and waiting for SAP confirmation."
+      : operation?.phase === "releasing_parent"
+        ? "Releasing the parent request and waiting for SAP confirmation."
+        : operation?.phase === "verifying"
+          ? "Verifying the final release status in SAP."
+          : "Waiting for SAP to confirm the child tasks and parent request.";
     return (
       <div className="cr-release-operation cr-release-operation-progress" role="status">
         <Loader2 className="spin" size={16} />
-        <div><strong>Release in progress</strong><span>Waiting for SAP to confirm the child tasks and parent request.</span></div>
+        <div><strong>Release in progress</strong><span>{phaseMessage}</span></div>
+      </div>
+    );
+  }
+  if (operation?.status === "timed_out") {
+    return (
+      <div className="cr-release-operation cr-release-operation-failed" role="alert">
+        <XCircle size={16} />
+        <div><strong>Release confirmation timed out</strong><span>Check the transport status in SAP before trying again.</span></div>
       </div>
     );
   }
   if (result?.ok) {
+    const syncMessage = operation?.syncStatus === "queued" || operation?.syncStatus === "running"
+      ? "CR data synchronization is running in the background."
+      : operation?.syncStatus === "failed"
+        ? `SAP confirmed the release, but CR data synchronization failed${operation.syncMessage ? `: ${operation.syncMessage}` : "."}`
+        : result.syncQueued
+          ? "CR sync has been queued."
+          : "SAP confirmed the request as released.";
     return (
       <div className="cr-release-operation cr-release-operation-success" role="status">
         <CheckCircle2 size={16} />
-        <div><strong>Released successfully</strong><span>{result.syncQueued ? "CR sync has been queued." : "SAP confirmed the request as released."}</span></div>
+        <div><strong>Released successfully</strong><span>{syncMessage}</span></div>
       </div>
     );
   }
@@ -425,4 +495,8 @@ export function ReleaseOperationStatus({
     );
   }
   return null;
+}
+
+function waitForReleasePoll() {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, RELEASE_OPERATION_POLL_MS));
 }
