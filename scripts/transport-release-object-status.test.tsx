@@ -226,6 +226,12 @@ test("returns a complete failed Test Run payload instead of converting it into a
     hasErrors: true,
     tasks: [{ trkorr: "TRDK924683", status: "ERROR", objects: [{ objectName: "ZBAP_READY_REPORT_F01", status: "ERROR" }] }]
   }), "RESULT");
+  assert.equal(classify!("release", 0, {
+    ok: false,
+    mode: "RELEASE",
+    message: "PARTIAL_RELEASE_TASK_FAILED",
+    tasks: [{ trkorr: "TRDK924753", status: "ERROR", message: "Release failed RC 7", objects: [] }]
+  }), "RESULT");
   assert.equal(classify!("release", 0, { ok: false, message: "RELEASE_FAILED", tasks: [] }), "ERROR");
   assert.equal(classify!("test-run", 1, { ok: false, message: "RFC_FAILURE", tasks: [] }), "ERROR");
 });

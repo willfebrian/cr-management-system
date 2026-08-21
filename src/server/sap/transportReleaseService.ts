@@ -121,11 +121,11 @@ export function classifyReleaseProcessResult(
   if (exitCode !== 0) return "ERROR";
   if (result.ok !== false) return "RESULT";
 
-  const isCompleteValidationResult = action === "test-run"
-    && result.mode === "TEST_RUN"
+  const expectedMode = action === "test-run" ? "TEST_RUN" : "RELEASE";
+  const isCompleteOperationResult = result.mode === expectedMode
     && Array.isArray(result.tasks)
     && result.tasks.length > 0;
-  return isCompleteValidationResult ? "RESULT" : "ERROR";
+  return isCompleteOperationResult ? "RESULT" : "ERROR";
 }
 
 type ReleaseObjectQuery = (

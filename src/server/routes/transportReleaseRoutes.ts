@@ -7,6 +7,7 @@ import { getLastSuccessfulSyncRun } from "../db/crRepository.js";
 import { pool } from "../db/pool.js";
 import { runCrSync } from "../sync/crSyncRunner.js";
 import { shouldQueueTransportCreateSync, transportCreateSyncOptions } from "../sync/transportRequestSync.js";
+import { getReleaseOperation, startReleaseOperation } from "../sap/transportReleaseOperationService.js";
 
 export const transportReleaseRoutes = Router();
 transportReleaseRoutes.use(requireAdmin);
@@ -108,6 +109,40 @@ transportReleaseRoutes.post("/test-run", asyncHandler(async (req, res) => {
   const targetSystem = normalizeTargetSystem(req.body?.targetSystem || "DEV_AIX");
   const result = await testRunRelease(trkorr, targetSystem);
   res.json(result);
+}));
+
+/**
+ * POST /api/cr-transports/release/operations
+ * Starts one tracked release operation or returns the active duplicate.
+ */
+transportReleaseRoutes.post("/operations", asyncHandler(async (req, res) => {
+  const trkorr = String(req.body?.trkorr || "").trim().toUpperCase();
+  if (!trkorr) {
+    res.status(400).json({ ok: false, message: "trkorr is required." });
+    return;
+  }
+  const targetSystem = normalizeTargetSystem(req.body?.targetSystem || "DEV_AIX");
+  const operation = await startReleaseOperation({ trkorr, targetSystem });
+  res.status(operation.status === "queued" || operation.status === "running" ? 202 : 200)
+    .json({ ok: true, operation });
+}));
+
+/**
+ * GET /api/cr-transports/release/operations/:id
+ * Returns the durable release operation state for frontend polling.
+ */
+transportReleaseRoutes.get("/operations/:id", asyncHandler(async (req, res) => {
+  const id = String(req.params.id || "").trim();
+  if (!/^\d+$/.test(id)) {
+    res.status(400).json({ ok: false, message: "Release operation id is invalid." });
+    return;
+  }
+  const operation = await getReleaseOperation(id);
+  if (!operation) {
+    res.status(404).json({ ok: false, message: "Release operation was not found." });
+    return;
+  }
+  res.json({ ok: true, operation });
 }));
 
 /**

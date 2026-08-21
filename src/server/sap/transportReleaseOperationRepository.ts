@@ -55,6 +55,25 @@ export async function findReleaseOperation(
   return result.rows[0] ? mapReleaseOperation(result.rows[0]) : null;
 }
 
+export async function claimReleaseOperation(
+  id: string,
+  query: Query = defaultQuery
+): Promise<ReleaseOperation | null> {
+  const result = await query(
+    `UPDATE cr_management.release_operations
+        SET status = 'running',
+            phase = 'releasing_children',
+            message = 'Waiting for SAP to confirm child tasks and parent request',
+            started_at = COALESCE(started_at, now()),
+            updated_at = now()
+      WHERE id = $1
+        AND status = 'queued'
+      RETURNING *`,
+    [id]
+  );
+  return result.rows[0] ? mapReleaseOperation(result.rows[0]) : null;
+}
+
 export async function updateReleaseOperation(
   id: string,
   patch: {
