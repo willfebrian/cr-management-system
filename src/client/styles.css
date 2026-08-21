@@ -6199,3 +6199,49 @@ body.dark-theme .cr-release-badge-skip { background: var(--surface-subtle); colo
   .cr-release-buttons button { flex: 1; }
   .cr-release-table { min-width: 680px; }
 }
+
+/* Full-screen Word template editor */
+body.docx-template-editor-open { overflow: hidden; }
+.docx-template-editor-overlay { position: fixed; inset: 0; z-index: 10000; display: flex; flex-direction: column; min-width: 0; background: var(--surface-page, #f8fafc); color: var(--color-text, #0f172a); }
+.docx-template-editor-header { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 20px; background: var(--surface-card, #fff); border-bottom: 1px solid var(--color-border, #e2e8f0); box-shadow: var(--shadow-sm); }
+.docx-template-editor-heading, .docx-template-editor-actions, .docx-template-tag-heading { display: flex; align-items: center; gap: 12px; }
+.docx-template-editor-heading { min-width: 0; }
+.docx-template-editor-heading h2 { margin: 0; font-size: var(--font-size-card-title, 18px); color: var(--color-text, #0f172a); }
+.docx-template-editor-heading p { margin: 3px 0 0; font-size: var(--font-size-label, 12px); color: var(--color-text-muted, #64748b); }
+.docx-template-editor-file-icon { display: grid; place-items: center; width: 38px; height: 38px; flex: 0 0 auto; color: var(--color-primary, #0f766e); background: var(--surface-selected, #ecfdf5); border-radius: var(--radius-control, 10px); }
+.docx-editor-icon-button, .docx-editor-secondary-button, .docx-editor-primary-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-radius: 8px; font-weight: 700; cursor: pointer; transition: all .15s ease; }
+.docx-editor-icon-button { width: 36px; height: 36px; border: 1px solid var(--color-border, #e2e8f0); color: var(--color-text-muted, #64748b); background: var(--surface-card, #fff); }
+.docx-editor-secondary-button, .docx-editor-primary-button { min-height: 38px; padding: 0 14px; font-size: 13px; }
+.docx-editor-secondary-button { border: 1px solid var(--color-border, #cbd5e1); color: var(--color-text, #334155); background: var(--surface-card, #fff); }
+.docx-editor-primary-button { border: 1px solid var(--color-primary, #0f766e); color: #fff; background: var(--color-primary, #0f766e); }
+.docx-editor-icon-button:hover, .docx-editor-secondary-button:hover { background: var(--surface-subtle, #f1f5f9); }
+.docx-editor-primary-button:hover { background: var(--color-primary-hover, #0d655e); }
+.docx-editor-secondary-button:disabled, .docx-editor-primary-button:disabled { opacity: .55; cursor: not-allowed; }
+.docx-template-save-status { color: #15803d; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.docx-template-save-status.is-dirty { color: #b45309; }
+.docx-template-editor-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); flex: 1; min-height: 0; }
+.docx-template-tag-panel { display: flex; flex-direction: column; min-height: 0; padding: 18px 16px; background: var(--surface-card, #fff); border-right: 1px solid var(--color-border, #e2e8f0); }
+.docx-template-tag-heading { align-items: flex-start; margin-bottom: 14px; color: var(--color-primary, #0f766e); }
+.docx-template-tag-heading div { display: grid; gap: 2px; }
+.docx-template-tag-heading strong { color: var(--color-text, #0f172a); font-size: 14px; }
+.docx-template-tag-heading span { color: var(--color-text-muted, #64748b); font-size: 11px; }
+.docx-template-tag-search { display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 0 10px; border: 1px solid var(--color-border, #cbd5e1); border-radius: 8px; color: var(--color-text-muted, #64748b); background: var(--surface-page, #f8fafc); }
+.docx-template-tag-search:focus-within { border-color: var(--color-primary, #0f766e); box-shadow: 0 0 0 3px var(--color-focus-ring); }
+.docx-template-tag-search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--color-text, #0f172a); font: inherit; font-size: 12px; }
+.docx-template-tag-groups { overflow-y: auto; margin: 14px -4px 0 0; padding-right: 6px; }
+.docx-template-tag-groups section { display: grid; gap: 6px; margin-bottom: 16px; }
+.docx-template-tag-groups h3 { margin: 0 0 2px; color: var(--color-text-muted, #64748b); font-size: 10px; text-transform: uppercase; letter-spacing: .07em; }
+.docx-template-tag-button { width: 100%; padding: 7px 9px; overflow: hidden; border: 1px solid #bbf7d0; border-radius: 6px; background: #f0fdf4; color: var(--color-primary, #0f766e); font-family: Consolas, monospace; font-size: 11px; font-weight: 700; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.docx-template-tag-button:hover { border-color: var(--color-primary, #0f766e); background: #dcfce7; }
+.docx-template-tag-empty { color: var(--color-text-muted, #64748b); font-size: 12px; text-align: center; }
+.docx-template-document-panel { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: #e8edf3; }
+.docx-template-document-panel > .docx-editor { height: 100%; }
+.docx-template-editor-state { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--color-text-muted, #64748b); }
+.docx-template-editor-state.is-error { color: #991b1b; }
+.docx-template-editor-state span { font-size: 12px; }
+.spin { animation: docxTemplateSpin .8s linear infinite; }
+@keyframes docxTemplateSpin { to { transform: rotate(360deg); } }
+.docx-template-card-edit-button { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--color-primary, #0f766e); background: #ecfdf5; color: var(--color-primary, #0f766e); font-size: .8rem; font-weight: 700; cursor: pointer; }
+.docx-template-card-edit-button:hover { background: #dff5ef; }
+@media (max-width: 900px) { .docx-template-editor-header { align-items: flex-start; flex-direction: column; } .docx-template-editor-actions { width: 100%; justify-content: flex-end; } .docx-template-editor-layout { grid-template-columns: 220px minmax(0, 1fr); } }
+@media (max-width: 680px) { .docx-template-save-status { display: none; } .docx-template-editor-layout { grid-template-columns: 1fr; grid-template-rows: 190px minmax(0, 1fr); } .docx-template-tag-panel { border-right: 0; border-bottom: 1px solid var(--color-border, #e2e8f0); } .docx-template-tag-groups { display: flex; gap: 12px; } .docx-template-tag-groups section { min-width: 220px; } }

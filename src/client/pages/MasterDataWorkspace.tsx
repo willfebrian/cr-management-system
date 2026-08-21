@@ -4,6 +4,7 @@ import { Check, Loader2, Save, X, Trash2, CheckCircle2, XCircle, AlertTriangle, 
 import { STATUS_COLOR_CONFIGS, applyCustomStatusColors } from "../utils/tagColors";
 import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
 import { TableDataLoader } from "../components/InteractiveLoaders";
+import { DocxTemplateEditor, type DocxTemplateType } from "../components/DocxTemplateEditor";
 
 interface MasterDataWorkspaceProps {
   mode?: "master-data" | "settings";
@@ -192,6 +193,7 @@ Regards,
   const [activePatternField, setActivePatternField] = useState<"single" | "project" | "user">("single");
   const [docxInfo, setDocxInfo] = useState<DocxTemplatesInfo | null>(null);
   const [docxUploading, setDocxUploading] = useState<"" | "single" | "project" | "user">("");
+  const [editingDocxTemplate, setEditingDocxTemplate] = useState<DocxTemplateType | null>(null);
 
   function loadDocxInfo() {
     fetchDocxTemplatesInfo()
@@ -709,6 +711,17 @@ Regards,
 
   return (
     <div className="master-data-workspace">
+      {editingDocxTemplate ? (
+        <DocxTemplateEditor
+          type={editingDocxTemplate}
+          onClose={() => setEditingDocxTemplate(null)}
+          onSaved={(message) => {
+            showToast("success", message);
+            loadDocxInfo();
+          }}
+          onError={(message) => showToast("error", message)}
+        />
+      ) : null}
 
       {activeTab === "people" && (
         <div className="people-tab" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
@@ -2074,6 +2087,10 @@ Regards,
                           />
                         </label>
 
+                        <button type="button" className="docx-template-card-edit-button" onClick={() => setEditingDocxTemplate("single")} disabled={!!docxUploading}>
+                          <Edit2 size={14} /> Edit Template
+                        </button>
+
                         {docxInfo?.single?.isCustom ? (
                           <button
                             type="button"
@@ -2137,6 +2154,10 @@ Regards,
                           />
                         </label>
 
+                        <button type="button" className="docx-template-card-edit-button" onClick={() => setEditingDocxTemplate("project")} disabled={!!docxUploading}>
+                          <Edit2 size={14} /> Edit Template
+                        </button>
+
                         {docxInfo?.project?.isCustom ? (
                           <button
                             type="button"
@@ -2199,6 +2220,10 @@ Regards,
                             }}
                           />
                         </label>
+
+                        <button type="button" className="docx-template-card-edit-button" onClick={() => setEditingDocxTemplate("user")} disabled={!!docxUploading}>
+                          <Edit2 size={14} /> Edit Template
+                        </button>
 
                         {docxInfo?.user?.isCustom ? (
                           <button
