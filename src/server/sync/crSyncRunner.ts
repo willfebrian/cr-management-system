@@ -13,7 +13,7 @@ import {
   upsertCrHeader
 } from "../db/crRepository.js";
 import { config, getSapCrSystem } from "../config.js";
-import { readCrCreationLogs, readCrDetail, readCrList, readTransportImportLogs } from "../sap/crExtractor.js";
+import { readCrCreationLogs, readCrDetail, readCrDetailFromServer, readCrList, readTransportImportLogs } from "../sap/crExtractor.js";
 import {
   reconcileLegacyTransportLifecycle,
   type LifecycleReconciliationTargetResult,
@@ -71,6 +71,86 @@ export type RunCrSyncResult = {
   orphanImportsRecovered: number;
   orphanImportsFailed: number;
 };
+
+type CreatedTransportSyncSource = {
+  code: string;
+  server: string;
+  owner: string;
+};
+
+type CreatedTransportSyncDependencies = {
+  getSystem: typeof getSapCrSystem;
+  createSyncRun: typeof createSyncRun;
+  finishSyncRun: typeof finishSyncRun;
+  readCrDetail: (trkorr: string, source: CreatedTransportSyncSource) => ReturnType<typeof readCrDetailFromServer>;
+  upsertCrHeader: typeof upsertCrHeader;
+  insertCrStatusSnapshot: typeof insertCrStatusSnapshot;
+  replaceCrObjects: typeof replaceCrObjects;
+  now: () => Date;
+};
+
+const createdTransportSyncDependencies: CreatedTransportSyncDependencies = {
+  getSystem: getSapCrSystem,
+  createSyncRun,
+  finishSyncRun,
+  readCrDetail: (trkorr, source) => readCrDetailFromServer(trkorr, source.server),
+  upsertCrHeader,
+  insertCrStatusSnapshot,
+  replaceCrObjects,
+  now: () => new Date()
+};
+
+export async function syncCreatedTransportRequest(
+  trkorr: string,
+  sourceSystemCode: string,
+  overrides: Partial<CreatedTransportSyncDependencies> = {}
+) {
+  const dependencies = { ...createdTransportSyncDependencies, ...overrides };
+  const requestNumber = String(trkorr || "").trim().toUpperCase();
+  if (!requestNumber) throw new Error("Created transport request number is required for SQL sync.");
+
+  const system = resolveCreatedTransportSyncSource(sourceSystemCode, dependencies.getSystem);
+  const today = ymd(dependencies.now());
+  const syncRunId = await dependencies.createSyncRun({
+    scopeOwner: system.owner,
+    sapSystemCode: system.code,
+    periodType: "created_request",
+    periodValue: 1,
+    fromDate: today,
+    toDate: today,
+    maxRows: 1,
+    syncMode: "incremental",
+    lookbackDays: null
+  });
+
+  try {
+    const detail = await dependencies.readCrDetail(requestNumber, system);
+    if (!detail.header) throw new Error("SAP did not return the newly created transport request.");
+    if (!isScopedParentRequest(detail.header, system.owner)) {
+      throw new Error(`Created transport request owner is ${detail.header.owner || "<empty>"}, not ${system.owner}.`);
+    }
+
+    await dependencies.upsertCrHeader(detail.header, system.code, syncRunId);
+    await dependencies.insertCrStatusSnapshot(detail.header, system.code, syncRunId);
+    for (const task of detail.tasks) {
+      await dependencies.upsertCrHeader(task, system.code, syncRunId);
+      await dependencies.insertCrStatusSnapshot(task, system.code, syncRunId);
+    }
+    await dependencies.replaceCrObjects(detail, system.code);
+    await dependencies.finishSyncRun(syncRunId, "success", null, 1);
+    return { ok: true, trkorr: requestNumber, syncRunId };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await dependencies.finishSyncRun(syncRunId, "failed", message, 0).catch(() => undefined);
+    throw error;
+  }
+}
+
+function resolveCreatedTransportSyncSource(sourceSystemCode: string, getSystem: typeof getSapCrSystem): CreatedTransportSyncSource {
+  const code = String(sourceSystemCode || "").trim().toUpperCase();
+  if (code === "DEV_NC") return { code, server: "SAP_DEV_NC", owner: "TRSTDEV" };
+  return getSystem(code);
+}
 
 export async function runCrSync(options: RunCrSyncOptions): Promise<RunCrSyncResult> {
   const systemCodes = normalizeSystemCodes(options.systemCodes);

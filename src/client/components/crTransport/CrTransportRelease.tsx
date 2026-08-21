@@ -15,6 +15,7 @@ import {
 import { fetchSapSystems, type SapSystemRow } from "../../api";
 import { transportSystemOptionLabel } from "./transportTarget";
 import { transportObjectLabel } from "../../../shared/transportObjectLabels";
+import { isReleaseCrIncomplete } from "./crTransportProgress";
 
 const TARGET_SYSTEM_STORAGE_KEY = "cr_release_target_system";
 const RELEASE_OPERATION_POLL_MS = 2000;
@@ -45,13 +46,15 @@ interface CrTransportReleaseProps {
   onTargetSystemChange?: (val: string) => void;
   availableSystems?: SapSystemRow[];
   refreshToken?: number;
+  onIncompleteChange?: (incomplete: boolean) => void;
 }
 
 export function CrTransportRelease({
   targetSystem: externalTargetSystem,
   onTargetSystemChange,
   availableSystems: externalAvailableSystems,
-  refreshToken = 0
+  refreshToken = 0,
+  onIncompleteChange
 }: CrTransportReleaseProps) {
   const [internalTargetSystem, setInternalTargetSystem] = useState<string>(() => {
     try { return localStorage.getItem(TARGET_SYSTEM_STORAGE_KEY) || "DEV_AIX"; } catch { return "DEV_AIX"; }
@@ -86,6 +89,13 @@ export function CrTransportRelease({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const candidateRequestRef = useRef(0);
   const releasePollGenerationRef = useRef(0);
+
+  useEffect(() => {
+    onIncompleteChange?.(isReleaseCrIncomplete({
+      selectedTrkorr,
+      releaseSucceeded: Boolean(releaseResult?.ok)
+    }));
+  }, [onIncompleteChange, releaseResult?.ok, selectedTrkorr]);
 
   useEffect(() => {
     if (externalAvailableSystems) return;

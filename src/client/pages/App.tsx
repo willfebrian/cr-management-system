@@ -1,11 +1,12 @@
 import { applyCustomStatusColors } from "../utils/tagColors";
 import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
-import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { AlertTriangle, BarChart3, Ban, Calendar, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Copy, Database, ExternalLink, FileOutput, FileSearch, FileText, FolderKanban, GitPullRequest, KeyRound, LayoutGrid, Link as LinkIcon, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Tag, Trash2, Unlock, User, Users, X, XCircle } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportTemplate, downloadUserCrTemplate, fetchAdminSettings, fetchAdminPeople, fetchCrDetail, fetchCrList, fetchDashboard, fetchGlpiPrefillActors, fetchGlpiTicketDetail, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchSapSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind, type GlpiTicketDetail, type AdminPersonRow, type SapSystemRow } from "../api";
+import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportBatch, downloadCrTransportTemplate, downloadUserCrTemplate, fetchAdminSettings, fetchAdminPeople, fetchCrDetail, fetchCrList, fetchDashboard, fetchGlpiPrefillActors, fetchGlpiTicketDetail, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchSapSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind, type GlpiTicketDetail, type AdminPersonRow, type SapSystemRow } from "../api";
 import { buildGlpiPrefillSubmission, formatGlpiOpeningDate, submitGlpiPrefill } from "../glpiPrefill";
 import { runTemplatePreviewAction } from "../templatePreviewActions";
+import { buildTemplateClipboardPayload } from "../templateClipboard";
 import { ModalAwareActionDock } from "../components/ModalAwareActionDock";
 import { IncompleteGroupCards } from "../components/IncompleteGroupCards";
 import { DisplayNameList } from "../components/DisplayNameList";
@@ -19,6 +20,7 @@ import { MasterDataWorkspace } from "./MasterDataWorkspace";
 import { AuditLogReport } from "./AuditLogReport";
 import { CrTransportCreate } from "../components/crTransport/CrTransportCreate";
 import { CrTransportRelease, nextReleaseRefreshToken } from "../components/crTransport/CrTransportRelease";
+import { getCrTransportLeaveWarning } from "../components/crTransport/crTransportProgress";
 import { TRANSPORT_TARGETS, transportSystemOptionLabel, transportTargetLabel } from "../components/crTransport/transportTarget";
 import { UIModal, type ModalType } from "../components/common/UIModal";
 import { fetchProjectDetail } from "../api/projectApi";
@@ -268,6 +270,8 @@ export function App() {
   }, [view]);
   const [projectEditorDetail, setProjectEditorDetail] = useState<ProjectDetailModel | null>(null);
   const [projectFormDirty, setProjectFormDirty] = useState(false);
+  const [crTransportCreateIncomplete, setCrTransportCreateIncomplete] = useState(false);
+  const [crTransportReleaseIncomplete, setCrTransportReleaseIncomplete] = useState(false);
   const [projectSearch, setProjectSearch] = useState("");
   const [projectStatus, setProjectStatus] = useState<ProjectStatus | "all">("all");
   const [projectStatusPopoverOpen, setProjectStatusPopoverOpen] = useState(false);
@@ -287,6 +291,7 @@ export function App() {
   const [issueFilters, setIssueFilters] = useState<IssueFilters>({ status: "all", page: 1, pageSize: 25 });
   const [draftIssueFilters, setDraftIssueFilters] = useState<IssueFilters>({ status: "all", page: 1, pageSize: 25 });
   const [selectedIssueId, setSelectedIssueId] = useState<number | null>(null);
+  const [selectedBatchIssueIds, setSelectedBatchIssueIds] = useState<Set<number>>(() => new Set());
   const [issueDetail, setIssueDetail] = useState<IssueDetail | null>(null);
   const [loadingIssueDetail, setLoadingIssueDetail] = useState(false);
   const [changeIssueInitialId, setChangeIssueInitialId] = useState<number | null>(null);
@@ -511,8 +516,10 @@ export function App() {
     title: string;
     subtitle: string;
     type?: ModalType;
+    body?: ReactNode;
     confirmText?: string;
     cancelText?: string;
+    confirmLoading?: boolean;
     onConfirm: () => void | Promise<void>;
   }>({
     isOpen: false,
@@ -702,6 +709,30 @@ export function App() {
 
   function navigateTo(nextView: View) {
     if (nextView === view) return true;
+    const crTransportWarning = getCrTransportLeaveWarning(
+      view,
+      crTransportCreateIncomplete,
+      crTransportReleaseIncomplete
+    );
+    if (crTransportWarning) {
+      setConfirmModal({
+        isOpen: true,
+        title: crTransportWarning.title,
+        subtitle: crTransportWarning.subtitle,
+        type: "warning",
+        confirmText: "Leave Page",
+        cancelText: "Continue Process",
+        onConfirm: () => {
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          setCrTransportCreateIncomplete(false);
+          setCrTransportReleaseIncomplete(false);
+          setIssueFormDirty(false);
+          setProjectFormDirty(false);
+          setView(nextView);
+        }
+      });
+      return false;
+    }
     if ((view === "issue-create" || view === "issue-change") && issueFormDirty) {
       setConfirmModal({
         isOpen: true,
@@ -3640,6 +3671,7 @@ export function App() {
         ) : view === "cr-transport-create" ? (
           <CrTransportCreate
             targetSystem={crTargetSystem}
+            onIncompleteChange={setCrTransportCreateIncomplete}
             onTargetSystemChange={(val) => {
               setCrTargetSystem(val);
               try { localStorage.setItem("cr_transport_target_system", val); } catch {}
@@ -3649,6 +3681,7 @@ export function App() {
         ) : view === "cr-transport-release" ? (
           <CrTransportRelease
             targetSystem={crTargetSystem}
+            onIncompleteChange={setCrTransportReleaseIncomplete}
             onTargetSystemChange={(val) => {
               setCrTargetSystem(val);
               try { localStorage.setItem("cr_transport_target_system", val); } catch {}
@@ -3722,6 +3755,31 @@ export function App() {
               } catch (err) {
                 setError(err instanceof Error ? err.message : String(err));
               }
+            }}
+            selectedBatchIssueIds={selectedBatchIssueIds}
+            onSelectedBatchIssueIdsChange={setSelectedBatchIssueIds}
+            onDownloadCrForms={async (issueIds) => {
+              setConfirmModal({
+                isOpen: true,
+                title: "Download CR Transport Forms?",
+                subtitle: "A single ZIP file will be created using the latest Issue data.",
+                type: "primary",
+                confirmText: "Download ZIP",
+                cancelText: "Cancel",
+                body: <div className="batchDownloadModalBody"><strong>{issueIds.length} Issues selected</strong><span>Each selected Issue will become one CR Transport Form (.docx).</span></div>,
+                onConfirm: async () => {
+                  setConfirmModal((current) => ({ ...current, confirmLoading: true }));
+                  setError("");
+                  try {
+                    await downloadCrTransportBatch(issueIds);
+                    setSelectedBatchIssueIds(new Set());
+                    setConfirmModal((current) => ({ ...current, isOpen: false, confirmLoading: false }));
+                  } catch (err) {
+                    setConfirmModal((current) => ({ ...current, confirmLoading: false }));
+                    setError(err instanceof Error ? err.message : String(err));
+                  }
+                }
+              });
             }}
             onPage={(page) => {
               const nextFilters = { ...issueFilters, page };
@@ -4087,8 +4145,11 @@ export function App() {
         type={confirmModal.type || "warning"}
         confirmText={confirmModal.confirmText || "Ya, Lanjutkan"}
         cancelText={confirmModal.cancelText || "Batal"}
+        confirmLoading={confirmModal.confirmLoading}
         onConfirm={confirmModal.onConfirm}
-      />
+      >
+        {confirmModal.body}
+      </UIModal>
     </main>
   );
 }
@@ -5086,6 +5147,9 @@ function IssueDisplay({
   onIssueAction,
   onGenerateCrForm,
   onGenerateUserCrForm,
+  selectedBatchIssueIds,
+  onSelectedBatchIssueIdsChange,
+  onDownloadCrForms,
   onPage,
   onPageSize,
   onOpenCr,
@@ -5105,6 +5169,9 @@ function IssueDisplay({
   onIssueAction: (id: number, action: "cancel" | "delete") => void;
   onGenerateCrForm: (id: number) => void;
   onGenerateUserCrForm?: (id: number) => void;
+  selectedBatchIssueIds: Set<number>;
+  onSelectedBatchIssueIdsChange: (ids: Set<number>) => void;
+  onDownloadCrForms: (ids: number[]) => Promise<void>;
   onPage: (page: number) => void;
   onPageSize: (pageSize: number) => void;
   onOpenCr: (link: { sap_system_code?: string; trkorr: string }) => void;
@@ -5156,7 +5223,25 @@ function IssueDisplay({
     completeness: 85,
     actions: 80
   });
-  const issueTableWidth = visibleIssueColumns.reduce((total, column) => total + issueColumns.widths[column], 0);
+  const issueTableWidth = 42 + visibleIssueColumns.reduce((total, column) => total + issueColumns.widths[column], 0);
+  const eligibleIssues = issues.filter((issue) => issue.issue_status !== "cancelled" && Boolean(issue.primary_cr));
+  const allPageEligibleSelected = eligibleIssues.length > 0 && eligibleIssues.every((issue) => selectedBatchIssueIds.has(issue.id));
+
+  function toggleBatchIssue(issueId: number, checked: boolean) {
+    const next = new Set(selectedBatchIssueIds);
+    if (checked) next.add(issueId);
+    else next.delete(issueId);
+    onSelectedBatchIssueIdsChange(next);
+  }
+
+  function togglePageBatchIssues(checked: boolean) {
+    const next = new Set(selectedBatchIssueIds);
+    for (const issue of eligibleIssues) {
+      if (checked) next.add(issue.id);
+      else next.delete(issue.id);
+    }
+    onSelectedBatchIssueIdsChange(next);
+  }
 
   function hasIssueColumn(column: IssueColumnKey) {
     return visibleIssueColumns.includes(column);
@@ -5164,11 +5249,19 @@ function IssueDisplay({
 
   return (
     <section className="issue-report-workspace">
+      {selectedBatchIssueIds.size > 0 ? (
+        <div className="issue-batch-toolbar">
+          <strong>{selectedBatchIssueIds.size} Issues selected</strong>
+          <button type="button" className="secondary issue-batch-clear" onClick={() => onSelectedBatchIssueIdsChange(new Set())}>Clear selection</button>
+          <button type="button" className="issue-batch-download" onClick={() => void onDownloadCrForms([...selectedBatchIssueIds])}><FileOutput size={15} /> Download CR Forms (.zip)</button>
+        </div>
+      ) : null}
       <div className="report-layout issue-layout controlled-dual-pane detail-closed">
         <section className="table-panel report-table-panel issue-table-panel">
           <div className="table-scroll">
             <table className="record-table issue-record-table" style={{ width: issueTableWidth, minWidth: "100%" }}>
               <colgroup>
+                <col style={{ width: 42 }} />
                 <col style={{ width: issueColumns.widths.issue }} />
                 <col style={{ width: issueColumns.widths.name }} />
                 <col style={{ width: issueColumns.widths.abaper }} />
@@ -5181,6 +5274,9 @@ function IssueDisplay({
               </colgroup>
               <thead>
                 <tr>
+                  <th style={{ width: 42, textAlign: "center" }}>
+                    <input aria-label="Select eligible Issues" type="checkbox" checked={allPageEligibleSelected} disabled={eligibleIssues.length === 0} onChange={(event) => togglePageBatchIssues(event.target.checked)} />
+                  </th>
                   <ResizableHeader label="Issue" column="issue" width={issueColumns.widths.issue} onResize={issueColumns.startResize} />
                   <ResizableHeader label="Name" column="name" width={issueColumns.widths.name} onResize={issueColumns.startResize} />
                   <ResizableHeader label="ABAPer" column="abaper" width={issueColumns.widths.abaper} onResize={issueColumns.startResize} />
@@ -5195,13 +5291,13 @@ function IssueDisplay({
               <tbody>
                 {loadingData ? (
                   <tr>
-                    <td colSpan={9} style={{ padding: 0 }}>
+                    <td colSpan={visibleIssueColumns.length + 1} style={{ padding: 0 }}>
                       <TableDataLoader text="Loading issue records..." />
                     </td>
                   </tr>
                 ) : issues.length === 0 ? (
                   <tr>
-                    <td colSpan={9} style={{ padding: "40px 0", textAlign: "center", color: "#64748b" }}>
+                    <td colSpan={visibleIssueColumns.length + 1} style={{ padding: "40px 0", textAlign: "center", color: "#64748b" }}>
                       No issue found for the current filter.
                     </td>
                   </tr>
@@ -5209,6 +5305,8 @@ function IssueDisplay({
                   issues.map((issue) => {
                     const isMenuOpen = rowMenuOpenId === issue.id;
                     const rowMissingItems = getIssueRowMissingItems(issue);
+                    const selectable = issue.issue_status !== "cancelled" && Boolean(issue.primary_cr);
+                    const selectionTitle = issue.issue_status === "cancelled" ? "Issue cancelled" : "CR SAP belum tersedia";
 
                     return (
                       <tr
@@ -5216,6 +5314,16 @@ function IssueDisplay({
                         className={selectedId === issue.id ? "selected" : ""}
                         onClick={() => onSelect(issue.id)}
                       >
+                        <td onClick={(event) => event.stopPropagation()} style={{ textAlign: "center" }}>
+                          <input
+                            aria-label={`Select eligible Issue ${issue.issue_key}`}
+                            type="checkbox"
+                            checked={selectedBatchIssueIds.has(issue.id)}
+                            disabled={!selectable}
+                            title={selectable ? "Select Issue" : selectionTitle}
+                            onChange={(event) => toggleBatchIssue(issue.id, event.target.checked)}
+                          />
+                        </td>
                         <td>{issue.issue_key}</td>
                         <td>{issue.issue_name}</td>
                         <td>{issue.abaper_name_snapshot || "-"}</td>
@@ -6360,27 +6468,29 @@ function IssueEditor({
     title: string;
     body: string;
     bodyHtml?: string;
+    previewHtml?: string;
     abaperGlpiUserIds?: number[];
   } | null>(null);
   const [copiedTemplate, setCopiedTemplate] = useState(false);
 
   async function copyTemplateToClipboard(notify = true) {
     if (!templatePreview) return;
+    const clipboardPayload = buildTemplateClipboardPayload(templatePreview);
     try {
-      if (templatePreview.bodyHtml) {
-        const blobHtml = new Blob([templatePreview.bodyHtml], { type: "text/html" });
-        const blobText = new Blob([templatePreview.body], { type: "text/plain" });
+      if (clipboardPayload.html) {
+        const blobHtml = new Blob([clipboardPayload.html], { type: "text/html" });
+        const blobText = new Blob([clipboardPayload.text], { type: "text/plain" });
         const item = new ClipboardItem({ "text/html": blobHtml, "text/plain": blobText });
         await navigator.clipboard.write([item]);
       } else {
-        await navigator.clipboard.writeText(templatePreview.body);
+        await navigator.clipboard.writeText(clipboardPayload.text);
       }
       setCopiedTemplate(true);
       if (notify) onNotify?.("success", "Template copied to clipboard!");
       setTimeout(() => setCopiedTemplate(false), 2500);
     } catch {
       try {
-        await navigator.clipboard.writeText(templatePreview.body);
+        await navigator.clipboard.writeText(clipboardPayload.text);
         setCopiedTemplate(true);
         if (notify) onNotify?.("success", "Template text copied to clipboard!");
         setTimeout(() => setCopiedTemplate(false), 2500);
@@ -7198,8 +7308,8 @@ function IssueEditor({
                         marginBottom: "1px"
                       }}
                     >
-                      <Plus size={15} />
-                      <span>+ Create CR</span>
+                            <Plus size={15} />
+                            <span>Create CR</span>
                     </button>
                   ) : null}
                 </div>
@@ -7409,8 +7519,8 @@ function IssueEditor({
               </button>
             </div>
 
-            {templatePreview.bodyHtml ? (
-              <div className="template-preview-body" dangerouslySetInnerHTML={{ __html: templatePreview.bodyHtml }} />
+            {templatePreview.previewHtml || templatePreview.bodyHtml ? (
+              <div className="template-preview-body" dangerouslySetInnerHTML={{ __html: templatePreview.previewHtml || templatePreview.bodyHtml || "" }} />
             ) : (
               <pre className="template-preview-body" style={{ whiteSpace: "pre-wrap", fontFamily: "inherit" }}>{templatePreview.body}</pre>
             )}

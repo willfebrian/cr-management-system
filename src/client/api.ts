@@ -96,6 +96,7 @@ export async function fetchIssueTemplate(id: number, kind: "email" | "ticket"): 
   templatePath: string;
   body: string;
   bodyHtml?: string;
+  previewHtml?: string;
 }> {
   return fetchJson(`/api/issues/${id}/templates/${kind}`);
 }
@@ -121,6 +122,30 @@ export async function downloadCrTransportTemplate(id: number) {
   }
   const blob = await response.blob();
   const filename = filenameFromDisposition(response.headers.get("content-disposition")) || "CR Transport.docx";
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export async function downloadCrTransportBatch(issueIds: number[]) {
+  const response = await fetch("/api/issues/templates/cr-transport/batch", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ issueIds })
+  });
+  if (!response.ok) {
+    let message = `Request failed: ${response.status}`;
+    try { message = (await response.json())?.message || message; } catch {}
+    throw new Error(message);
+  }
+  const blob = await response.blob();
+  const filename = filenameFromDisposition(response.headers.get("content-disposition")) || "CR-Transport-Forms.zip";
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

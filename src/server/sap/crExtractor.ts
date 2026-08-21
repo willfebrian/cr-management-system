@@ -110,11 +110,15 @@ export async function readCrList(options: { systemCode?: string; fromDate: strin
 
 export async function readCrDetail(trkorr: string, systemCode?: string) {
   const system = getSapCrSystem(systemCode);
+  return readCrDetailFromServer(trkorr, system.server);
+}
+
+export async function readCrDetailFromServer(trkorr: string, server: string) {
   return runSapDiscovery<CrDetailResult>([
     "cr-detail",
     trkorr,
     "--server",
-    system.server,
+    server,
     "--include-keys",
     "--row-count",
     "1000",

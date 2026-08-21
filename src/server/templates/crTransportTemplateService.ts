@@ -15,6 +15,18 @@ export type ZipEntry = {
   data: Buffer;
 };
 
+export type CrTransportDocument = {
+  filename: string;
+  buffer: Buffer;
+};
+
+export type CrTransportBatchArchive = {
+  filename: string;
+  buffer: Buffer;
+  successfulIssueIds: number[];
+  failures: Array<{ issueId: number; message: string }>;
+};
+
 type CrTransportObjectClassification = {
   label: string;
   names: string[];
@@ -60,6 +72,73 @@ export async function buildCrTransportDocument(issueId: number) {
     filename,
     buffer: writeZipEntries(entries)
   };
+}
+
+export async function buildCrTransportBatchArchive(
+  issueIds: number[],
+  documentBuilder: (issueId: number) => Promise<CrTransportDocument> = buildEligibleCrTransportDocument
+): Promise<CrTransportBatchArchive> {
+  const entries: ZipEntry[] = [];
+  const successfulIssueIds: number[] = [];
+  const failures: Array<{ issueId: number; message: string }> = [];
+  const usedNames = new Set<string>();
+
+  for (const issueId of issueIds) {
+    try {
+      const document = await documentBuilder(issueId);
+      entries.push({ name: uniqueArchiveEntryName(document.filename, usedNames), data: document.buffer });
+      successfulIssueIds.push(issueId);
+    } catch (error) {
+      failures.push({ issueId, message: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  if (successfulIssueIds.length === 0) {
+    throw new Error("No CR Transport Form could be generated.");
+  }
+
+  if (failures.length > 0) {
+    entries.push({ name: "README-gagal.txt", data: Buffer.from(renderBatchFailures(failures), "utf8") });
+  }
+
+  return {
+    filename: `CR-Transport-Forms_${new Date().toISOString().slice(0, 10)}.zip`,
+    buffer: writeZipEntries(entries),
+    successfulIssueIds,
+    failures
+  };
+}
+
+async function buildEligibleCrTransportDocument(issueId: number): Promise<CrTransportDocument> {
+  const detail = await getIssueDetail(issueId);
+  if (!detail.issue) throw new Error("Issue not found.");
+  if (detail.issue.issue_status === "cancelled") throw new Error("Issue cancelled.");
+  if (!detail.crLinks.some((link) => Boolean(link.trkorr))) throw new Error("CR SAP belum tersedia.");
+  return buildCrTransportDocument(issueId);
+}
+
+function uniqueArchiveEntryName(filename: string, usedNames: Set<string>) {
+  const safeName = sanitizeFilename(filename) || "CR Transport.docx";
+  const dotIndex = safeName.lastIndexOf(".");
+  const base = dotIndex > 0 ? safeName.slice(0, dotIndex) : safeName;
+  const extension = dotIndex > 0 ? safeName.slice(dotIndex) : "";
+  let candidate = safeName;
+  let suffix = 2;
+  while (usedNames.has(candidate.toLowerCase())) {
+    candidate = `${base} (${suffix})${extension}`;
+    suffix += 1;
+  }
+  usedNames.add(candidate.toLowerCase());
+  return candidate;
+}
+
+function renderBatchFailures(failures: Array<{ issueId: number; message: string }>) {
+  return [
+    "CR Transport Form tidak dapat dibuat untuk Issue berikut:",
+    "",
+    ...failures.map((failure) => `- Issue ID ${failure.issueId}: ${failure.message}`),
+    ""
+  ].join("\n");
 }
 
 function crTransportTemplatePath() {

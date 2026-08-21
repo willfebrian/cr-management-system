@@ -9,6 +9,25 @@ import type { CrDetail } from "../../shared/types.js";
 
 export type IssueTemplateKind = "email" | "ticket";
 
+export function renderCustomIssueTemplate(
+  template: string,
+  tokens: Record<string, string>,
+  objectListHtml: string,
+  kind: IssueTemplateKind
+) {
+  const rendered = renderMarkdownTemplate(
+    template,
+    tokens,
+    objectListHtml,
+    { htmlProfile: kind === "ticket" ? "glpi" : "default" }
+  );
+  const previewHtml = kind === "email"
+    ? renderMarkdownTemplate(template, tokens, objectListHtml, { htmlProfile: "glpi" }).bodyHtml
+    : rendered.bodyHtml;
+
+  return { ...rendered, previewHtml };
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..", "..", "..");
 
@@ -68,18 +87,14 @@ export async function buildIssueTemplatePreview(
       ABAPER: abaper
     };
 
-    const renderedMarkdown = renderMarkdownTemplate(
-      customTemplate,
-      tokens,
-      objectListHtml,
-      { htmlProfile: kind === "ticket" ? "glpi" : "default" }
-    );
+    const renderedMarkdown = renderCustomIssueTemplate(customTemplate, tokens, objectListHtml, kind);
     return {
       kind,
       title: kind === "email" ? "Generate Email Template" : "Generate GLPI Ticket Template",
       templatePath: "Custom App Setting",
       body: renderedMarkdown.body,
-      bodyHtml: renderedMarkdown.bodyHtml
+      bodyHtml: renderedMarkdown.bodyHtml,
+      previewHtml: renderedMarkdown.previewHtml
     };
   }
 

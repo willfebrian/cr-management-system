@@ -4,6 +4,7 @@ import { UIModal } from "../common/UIModal";
 import { createTransportRequest, preflightTransportRequest, resolveTransportObject, type ResolvedTransportObject, type TransportRequestResult } from "../../api/transportRequestApi";
 import { TRANSPORT_TARGETS, type TransportTargetSystem, normalizeTransportTarget, transportSystemOptionLabel, transportTargetLabel } from "./transportTarget";
 import { fetchSapSystems, type SapSystemRow } from "../../api";
+import { isCreateCrIncomplete } from "./crTransportProgress";
 
 const PREFIX = "AB - ";
 const MAX_DESCRIPTION = 55;
@@ -50,6 +51,7 @@ interface CrTransportCreateProps {
   availableSystems?: SapSystemRow[];
   isModal?: boolean;
   onRequestCreated?: (requestNo: string, taskNo?: string) => void;
+  onIncompleteChange?: (incomplete: boolean) => void;
 }
 
 export function CrTransportCreate({
@@ -58,7 +60,8 @@ export function CrTransportCreate({
   onTargetSystemChange,
   availableSystems: externalAvailableSystems,
   isModal = false,
-  onRequestCreated
+  onRequestCreated,
+  onIncompleteChange
 }: CrTransportCreateProps = {}) {
   const [internalTargetSystem, setInternalTargetSystem] = useState<string>(() => {
     try {
@@ -97,6 +100,16 @@ export function CrTransportCreate({
   const fullDescription = `${PREFIX}${description.trim()}`;
   const selectedKeys = useMemo(() => new Set(objects.map(objectKey)), [objects]);
   const canPreflight = objects.length > 0 && description.trim().length > 0 && !busy && !created?.ok;
+
+  useEffect(() => {
+    onIncompleteChange?.(isCreateCrIncomplete({
+      description,
+      selectedObjectCount: objects.length,
+      hasPreflightResult: Boolean(preflight),
+      busy,
+      created: Boolean(created?.ok)
+    }));
+  }, [busy, created?.ok, description, objects.length, onIncompleteChange, preflight]);
 
   useEffect(() => {
     if (initialDescription) {
@@ -192,7 +205,7 @@ export function CrTransportCreate({
   }
 
   return <div className="cr-create-workspace">
-    {created?.ok ? <section className="cr-create-success card"><CheckCircle2 size={24} /><div><span className="eyebrow">REQUEST CREATED</span><h3>{created.request}</h3><p>Task {created.task} was created in {transportTargetLabel(targetSystem)} and the selected objects were registered.{created.syncQueued ? " CR sync has been queued." : ""}</p></div><button type="button" className="secondary cr-start-new-request" onClick={startNewRequest}><Plus size={16} /> Start New Request</button></section> : null}
+    {created?.ok ? <section className="cr-create-success card"><CheckCircle2 size={24} /><div><span className="eyebrow">REQUEST CREATED</span><h3>{created.request}</h3><p>Task {created.task} was created in {transportTargetLabel(targetSystem)} and the selected objects were registered.{created.syncCompleted ? " The new CR data has been saved to the local database." : created.syncMessage ? ` The new CR data could not be saved to the local database: ${created.syncMessage}` : created.syncQueued ? " CR sync has been queued." : ""}</p></div><button type="button" className="secondary cr-start-new-request" onClick={startNewRequest}><Plus size={16} /> Start New Request</button></section> : null}
 
     <section className="card cr-create-card">
       <div className="cr-create-section-heading"><div><span className="cr-create-step">1</span><h3>SAP Objects</h3><p>Search by TCode, program, class, function module, table, or another repository object.</p></div><span className="cr-create-count">{objects.length} selected</span></div>

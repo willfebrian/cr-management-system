@@ -7,8 +7,8 @@ import {
   normalizeTargetSystem
 } from "../sap/transportRequestService.js";
 import { recordActivityLog } from "../db/auditRepository.js";
-import { runCrSync } from "../sync/crSyncRunner.js";
-import { shouldQueueTransportCreateSync, transportCreateSyncOptions } from "../sync/transportRequestSync.js";
+import { syncCreatedTransportRequest } from "../sync/crSyncRunner.js";
+import { createdTransportSyncPlan } from "../sync/transportRequestSync.js";
 
 export const transportRequestRoutes = Router();
 transportRequestRoutes.use(requireAdmin);
@@ -29,7 +29,9 @@ transportRequestRoutes.post("/preflight", asyncHandler(async (req, res) => {
 transportRequestRoutes.post("/create", asyncHandler(async (req, res) => {
   const result = await createTransportRequest(req.body);
   const targetSystem = normalizeTargetSystem(req.body?.targetSystem);
-  const syncQueued = shouldQueueTransportCreateSync(targetSystem, result);
+  const syncPlan = createdTransportSyncPlan(targetSystem, result);
+  let syncCompleted = false;
+  let syncMessage: string | undefined;
   await recordActivityLog({
     activityType: "admin",
     action: "create_sap_transport_request",
@@ -38,26 +40,31 @@ transportRequestRoutes.post("/create", asyncHandler(async (req, res) => {
     description: `Created SAP transport request ${String(result.request || "")} on ${targetSystem} with ${Array.isArray(req.body?.objects) ? req.body.objects.length : 0} object(s)`,
     ipAddress: req.ip
   });
-  if (syncQueued) {
-    void runCrSync(transportCreateSyncOptions())
-      .then((syncResult) => recordActivityLog({
+  if (syncPlan) {
+    try {
+      await syncCreatedTransportRequest(syncPlan.trkorr, syncPlan.sourceSystemCode);
+      syncCompleted = true;
+      await recordActivityLog({
         activityType: "admin",
         action: "sync_cr_after_transport_create",
         username: req.authUser?.username || "system",
         userId: req.authUser?.id || null,
-        description: `Automatic CR sync completed after DEV AIX request ${String(result.request || "")}: ${syncResult.requestCount} request(s)`,
+        description: `Created transport request ${syncPlan.trkorr} was saved to the local CR database.`,
         ipAddress: req.ip
-      }))
-      .catch((error) => recordActivityLog({
+      });
+    } catch (error) {
+      syncMessage = error instanceof Error ? error.message : String(error);
+      await recordActivityLog({
         activityType: "admin",
         action: "sync_cr_after_transport_create_failed",
         username: req.authUser?.username || "system",
         userId: req.authUser?.id || null,
-        description: `Automatic CR sync failed after DEV AIX request ${String(result.request || "")}: ${String(error?.message || error)}`,
+        description: `Created transport request ${syncPlan.trkorr} could not be saved to the local CR database: ${syncMessage}`,
         ipAddress: req.ip
-      }));
+      });
+    }
   }
-  res.status(201).json({ ...result, targetSystem, syncQueued });
+  res.status(201).json({ ...result, targetSystem, syncQueued: false, syncCompleted, syncMessage });
 }));
 
 function asyncHandler(handler: (req: Request, res: Response) => Promise<void>) {

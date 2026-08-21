@@ -20,6 +20,8 @@ export type TransportRequestResult = {
   targetSystem?: string;
   targetServer?: string;
   syncQueued?: boolean;
+  syncCompleted?: boolean;
+  syncMessage?: string;
 };
 
 export async function resolveTransportObject(query: string, targetSystem: TransportTargetSystem = "DEV_NC"): Promise<{ ok: boolean; message: string; rows: ResolvedTransportObject[] }> {

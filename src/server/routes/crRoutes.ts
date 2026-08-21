@@ -10,7 +10,7 @@ import { cancelIssue, deleteIssue, getIssueDashboardInsights, getIssueDetail, ge
 import { findGlpiUserIdsByEmails, getGlpiTicketDetailFromMaria, searchGlpiTicketsFromMaria } from "../db/glpiMariaRepository.js";
 import { getSapCrSystem, listSapCrSystems } from "../config.js";
 import { normalizeLookbackDays, normalizeSyncMode, normalizeSystemCodes, runCrSync } from "../sync/crSyncRunner.js";
-import { buildCrTransportDocument, buildUserCrDocument } from "../templates/crTransportTemplateService.js";
+import { buildCrTransportBatchArchive, buildCrTransportDocument, buildUserCrDocument } from "../templates/crTransportTemplateService.js";
 import { buildIssueTemplatePreview, type IssueTemplateKind } from "../templates/issueTemplateService.js";
 
 export const crRoutes = Router();
@@ -247,6 +247,41 @@ crRoutes.get("/issues/:id/templates/cr-transport", async (req, res, next) => {
   }
 });
 
+crRoutes.post("/issues/templates/cr-transport/batch", async (req, res, next) => {
+  try {
+    await assertDatabaseConfigured();
+    const issueIds = normalizeBatchIssueIds(req.body?.issueIds);
+    if (issueIds.length === 0) {
+      res.status(400).json({ ok: false, message: "Select at least one Issue." });
+      return;
+    }
+
+    const archive = await buildCrTransportBatchArchive(issueIds);
+    const user = await resolveAuthUser(req);
+    await recordActivityLog({
+      activityType: "issue",
+      action: "download_cr_transport_forms_batch",
+      username: user?.username || "system",
+      userId: user?.id || null,
+      description: `Downloaded CR Transport Forms for ${archive.successfulIssueIds.length} Issue(s)`,
+      metadata: {
+        requestedIssueIds: issueIds,
+        successfulIssueIds: archive.successfulIssueIds,
+        failures: archive.failures
+      },
+      ipAddress: req.ip
+    });
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${archive.filename}"; filename*=UTF-8''${encodeURIComponent(archive.filename)}`
+    );
+    res.send(archive.buffer);
+  } catch (error) {
+    next(error);
+  }
+});
+
 crRoutes.get("/issues/:id/templates/cr-user", async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
@@ -311,6 +346,14 @@ crRoutes.get("/issues/:id/templates/:kind", async (req, res, next) => {
 
 import { recordActivityLog } from "../db/auditRepository.js";
 import { resolveAuthUser } from "../auth/middleware.js";
+
+export function normalizeBatchIssueIds(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  const ids = value
+    .map((item) => typeof item === "number" ? item : typeof item === "string" ? Number(item) : Number.NaN)
+    .filter((item) => Number.isInteger(item) && item > 0);
+  return [...new Set(ids)];
+}
 
 crRoutes.post("/issues", async (req, res, next) => {
   try {

@@ -7,6 +7,17 @@ export function shouldQueueTransportCreateSync(targetSystem: string, result: { o
     && Boolean(String(requestId || "").trim());
 }
 
+export function createdTransportSyncPlan(targetSystem: string, result: { ok?: boolean; request?: unknown; trkorr?: unknown }) {
+  const trkorr = String(result?.request ?? result?.trkorr ?? "").trim().toUpperCase();
+  const target = String(targetSystem || "").trim().toUpperCase();
+  if (result?.ok !== true || !trkorr) {
+    return null;
+  }
+  if (target === "DEV_AIX") return { sourceSystemCode: "DEV", trkorr };
+  if (target === "DEV_NC") return { sourceSystemCode: "DEV_NC", trkorr };
+  return null;
+}
+
 export function transportCreateSyncOptions() {
   return {
     systemCodes: ["DEV", "QA", "PRD"],

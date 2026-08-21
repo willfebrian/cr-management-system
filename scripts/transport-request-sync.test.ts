@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { shouldQueueTransportCreateSync, transportCreateSyncOptions } from "../src/server/sync/transportRequestSync.js";
+import { createdTransportSyncPlan, shouldQueueTransportCreateSync, transportCreateSyncOptions } from "../src/server/sync/transportRequestSync.js";
 import { normalizeTargetSystem } from "../src/server/sap/transportRequestService.js";
 
 test("queues automatic sync only after a successful DEV AIX request", () => {
@@ -12,6 +12,18 @@ test("queues automatic sync only after a successful DEV AIX request", () => {
 
 test("queues automatic sync after a successful DEV AIX release using trkorr", () => {
   assert.equal(shouldQueueTransportCreateSync("DEV_AIX", { ok: true, trkorr: "TRDK999002" }), true);
+});
+
+test("plans a direct SQL sync for only the newly created DEV AIX request", () => {
+  assert.deepEqual(
+    createdTransportSyncPlan("DEV_AIX", { ok: true, request: "TRDK999003" }),
+    { sourceSystemCode: "DEV", trkorr: "TRDK999003" }
+  );
+  assert.deepEqual(
+    createdTransportSyncPlan("DEV_NC", { ok: true, request: "TRDK999003" }),
+    { sourceSystemCode: "DEV_NC", trkorr: "TRDK999003" }
+  );
+  assert.equal(createdTransportSyncPlan("DEV_AIX", { ok: false, request: "TRDK999003" }), null);
 });
 
 test("automatic sync uses the fixed DEV, QA, PRD incremental three-day scope", () => {

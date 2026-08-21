@@ -39,3 +39,11 @@ test("uses a controlled dual-pane workspace", () => {
   assert.match(styles, /\.controlled-dual-pane\s*\{/);
   assert.match(styles, /\.issue-report-workspace\s*\{/);
 });
+
+test("provides an eligible Issue selection column and batch ZIP download action", () => {
+  const app = readFileSync(new URL("../src/client/pages/App.tsx", import.meta.url), "utf8");
+  assert.match(app, /Select eligible Issues/);
+  assert.match(app, /Download CR Forms \(.zip\)/);
+  assert.match(app, /issue\.issue_status !== "cancelled"/);
+  assert.match(app, /Boolean\(issue\.primary_cr\)/);
+});
