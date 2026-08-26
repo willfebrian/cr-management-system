@@ -102,6 +102,7 @@ export async function fetchIssueTemplate(id: number, kind: "email" | "ticket"): 
 }
 
 export async function fetchGlpiPrefillActors(id: number): Promise<{
+  requesterGlpiUserIds: number[];
   abaperGlpiUserIds: number[];
 }> {
   return fetchJson(`/api/issues/${id}/glpi-prefill-actors`);

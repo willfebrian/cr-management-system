@@ -15,6 +15,11 @@ export type IncompleteGroup = {
   items: IncompleteItem[];
 };
 
+export type IncompleteNavigationRequest = {
+  sequence: number;
+  item: IncompleteItem;
+};
+
 export type ExpandedIssueSections = Record<IssueSection, boolean>;
 
 type IncompleteTargetMarker = {
@@ -129,6 +134,13 @@ export function groupIncompleteItems(items: IncompleteItem[]): IncompleteGroup[]
 export function expandSection(current: ExpandedIssueSections, section: IssueSection): ExpandedIssueSections {
   if (current[section]) return current;
   return { ...current, [section]: true };
+}
+
+export function getActiveIncompleteNavigation(
+  internalNavigation: IncompleteNavigationRequest | null | undefined,
+  externalNavigation: IncompleteNavigationRequest | null | undefined
+) {
+  return internalNavigation || externalNavigation || null;
 }
 
 export function markIncompleteTarget(

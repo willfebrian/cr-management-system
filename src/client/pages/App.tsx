@@ -24,7 +24,7 @@ import { getCrTransportLeaveWarning } from "../components/crTransport/crTranspor
 import { TRANSPORT_TARGETS, transportSystemOptionLabel, transportTargetLabel } from "../components/crTransport/transportTarget";
 import { UIModal, type ModalType } from "../components/common/UIModal";
 import { fetchProjectDetail } from "../api/projectApi";
-import { afterIncompleteSectionRender, expandSection, getIncompleteItems, getIssueRowMissingItems, groupIncompleteItems, markIncompleteTarget, type ExpandedIssueSections, type IncompleteItem, type IssueSection } from "../issueIncomplete";
+import { afterIncompleteSectionRender, expandSection, getActiveIncompleteNavigation, getIncompleteItems, getIssueRowMissingItems, groupIncompleteItems, markIncompleteTarget, type ExpandedIssueSections, type IncompleteItem, type IssueSection } from "../issueIncomplete";
 import { getSidebarGroupDestination, nextExpandedSidebarGroup, type SidebarGroup } from "../navigation";
 import type { CrDetail, CrRequest, DashboardData, IssueDetail, IssueRow, SapSystemConfig, StatusTrendData } from "../../shared/types";
 import { AppLoadingScreen, SkeletonDetailLoader, TableDataLoader } from "../components/InteractiveLoaders";
@@ -6126,7 +6126,7 @@ function IssueEditor({
   const layoutStyle = layoutStyleOverride ?? internalLayoutStyle;
   const [editorTab, setEditorTab] = useState<"basic" | "team" | "timeline">("basic");
   const [internalNav, setInternalNav] = useState<{ sequence: number; item: IncompleteItem } | null>(null);
-  const effectiveNav = navigationRequest || internalNav;
+  const effectiveNav = getActiveIncompleteNavigation(internalNav, navigationRequest);
   const [isQuickMode, setIsQuickMode] = useState<boolean>(() => mode === "create");
   const incompleteItems = detail?.issue && detail.issue.issue_status !== "cancelled" ? getIncompleteItems(detail) : [];
   const incompleteGroups = groupIncompleteItems(incompleteItems);
@@ -6469,6 +6469,7 @@ function IssueEditor({
     body: string;
     bodyHtml?: string;
     previewHtml?: string;
+    requesterGlpiUserIds?: number[];
     abaperGlpiUserIds?: number[];
   } | null>(null);
   const [copiedTemplate, setCopiedTemplate] = useState(false);
@@ -7550,6 +7551,7 @@ function IssueEditor({
                           title: `Issue no: ${issueKey} (${currentIssue.issue_name})`,
                           descriptionHtml: currentTemplate.bodyHtml || currentTemplate.body,
                           openedAt: formatGlpiOpeningDate(),
+                          requesterGlpiUserIds: currentTemplate.requesterGlpiUserIds || [],
                           abaperGlpiUserIds: currentTemplate.abaperGlpiUserIds || []
                         }));
                         onNotify?.("success", "GLPI preview opened. Review the pre-filled form before clicking Add.");

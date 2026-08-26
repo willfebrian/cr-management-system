@@ -18,6 +18,7 @@ test("builds a GLPI preview GET without the ticket-creation flag", () => {
     title: "Issue no: 26048-01 (Enhancement Program for PI/PO TTD UNS)",
     descriptionHtml: "<p>Dear All,</p><p>Issue and CR CREATED.</p>",
     openedAt: "2026-08-20 15:46:13",
+    requesterGlpiUserIds: [77],
     abaperGlpiUserIds: [88]
   });
 
@@ -32,11 +33,14 @@ test("builds a GLPI preview GET without the ticket-creation flag", () => {
     requesttypes_id: "2",
     locations_id: "1",
     _skip_default_actor: "1",
-    "_actors[requester][0][itemtype]": "Group",
-    "_actors[requester][0][items_id]": "31",
+    "_actors[requester][0][itemtype]": "User",
+    "_actors[requester][0][items_id]": "77",
+    "_actors[requester][0][use_notification]": "1",
     "_actors[requester][1][itemtype]": "User",
     "_actors[requester][1][items_id]": "88",
     "_actors[requester][1][use_notification]": "1",
+    "_actors[requester][2][itemtype]": "Group",
+    "_actors[requester][2][items_id]": "31",
     "_actors[observer][0][itemtype]": "Group",
     "_actors[observer][0][items_id]": "31",
     "_actors[observer][1][itemtype]": "Group",
@@ -58,12 +62,27 @@ test("omits an unavailable ABAPer while keeping the default GLPI groups", () => 
     title: "Issue no: 26048-01 (Example)",
     descriptionHtml: "<p>Template</p>",
     openedAt: "2026-08-20 15:46:13",
+    requesterGlpiUserIds: [],
     abaperGlpiUserIds: []
   });
   assert.equal(submission.fields["_actors[requester][0][items_id]"], "31");
   assert.equal(submission.fields["_actors[observer][0][items_id]"], "31");
   assert.equal(submission.fields["_actors[observer][1][items_id]"], "40");
   assert.equal(Object.values(submission.fields).includes("User"), false);
+});
+
+test("does not duplicate the same GLPI user when Requester is also the ABAPer", () => {
+  const submission = buildGlpiPrefillSubmission({
+    title: "Issue no: 26048-01 (Example)",
+    descriptionHtml: "<p>Template</p>",
+    openedAt: "2026-08-20 15:46:13",
+    requesterGlpiUserIds: [88],
+    abaperGlpiUserIds: [88]
+  });
+
+  assert.equal(submission.fields["_actors[requester][0][items_id]"], "88");
+  assert.equal(submission.fields["_actors[requester][1][items_id]"], "31");
+  assert.equal(Object.keys(submission.fields).filter((key) => key.endsWith("[items_id]") && submission.fields[key] === "88").length, 2);
 });
 
 test("opens the prefill GET in a new tab without posting a form", () => {

@@ -5,6 +5,7 @@ import {
   afterIncompleteSectionRender,
   expandSection,
   getIncompleteItems,
+  getActiveIncompleteNavigation,
   groupIncompleteItems,
   markIncompleteTarget
 } from "../src/client/issueIncomplete";
@@ -135,4 +136,11 @@ test("waits through two render frames before navigating to a newly expanded fiel
   assert.equal(navigated, false);
   frames.shift()?.();
   assert.equal(navigated, true);
+});
+
+test("prefers a new Change Issue navigation over the consumed modal navigation", () => {
+  const fromModal = { sequence: 1, item: { id: "qa-tester", label: "QA Tester", section: "qa" as const, targetId: "issue-qa-tester" } };
+  const fromChangePage = { sequence: 1, item: { id: "prd-requester", label: "PRD Requester", section: "prd" as const, targetId: "issue-prd-requester" } };
+
+  assert.equal(getActiveIncompleteNavigation(fromChangePage, fromModal), fromChangePage);
 });

@@ -20,6 +20,7 @@ export function buildGlpiPrefillSubmission(input: {
   title: string;
   descriptionHtml: string;
   openedAt: string;
+  requesterGlpiUserIds: number[];
   abaperGlpiUserIds: number[];
 }): GlpiPrefillSubmission {
   const fields: Record<string, string> = {
@@ -31,18 +32,24 @@ export function buildGlpiPrefillSubmission(input: {
     requesttypes_id: "2",
     locations_id: "1",
     _skip_default_actor: "1",
-    "_actors[requester][0][itemtype]": "Group",
-    "_actors[requester][0][items_id]": SAP_ABAP_GROUP_ID,
     "_actors[observer][0][itemtype]": "Group",
     "_actors[observer][0][items_id]": SAP_ABAP_GROUP_ID,
     "_actors[observer][1][itemtype]": "Group",
     "_actors[observer][1][items_id]": SAP_BASIS_GROUP_ID
   };
-  input.abaperGlpiUserIds.forEach((id, index) => {
-    const requesterIndex = index + 1;
-    fields[`_actors[requester][${requesterIndex}][itemtype]`] = "User";
-    fields[`_actors[requester][${requesterIndex}][items_id]`] = String(id);
-    fields[`_actors[requester][${requesterIndex}][use_notification]`] = "1";
+  const requesterIds = [...new Set(input.requesterGlpiUserIds)];
+  const abaperIds = [...new Set(input.abaperGlpiUserIds)];
+  const requesterActorIds = [...requesterIds, ...abaperIds.filter((id) => !requesterIds.includes(id))];
+  requesterActorIds.forEach((id, index) => {
+    fields[`_actors[requester][${index}][itemtype]`] = "User";
+    fields[`_actors[requester][${index}][items_id]`] = String(id);
+    fields[`_actors[requester][${index}][use_notification]`] = "1";
+  });
+  const sapAbapRequesterIndex = requesterActorIds.length;
+  fields[`_actors[requester][${sapAbapRequesterIndex}][itemtype]`] = "Group";
+  fields[`_actors[requester][${sapAbapRequesterIndex}][items_id]`] = SAP_ABAP_GROUP_ID;
+
+  abaperIds.forEach((id, index) => {
     fields[`_actors[assign][${index}][itemtype]`] = "User";
     fields[`_actors[assign][${index}][items_id]`] = String(id);
     fields[`_actors[assign][${index}][use_notification]`] = "1";
