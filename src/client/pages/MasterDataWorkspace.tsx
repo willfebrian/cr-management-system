@@ -1,10 +1,11 @@
 import { useEffect, useState, useRef } from "react";
-import { fetchAdminPeople, fetchAdminSettings, updateAdminPerson, updateAdminSettings, createAdminPerson, deleteAdminPerson, fetchGroupEmails, createGroupEmail, updateGroupEmail, deleteGroupEmail, fetchSapSystems, createSapSystem, updateSapSystem, deleteSapSystem, testSapSystemConnection, testAiConnection, fetchDocxTemplatesInfo, uploadDocxTemplate, resetDocxTemplate, downloadDocxTemplateUrl, type AdminPersonRow, type GroupEmailRow, type SapSystemRow, type DocxTemplatesInfo } from "../api";
+import { fetchAdminPeople, fetchAdminSettings, updateAdminPerson, updateAdminSettings, createAdminPerson, deleteAdminPerson, fetchGroupEmails, createGroupEmail, updateGroupEmail, deleteGroupEmail, fetchSapSystems, createSapSystem, updateSapSystem, deleteSapSystem, testSapSystemConnection, testAiConnection, testMcpEmailConnection, fetchDocxTemplatesInfo, uploadDocxTemplate, resetDocxTemplate, downloadDocxTemplateUrl, type AdminPersonRow, type GroupEmailRow, type SapSystemRow, type DocxTemplatesInfo } from "../api";
 import { Check, Loader2, Save, X, Trash2, CheckCircle2, XCircle, AlertTriangle, Mail, Palette, Type, Sliders, User, Database, LayoutGrid, Server, Eye, EyeOff, Plus, Edit2, Activity, ShieldCheck, Radio, FileCode2, FileText, Upload, Download, RotateCcw, FileCheck, Zap, Globe } from "lucide-react";
 import { STATUS_COLOR_CONFIGS, applyCustomStatusColors } from "../utils/tagColors";
 import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
 import { TableDataLoader } from "../components/InteractiveLoaders";
 import { DocxTemplateEditor, type DocxTemplateType } from "../components/DocxTemplateEditor";
+import { McpEmailSettingsCard, validateMcpEmailConfigJson, type McpConnectionStatus } from "../components/settings/McpEmailSettingsCard";
 
 interface MasterDataWorkspaceProps {
   mode?: "master-data" | "settings";
@@ -110,6 +111,7 @@ Regards,
     exchange_host: "",
     exchange_user: "",
     exchange_pass: "",
+    outlook_mcp_config: "",
     outlook_max_email_count: "5",
     outlook_max_body_chars: "15000",
     app_font_size: "14",
@@ -123,6 +125,8 @@ Regards,
   const [showOpenRouterKey, setShowOpenRouterKey] = useState(false);
   const [testingNineRouter, setTestingNineRouter] = useState(false);
   const [testingOpenRouter, setTestingOpenRouter] = useState(false);
+  const [testingMcpEmail, setTestingMcpEmail] = useState(false);
+  const [mcpConnectionStatus, setMcpConnectionStatus] = useState<McpConnectionStatus>({ type: "idle", message: "" });
 
   const glpiTextareaRef = useRef<HTMLTextAreaElement>(null);
   const emailTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -324,6 +328,7 @@ Regards,
           exchange_host: settingsRes.exchange_host || "",
           exchange_user: settingsRes.exchange_user || "",
           exchange_pass: settingsRes.exchange_pass || "",
+          outlook_mcp_config: settingsRes.outlook_mcp_config || "",
           outlook_max_email_count: settingsRes.outlook_max_email_count || "5",
           outlook_max_body_chars: settingsRes.outlook_max_body_chars || "15000",
           app_font_size: settingsRes.app_font_size || "14",
@@ -577,9 +582,23 @@ Regards,
   }
 
   async function saveSettings() {
+    const mcpValidationError = settings.outlook_mcp_config?.trim()
+      ? validateMcpEmailConfigJson(settings.outlook_mcp_config)
+      : null;
+    if (mcpValidationError) {
+      showToast("error", mcpValidationError);
+      return;
+    }
     setSaving(true);
     try {
       await updateAdminSettings(settings);
+      if (settings.outlook_mcp_config?.trim()) {
+        const savedSettings = await fetchAdminSettings();
+        setSettings((current) => ({
+          ...current,
+          outlook_mcp_config: savedSettings.outlook_mcp_config || current.outlook_mcp_config
+        }));
+      }
       applyCustomStatusColors(settings);
       applyCustomFontSize(settings);
       showToast("success", "Settings saved successfully!");
@@ -587,6 +606,33 @@ Regards,
       showToast("error", "Failed to save settings");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleTestMcpEmail() {
+    const configJson = settings.outlook_mcp_config || "";
+    const validationError = configJson.trim()
+      ? validateMcpEmailConfigJson(configJson)
+      : "Enter the MCP Email configuration before testing.";
+    if (validationError) {
+      setMcpConnectionStatus({ type: "error", message: validationError });
+      return;
+    }
+    setTestingMcpEmail(true);
+    setMcpConnectionStatus({ type: "idle", message: "" });
+    try {
+      const result = await testMcpEmailConnection(configJson);
+      setMcpConnectionStatus({
+        type: "success",
+        message: `Connected to ${result.serverName} — email tools detected`
+      });
+    } catch (error) {
+      setMcpConnectionStatus({
+        type: "error",
+        message: error instanceof Error ? error.message : String(error)
+      });
+    } finally {
+      setTestingMcpEmail(false);
     }
   }
 
@@ -1801,114 +1847,21 @@ Regards,
               </div>
 
               {/* Outlook Mail Extraction Configuration */}
-              <div style={{
-                background: "var(--color-bg-elevated, #ffffff)",
-                padding: "1.5rem",
-                borderRadius: "12px",
-                border: "1px solid var(--color-border, #e5e7eb)",
-                boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-                display: "flex",
-                flexDirection: "column",
-                gap: "1.25rem"
-              }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                  <div style={{
-                    width: "36px",
-                    height: "36px",
-                    borderRadius: "10px",
-                    background: "linear-gradient(135deg, #0284c7 0%, #0369a1 100%)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "#ffffff",
-                    flexShrink: 0,
-                    boxShadow: "0 2px 6px rgba(2, 132, 199, 0.3)"
-                  }}>
-                    <Mail size={20} />
-                  </div>
-                  <div>
-                    <h4 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 700, color: "var(--color-text-heading, #111827)" }}>
-                      Outlook Mail Extraction Configuration
-                    </h4>
-                    <p style={{ margin: "2px 0 0 0", color: "var(--color-text-muted, #6b7280)", fontSize: "0.825rem" }}>
-                      Configure the maximum number of matching emails and character limit per email body retrieved for AI context analysis.
-                    </p>
-                  </div>
-                </div>
-
-                <div style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-                  gap: "1.25rem"
-                }}>
-                  {/* Max Emails */}
-                  <div style={{
-                    background: "var(--color-bg-subtle, #f8fafc)",
-                    border: "1px solid var(--color-border, #e2e8f0)",
-                    borderRadius: "10px",
-                    padding: "1rem"
-                  }}>
-                    <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--color-text-muted, #64748b)", marginBottom: "0.4rem" }}>
-                      MAXIMUM EMAILS TO FETCH
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={50}
-                      value={settings.outlook_max_email_count !== undefined ? settings.outlook_max_email_count : "5"}
-                      onChange={(e) => setSettings({ ...settings, outlook_max_email_count: e.target.value })}
-                      placeholder="5"
-                      style={{
-                        width: "100%",
-                        padding: "0.55rem 0.75rem",
-                        borderRadius: "6px",
-                        border: "1px solid var(--color-border, #cbd5e1)",
-                        background: "var(--color-bg-elevated, #ffffff)",
-                        color: "var(--color-text, #1e293b)",
-                        fontSize: "0.875rem",
-                        fontWeight: 600
-                      }}
-                    />
-                    <small style={{ color: "var(--color-text-muted, #64748b)", display: "block", marginTop: "0.35rem", fontSize: "0.75rem" }}>
-                      Default: <code>5</code> email(s). Limits the number of latest matching thread messages queried from Outlook.
-                    </small>
-                  </div>
-
-                  {/* Max Characters per Body */}
-                  <div style={{
-                    background: "var(--color-bg-subtle, #f8fafc)",
-                    border: "1px solid var(--color-border, #e2e8f0)",
-                    borderRadius: "10px",
-                    padding: "1rem"
-                  }}>
-                    <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--color-text-muted, #64748b)", marginBottom: "0.4rem" }}>
-                      MAXIMUM CHARACTERS PER BODY
-                    </label>
-                    <input
-                      type="number"
-                      min={1000}
-                      max={100000}
-                      step={1000}
-                      value={settings.outlook_max_body_chars !== undefined ? settings.outlook_max_body_chars : "15000"}
-                      onChange={(e) => setSettings({ ...settings, outlook_max_body_chars: e.target.value })}
-                      placeholder="15000"
-                      style={{
-                        width: "100%",
-                        padding: "0.55rem 0.75rem",
-                        borderRadius: "6px",
-                        border: "1px solid var(--color-border, #cbd5e1)",
-                        background: "var(--color-bg-elevated, #ffffff)",
-                        color: "var(--color-text, #1e293b)",
-                        fontSize: "0.875rem",
-                        fontWeight: 600
-                      }}
-                    />
-                    <small style={{ color: "var(--color-text-muted, #64748b)", display: "block", marginTop: "0.35rem", fontSize: "0.75rem" }}>
-                      Default: <code>15000</code> chars (~3,500 words). Truncates excessively long message bodies before JSON encoding.
-                    </small>
-                  </div>
-                </div>
-              </div>
+              <McpEmailSettingsCard
+                configJson={settings.outlook_mcp_config || ""}
+                maxEmails={settings.outlook_max_email_count !== undefined ? settings.outlook_max_email_count : "5"}
+                maxBodyChars={settings.outlook_max_body_chars !== undefined ? settings.outlook_max_body_chars : "15000"}
+                validationError={settings.outlook_mcp_config?.trim() ? validateMcpEmailConfigJson(settings.outlook_mcp_config) || "" : ""}
+                connectionStatus={mcpConnectionStatus}
+                testing={testingMcpEmail}
+                onConfigChange={(value) => {
+                  setSettings((current) => ({ ...current, outlook_mcp_config: value }));
+                  setMcpConnectionStatus({ type: "idle", message: "" });
+                }}
+                onMaxEmailsChange={(value) => setSettings((current) => ({ ...current, outlook_max_email_count: value }))}
+                onMaxBodyCharsChange={(value) => setSettings((current) => ({ ...current, outlook_max_body_chars: value }))}
+                onTestConnection={handleTestMcpEmail}
+              />
 
               {/* Document & File Naming Patterns */}
               <div style={{ marginTop: "1.5rem", paddingTop: "1.5rem", borderTop: "1px solid var(--color-border, #e5e7eb)" }}>

@@ -307,6 +307,18 @@ export async function updateAdminSettings(settings: Record<string, string>): Pro
   });
 }
 
+export async function testMcpEmailConnection(configJson: string): Promise<{
+  ok: boolean;
+  serverName: string;
+  tools: string[];
+}> {
+  return fetchJson("/api/outlook/test-mcp-connection", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ configJson })
+  });
+}
+
 export type GroupEmailRow = {
   id: number;
   email_address: string;
@@ -433,54 +445,7 @@ export async function searchOutlookEmail(
   if (finalLimit && finalLimit > 0) queryParams.set("limit", String(finalLimit));
   if (finalMaxChars && finalMaxChars > 0) queryParams.set("maxChars", String(finalMaxChars));
   const queryString = queryParams.toString();
-
-  // 1. Try Local Client Agent on user's Windows laptop (Passwordless local MAPI)
-  const agentUrls = [
-    `http://127.0.0.1:18888/api/fetch-outlook?${queryString}`,
-    `http://localhost:18888/api/fetch-outlook?${queryString}`
-  ];
-
-  for (const url of agentUrls) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 25000);
-      const localRes = await fetch(url, {
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
-      
-      const data = await localRes.json();
-      
-      if (!localRes.ok) {
-        if (data && data.error) {
-          throw new Error(data.error); // Throw application error from Agent to UI
-        }
-        continue;
-      }
-      
-      if (data && Array.isArray(data.rows)) {
-        return data;
-      }
-    } catch (err: any) {
-      if (err.message && err.message.includes("Gagal mengambil email")) {
-        throw err; // Stop loop and fallback, throw directly to UI!
-      }
-      console.warn(`Local Agent fetch failed for ${url}:`, err);
-    }
-  }
-
-  // 2. Central Server Backend Fallback
-  try {
-    return await fetchJson(`/api/outlook/search-email?${queryString}`);
-  } catch (serverErr: any) {
-    const msg = serverErr?.message || String(serverErr);
-    if (msg.includes("Agent lokal Outlook belum berjalan")) {
-      throw new Error(
-        "Agent Outlook lokal belum terhubung atau diblokir oleh browser. Pastikan Outlook Desktop terbuka dan buka http://127.0.0.1:18888 di tab baru untuk mengaktifkan koneksi."
-      );
-    }
-    throw serverErr;
-  }
+  return fetchJson(`/api/outlook/search-email?${queryString}`);
 }
 
 export type AiAnalysisResult = {

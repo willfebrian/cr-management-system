@@ -1,189 +1,70 @@
-import { execFile } from "child_process";
-import { promisify } from "util";
 import { pool } from "../db/pool.js";
+import { parseMcpEmailConfig } from "./mcpEmailConfig.js";
+import {
+  discoverMcpEmailServer,
+  searchMcpEmails,
+  type OutlookEmailMatch
+} from "./mcpEmailService.js";
 
-const execFileAsync = promisify(execFile);
+export type { OutlookEmailMatch } from "./mcpEmailService.js";
 
-export type OutlookEmailMatch = {
-  receivedAt: string;
-  senderName: string;
-  senderEmail: string;
-  to: string;
-  subject: string;
-  body: string;
+type OutlookSettings = Record<string, string>;
+
+type OutlookMcpDependencies = {
+  loadSettings?: () => Promise<OutlookSettings>;
+  fetchImpl?: typeof fetch;
 };
+
+async function loadOutlookSettings(): Promise<OutlookSettings> {
+  const { rows } = await pool.query<{ setting_key: string; setting_value: string }>(
+    `SELECT setting_key, setting_value
+     FROM app_settings
+     WHERE setting_key IN ('outlook_mcp_config', 'outlook_max_email_count', 'outlook_max_body_chars')`
+  );
+  return rows.reduce((settings, row) => {
+    settings[row.setting_key] = row.setting_value;
+    return settings;
+  }, {} as OutlookSettings);
+}
+
+function positiveInteger(value: number | undefined, configured: string | undefined, fallback: number) {
+  const candidate = value ?? Number.parseInt(configured || "", 10);
+  return Number.isFinite(candidate) && candidate > 0 ? Math.floor(candidate) : fallback;
+}
+
+export async function searchConfiguredMcpEmails(
+  querySubject: string,
+  limit?: number,
+  maxChars?: number,
+  dependencies: OutlookMcpDependencies = {}
+): Promise<OutlookEmailMatch[]> {
+  if (!querySubject?.trim()) return [];
+  const settings = await (dependencies.loadSettings || loadOutlookSettings)();
+  const rawConfig = settings.outlook_mcp_config;
+  if (!rawConfig?.trim()) {
+    throw new Error("MCP Email is not configured. Configure it in Settings > General Settings.");
+  }
+
+  return searchMcpEmails(parseMcpEmailConfig(rawConfig), querySubject, {
+    maxResults: positiveInteger(limit, settings.outlook_max_email_count, 5),
+    maxBodyChars: positiveInteger(maxChars, settings.outlook_max_body_chars, 15000),
+    fetchImpl: dependencies.fetchImpl
+  });
+}
 
 export async function searchOutlookEmails(
   querySubject: string,
   limit?: number,
   maxChars?: number
 ): Promise<OutlookEmailMatch[]> {
-  if (!querySubject || !querySubject.trim()) return [];
+  return searchConfiguredMcpEmails(querySubject, limit, maxChars);
+}
 
-  // Server runs on Linux and has no access to Outlook COM — this path only
-  // exists as a fallback when the user's local agent (port 18888) wasn't reachable.
-  if (process.platform !== "win32") {
-    throw new Error(
-      "Gagal mengambil email: Agent lokal Outlook belum berjalan di laptop Anda. Silakan download & jalankan installer-nya di /api/outlook/download-agent, pastikan Outlook Desktop terbuka, lalu coba lagi."
-    );
-  }
-
-  let finalLimit = limit;
-  let finalMaxChars = maxChars;
-
-  if (!finalLimit || !finalMaxChars) {
-    try {
-      const { rows } = await pool.query<{ setting_key: string; setting_value: string }>(
-        `SELECT setting_key, setting_value FROM app_settings WHERE setting_key IN ('outlook_max_email_count', 'outlook_max_body_chars')`
-      );
-      for (const r of rows) {
-        if (r.setting_key === "outlook_max_email_count" && !finalLimit) {
-          finalLimit = parseInt(r.setting_value, 10);
-        }
-        if (r.setting_key === "outlook_max_body_chars" && !finalMaxChars) {
-          finalMaxChars = parseInt(r.setting_value, 10);
-        }
-      }
-    } catch (e) {
-      console.warn("Could not query outlook limits from DB:", e);
-    }
-  }
-
-  finalLimit = finalLimit && finalLimit > 0 ? finalLimit : 5;
-  finalMaxChars = finalMaxChars && finalMaxChars > 0 ? finalMaxChars : 15000;
-
-  // Windows Desktop MAPI COM Object Implementation
-  const script = `
-    $ErrorActionPreference = 'Stop'
-    try {
-      $outlook = New-Object -ComObject Outlook.Application
-      $namespace = $outlook.GetNamespace("MAPI")
-      $inbox = $namespace.GetDefaultFolder(6)
-      $items = $inbox.Items
-      
-      try { $items.Sort("[ReceivedTime]", $true) } catch {}
-
-      $maxCount = [int]$env:MAX_EMAILS
-      if ($maxCount -le 0) { $maxCount = 5 }
-
-      $maxCharsLimit = [int]$env:MAX_BODY_CHARS
-      if ($maxCharsLimit -le 0) { $maxCharsLimit = 15000 }
-
-      function Clean-Subject($str) {
-        if (-not $str) { return "" }
-        $cleaned = $str -replace '(?i)^\\s*(re|fw|fwd|fe|tr|vs|sv)\\s*:\\s*', ''
-        $cleaned = $cleaned -replace '(?i)^\\s*\\[(external|balas|forward)\\]\\s*', ''
-        $cleaned = $cleaned -replace '(?i)^\\s*(re|fw|fwd|fe|tr|vs|sv)\\s*:\\s*', ''
-        return $cleaned.Trim().ToLower()
-      }
-
-      function To-B64($str) {
-        if (-not $str) { return "" }
-        $s = [string]$str
-        if ($s.Length -gt $maxCharsLimit) { $s = $s.Substring(0, $maxCharsLimit) }
-        $bytes = [System.Text.Encoding]::UTF8.GetBytes($s)
-        return [System.Convert]::ToBase64String($bytes)
-      }
-
-      $rawQuery = $env:SEARCH_SUBJECT.Trim().ToLower()
-      $cleanQuery = Clean-Subject $env:SEARCH_SUBJECT
-      $matches = @()
-      $scanCount = 0
-      $maxScan = 250
-
-      foreach ($item in $items) {
-        $scanCount++
-        if ($scanCount -gt $maxScan -or $matches.Count -ge $maxCount) { break }
-        try {
-          $subject = ""
-          try { $subject = $item.Subject } catch {}
-          if (-not $subject) { continue }
-
-          $subLower = $subject.ToLower()
-          $cleanSub = Clean-Subject $subject
-
-          $isMatch = $subLower.Contains($rawQuery) -or $cleanSub.Contains($cleanQuery) -or ($cleanQuery.Length -gt 3 -and $cleanQuery.Contains($cleanSub))
-
-          if (-not $isMatch -and $cleanQuery.Length -gt 3) {
-            $words = $cleanQuery -split '\\s+' | Where-Object { $_.Length -gt 2 }
-            if ($words.Count -gt 0) {
-              $allWordsFound = $true
-              foreach ($w in $words) {
-                if (-not $cleanSub.Contains($w)) {
-                  $allWordsFound = $false
-                  break
-                }
-              }
-              if ($allWordsFound) { $isMatch = $true }
-            }
-          }
-
-          if ($isMatch) {
-            $to = ""
-            try { $to = $item.To } catch {}
-            $senderEmail = ""
-            try { $senderEmail = $item.SenderEmailAddress } catch {}
-            $senderName = ""
-            try { $senderName = $item.SenderName } catch {}
-            $body = ""
-            try { $body = $item.Body } catch {}
-            $recTime = ""
-            try { $recTime = $item.ReceivedTime.ToString("yyyy-MM-dd HH:mm:ss") } catch { $recTime = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss") }
-
-            $matches += [PSCustomObject]@{
-              receivedAt = $recTime
-              senderName = To-B64 $senderName
-              senderEmail = To-B64 $senderEmail
-              to = To-B64 $to
-              subject = To-B64 $subject
-              body = To-B64 $body
-            }
-          }
-        } catch {
-          # Skip any item that throws COM exception
-        }
-      }
-      $matches | ConvertTo-Json -Compress
-    } catch {
-      Write-Error $_.Exception.Message
-    }
-  `;
-
-  try {
-    const { stdout } = await execFileAsync("powershell", [
-      "-NoProfile",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-Command",
-      script
-    ], {
-      env: {
-        ...process.env,
-        SEARCH_SUBJECT: querySubject,
-        MAX_EMAILS: String(finalLimit),
-        MAX_BODY_CHARS: String(finalMaxChars)
-      },
-      maxBuffer: 10 * 1024 * 1024
-    });
-
-    let results: OutlookEmailMatch[] = [];
-    if (stdout && stdout.trim()) {
-      const parsed = JSON.parse(stdout.trim());
-      const list = Array.isArray(parsed) ? parsed : [parsed];
-      results = list.map((r: any) => ({
-        receivedAt: r.receivedAt || "",
-        senderName: Buffer.from(r.senderName || "", "base64").toString("utf-8"),
-        senderEmail: Buffer.from(r.senderEmail || "", "base64").toString("utf-8"),
-        to: Buffer.from(r.to || "", "base64").toString("utf-8"),
-        subject: Buffer.from(r.subject || "", "base64").toString("utf-8"),
-        body: Buffer.from(r.body || "", "base64").toString("utf-8")
-      }));
-    }
-    return results;
-  } catch (error) {
-    console.error("Error querying Outlook via PowerShell:", error);
-    throw new Error(
-      "Gagal mengambil email: Aplikasi Microsoft Outlook Desktop di laptop Anda belum dibuka. Silakan buka aplikasi Microsoft Outlook Desktop terlebih dahulu, lalu coba lagi."
-    );
-  }
+export async function testConfiguredMcpEmail(rawConfig: string, fetchImpl: typeof fetch = fetch) {
+  const result = await discoverMcpEmailServer(parseMcpEmailConfig(rawConfig), fetchImpl);
+  return {
+    ok: true as const,
+    serverName: result.server.name,
+    tools: result.tools.filter((name) => name === "search_emails" || name === "read_email")
+  };
 }

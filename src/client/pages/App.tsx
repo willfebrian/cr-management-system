@@ -6201,8 +6201,6 @@ function IssueEditor({
     }
   }, [primaryGlpiNo]);
 
-  const fetchedEmailSubjectRef = useRef<string | null>(null);
-
   async function handleFetchEmailContent(subjectOverride?: string) {
     const targetSubject = subjectOverride ?? form.emailSubject;
     if (!targetSubject?.trim()) {
@@ -6513,7 +6511,6 @@ function IssueEditor({
     setFetchedGlpiContext(null);
     setFetchedEmailContext(null);
     fetchedGlpiTicketRef.current = null;
-    fetchedEmailSubjectRef.current = null;
 
     const nextForm = issueFormFromDetail(detail);
     initialFormRef.current = nextForm;
@@ -7153,9 +7150,6 @@ function IssueEditor({
                   </button>
                 </div>
               </label>
-              <a href="/api/outlook/download-agent" style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #6b7280)", marginTop: "0.25rem", display: "inline-block" }}>
-                "Fetch Email" tidak jalan? Download &amp; jalankan Outlook Agent di laptop Anda
-              </a>
             </div>
           </div>
 

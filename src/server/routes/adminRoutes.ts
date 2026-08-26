@@ -4,6 +4,11 @@ import { pool } from "../db/pool.js";
 import { requireAdmin, resolveAuthUser } from "../auth/middleware.js";
 import { recordActivityLog } from "../db/auditRepository.js";
 import { deleteAdminPerson, PeopleAdminError } from "../admin/peopleAdminService.js";
+import {
+  OUTLOOK_MCP_CONFIG_KEY,
+  prepareAdminSettingsUpdate,
+  sanitizeAdminSettings
+} from "../admin/adminSettingsService.js";
 
 export const adminRoutes = Router();
 
@@ -208,7 +213,7 @@ adminRoutes.get("/settings", async (_req, res, next) => {
       acc[row.setting_key] = row.setting_value;
       return acc;
     }, {} as Record<string, string>);
-    res.json(settings);
+    res.json(sanitizeAdminSettings(settings));
   } catch (error) {
     next(error);
   }
@@ -216,7 +221,16 @@ adminRoutes.get("/settings", async (_req, res, next) => {
 
 adminRoutes.put("/settings", async (req, res, next) => {
   try {
-    const settings = req.body as Record<string, string>;
+    const requestedSettings = req.body as Record<string, string>;
+    let storedMcpConfig: string | undefined;
+    if (Object.prototype.hasOwnProperty.call(requestedSettings, OUTLOOK_MCP_CONFIG_KEY)) {
+      const stored = await pool.query<{ setting_value: string }>(
+        `SELECT setting_value FROM app_settings WHERE setting_key = $1 LIMIT 1`,
+        [OUTLOOK_MCP_CONFIG_KEY]
+      );
+      storedMcpConfig = stored.rows[0]?.setting_value;
+    }
+    const settings = prepareAdminSettingsUpdate(requestedSettings, storedMcpConfig);
     const keys = Object.keys(settings);
     
     for (const key of keys) {
