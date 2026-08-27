@@ -4,6 +4,10 @@ export async function fetchDashboard(): Promise<DashboardData> {
   return fetchJson("/api/dashboard");
 }
 
+export type IssueReminderPreview = { eligible: boolean; to: string[]; cc?: string; skippedRecipients: string[]; subject: string; body: string; notesDraft: string; lastSentAt?: string | null };
+export async function fetchIssueReminderPreview(id: number) { return fetchJson<IssueReminderPreview>(`/api/issues/${id}/reminder-preview`); }
+export async function sendIssueReminder(id: number, notes: string) { return fetchJson(`/api/issues/${id}/reminder`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ notes }) }); }
+
 export async function fetchStatusTrend(filters: { fromPeriod: string; toPeriod: string }): Promise<StatusTrendData> {
   const params = new URLSearchParams({
     fromPeriod: filters.fromPeriod,
