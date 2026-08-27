@@ -29,19 +29,19 @@ Create one ordered, de-duplicated recipient list:
 
 1. Active Issue participants with role `requester`, department `IT`, and a valid email address.
 2. Active Issue participants with role `abaper` and a valid email address.
-3. The active Group Email whose name is `SAP ABAP Group` (currently `sap-abap@trst.co.id`). This address is always included.
+3. The active Group Email whose name is `SAP ABAP Group` (currently `sap-abap@trst.co.id`). This address is included as CC when there is a primary recipient, otherwise as To.
 
 Participants without an email are omitted and shown in the preview as skipped recipients. The SAP ABAP Group record is not created by this feature; it must already exist and be active. If it is missing or inactive, sending is blocked with an actionable configuration error.
 
-All recipients are sent as Multiple To. The app joins the de-duplicated email addresses with commas. A controlled MCP send on 2026-08-27 confirmed this format delivers to Multiple To recipients and accepts a CC field.
+Requester and ABAPer addresses are sent as Multiple To. The app joins the de-duplicated addresses with commas. SAP ABAP Group is sent through CC. When no Requester or ABAPer has a valid email, SAP ABAP Group becomes the sole To recipient. A controlled MCP send on 2026-08-27 confirmed the configured MCP accepts Multiple To and CC.
 
 ## MCP Email Integration
 
 The configured MCP server exposes `send_email` with `to`, `cc`, `bcc`, `subject`, and `body` string parameters. The body uses plain text/Markdown.
 
 - Keep MCP protocol and recipient mapping behind a dedicated email-delivery adapter rather than embedding tool arguments in Issue routes or UI code.
-- Send the comma-separated recipient list through `to`; this Multiple To format has been verified against the configured MCP server.
-- The reminder does not use CC or BCC in this release, but the adapter preserves support for them for a future business requirement.
+- Send the comma-separated Requester/ABAPer recipient list through `to`; this Multiple To format has been verified against the configured MCP server.
+- Send SAP ABAP Group through `cc`; CC has been verified against the configured MCP server. When the primary recipient list is empty, send SAP ABAP Group through `to` and omit CC. The reminder does not use BCC in this release.
 - At send time, the adapter verifies that the configured MCP server still exposes `send_email`. A missing tool or failed connection blocks sending with a clear error.
 - Record the MCP response or failure without logging secrets.
 
