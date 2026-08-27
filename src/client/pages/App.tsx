@@ -26,6 +26,7 @@ import { UIModal, type ModalType } from "../components/common/UIModal";
 import { fetchProjectDetail } from "../api/projectApi";
 import { afterIncompleteSectionRender, expandSection, getActiveIncompleteNavigation, getIncompleteItems, getIssueRowMissingItems, groupIncompleteItems, markIncompleteTarget, type ExpandedIssueSections, type IncompleteItem, type IssueSection } from "../issueIncomplete";
 import { getSidebarGroupDestination, nextExpandedSidebarGroup, type SidebarGroup } from "../navigation";
+import { startReportDbRefresh } from "../reportDbRefresh";
 import type { CrDetail, CrRequest, DashboardData, IssueDetail, IssueRow, SapSystemConfig, StatusTrendData } from "../../shared/types";
 import { AppLoadingScreen, SkeletonDetailLoader, TableDataLoader } from "../components/InteractiveLoaders";
 import type { ProjectDetail as ProjectDetailModel, ProjectStatus } from "../../shared/projectTypes";
@@ -797,14 +798,13 @@ export function App() {
 
   useEffect(() => {
     if (view !== "report") return;
-    const interval = window.setInterval(() => {
+    return startReportDbRefresh(() => {
       loadReport(filters).catch((err) => setError(err instanceof Error ? err.message : String(err)));
       if (selected) {
         const key = parseRequestKey(selected);
         fetchCrDetail(key.trkorr, key.sapSystemCode).then(setDetail).catch((err) => setError(err.message));
       }
     }, REPORT_DB_REFRESH_MS);
-    return () => window.clearInterval(interval);
   }, [view, filters, selected]);
 
   useEffect(() => {
