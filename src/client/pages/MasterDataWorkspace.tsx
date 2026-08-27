@@ -813,7 +813,7 @@ Regards,
                     <th style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", color: "var(--color-text-muted, #6b7280)", fontWeight: "600", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>Evaluator</th>
                     <th style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", color: "var(--color-text-muted, #6b7280)", fontWeight: "600", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>Approver</th>
                     <th style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", color: "var(--color-text-muted, #6b7280)", fontWeight: "600", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>Transporter</th>
-                    <th style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", color: "var(--color-text-muted, #6b7280)", fontWeight: "600", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>REMINDER</th>
+                    <th style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", color: "var(--color-text-muted, #6b7280)", fontWeight: "600", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>Reminder</th>
                     <th style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border, #e5e7eb)", color: "var(--color-text-muted, #6b7280)", fontWeight: "600", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}></th>
                   </tr>
                 </thead>
@@ -863,7 +863,7 @@ Regards,
                         {p.is_evaluator && <span style={{ padding: "0.125rem 0.5rem", borderRadius: "9999px", fontSize: "0.65rem", fontWeight: "600", backgroundColor: "#ffedd5", color: "#c2410c", border: "1px solid #fed7aa" }}>Leader</span>}
                         {p.is_approver && <span style={{ padding: "0.125rem 0.5rem", borderRadius: "9999px", fontSize: "0.65rem", fontWeight: "600", backgroundColor: "#fee2e2", color: "#b91c1c", border: "1px solid #fecaca" }}>Manager</span>}
                         {p.is_transporter && <span style={{ padding: "0.125rem 0.5rem", borderRadius: "9999px", fontSize: "0.65rem", fontWeight: "600", backgroundColor: "#dcfce7", color: "#15803d", border: "1px solid #bbf7d0" }}>Basis</span>}
-                        {p.is_reminder && <span style={{ padding: "0.125rem 0.5rem", borderRadius: "9999px", fontSize: "0.65rem", fontWeight: "600", backgroundColor: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" }}>REMINDER</span>}
+                        {p.is_reminder && <span style={{ padding: "0.125rem 0.5rem", borderRadius: "9999px", fontSize: "0.65rem", fontWeight: "600", backgroundColor: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" }}>Reminder</span>}
                         {(!p.is_abaper && !p.is_tester && !p.is_evaluator && !p.is_approver && !p.is_transporter && !p.is_reminder) && <span style={{ color: "var(--color-text-muted, #9ca3af)", fontSize: "0.75rem", fontStyle: "italic" }}>-</span>}
                       </div>
                     </td>
