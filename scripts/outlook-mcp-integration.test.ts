@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   searchConfiguredMcpEmails,
+  sendConfiguredMcpEmail,
   testConfiguredMcpEmail
 } from "../src/server/services/outlookService.js";
 
@@ -65,4 +66,18 @@ test("reports a missing MCP Email configuration", async () => {
     }),
     /MCP Email is not configured/i
   );
+});
+
+test("uses the configured MCP Email server to send a reminder", async () => {
+  const result = await sendConfiguredMcpEmail({ to: "requester@example.test", subject: "Reminder", body: "Outstanding" }, {
+    loadSettings: async () => ({ outlook_mcp_config: rawConfig }),
+    fetchImpl: async (_input, init) => {
+      const request = JSON.parse(String(init?.body || "{}"));
+      if (request.method === "initialize") return rpcResponse({});
+      if (request.method === "notifications/initialized") return new Response(null, { status: 202 });
+      if (request.method === "tools/list") return rpcResponse({ tools: [{ name: "send_email" }] });
+      return rpcResponse({ content: [{ type: "text", text: JSON.stringify({ status: "sent", messageId: "message-99" }) }] });
+    }
+  });
+  assert.equal(result.messageId, "message-99");
 });

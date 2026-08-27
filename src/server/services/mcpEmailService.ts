@@ -1,6 +1,7 @@
 import type { McpEmailConfig, McpEmailServerConfig } from "./mcpEmailConfig.js";
 
 const REQUIRED_EMAIL_TOOLS = ["search_emails", "read_email"] as const;
+const REQUIRED_SEND_EMAIL_TOOLS = ["send_email"] as const;
 
 export type McpEmailConnectionResult = {
   server: McpEmailServerConfig;
@@ -15,6 +16,9 @@ export type OutlookEmailMatch = {
   subject: string;
   body: string;
 };
+
+export type McpEmailSendInput = { to: string; cc?: string; bcc?: string; subject: string; body: string };
+export type McpEmailSendResult = { status: string; messageId?: string; to: string; cc?: string; subject: string };
 
 type JsonRpcResponse = {
   result?: any;
@@ -101,7 +105,7 @@ class McpHttpClient {
   }
 }
 
-async function connectMcpEmailServer(config: McpEmailConfig, fetchImpl: typeof fetch) {
+async function connectMcpEmailServer(config: McpEmailConfig, fetchImpl: typeof fetch, requiredTools: readonly string[] = REQUIRED_EMAIL_TOOLS) {
   const failures: string[] = [];
   for (const server of config.servers) {
     try {
@@ -111,7 +115,7 @@ async function connectMcpEmailServer(config: McpEmailConfig, fetchImpl: typeof f
       const tools = Array.isArray(list?.tools)
         ? list.tools.map((tool: any) => String(tool?.name || "")).filter(Boolean)
         : [];
-      const missing = REQUIRED_EMAIL_TOOLS.filter((name) => !tools.includes(name));
+      const missing = requiredTools.filter((name) => !tools.includes(name));
       if (missing.length) {
         failures.push(`${server.name}: missing ${missing.join(", ")}`);
         continue;
@@ -121,7 +125,7 @@ async function connectMcpEmailServer(config: McpEmailConfig, fetchImpl: typeof f
       failures.push(`${server.name}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
-  throw new Error(`No configured MCP server exposes search_emails and read_email. ${failures.join("; ")}`);
+  throw new Error(`No configured MCP server exposes ${requiredTools.join(" and ")}. ${failures.join("; ")}`);
 }
 
 export async function discoverMcpEmailServer(
@@ -218,4 +222,33 @@ export async function searchMcpEmails(
     });
     return normalizeEmail(toolPayload(readResult, "read_email"), options.maxBodyChars);
   }));
+}
+
+export async function sendMcpEmail(
+  config: McpEmailConfig,
+  input: McpEmailSendInput,
+  options: { fetchImpl?: typeof fetch } = {}
+): Promise<McpEmailSendResult> {
+  if (!input.to.trim()) throw new Error("At least one To recipient is required.");
+  if (!input.subject.trim()) throw new Error("Email subject is required.");
+  if (!input.body.trim()) throw new Error("Email body is required.");
+  const { client } = await connectMcpEmailServer(config, options.fetchImpl || fetch, REQUIRED_SEND_EMAIL_TOOLS);
+  const result = await client.request("tools/call", {
+    name: "send_email",
+    arguments: {
+      to: input.to,
+      ...(input.cc?.trim() ? { cc: input.cc.trim() } : {}),
+      ...(input.bcc?.trim() ? { bcc: input.bcc.trim() } : {}),
+      subject: input.subject,
+      body: input.body
+    }
+  });
+  const payload = toolPayload(result, "send_email");
+  return {
+    status: stringValue(payload?.status || "sent"),
+    messageId: stringValue(payload?.messageId ?? payload?.message_id) || undefined,
+    to: input.to,
+    ...(input.cc?.trim() ? { cc: input.cc.trim() } : {}),
+    subject: input.subject
+  };
 }
