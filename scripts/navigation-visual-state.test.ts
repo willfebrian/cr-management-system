@@ -24,7 +24,8 @@ test("uses semantic responsive header classes", () => {
   const styles = readFileSync(new URL("../src/client/styles.css", import.meta.url), "utf8");
 
   assert.match(app, /className="page-identity"/);
-  assert.match(app, /page-sync-toolbar/);
+  assert.match(app, /topbar report-topbar/);
+  assert.match(app, /sync-cr-popover-wrapper/);
   assert.match(styles, /\.page-identity\s*\{/);
-  assert.match(styles, /\.page-sync-toolbar\s*\{/);
+  assert.match(styles, /\.report-topbar\s*\{/);
 });

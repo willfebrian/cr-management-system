@@ -13,6 +13,7 @@ import { normalizeLookbackDays, normalizeSyncMode, normalizeSystemCodes, runCrSy
 import { buildCrTransportBatchArchive, buildCrTransportDocument, buildUserCrDocument } from "../templates/crTransportTemplateService.js";
 import { buildIssueTemplatePreview, type IssueTemplateKind } from "../templates/issueTemplateService.js";
 import { resolveGlpiPrefillActors } from "../services/glpiPrefillActorService.js";
+import { previewIssueReminder, sendIssueReminder } from "../services/issueReminderService.js";
 
 export const crRoutes = Router();
 
@@ -209,6 +210,9 @@ crRoutes.get("/issues/:id", async (req, res, next) => {
     next(error);
   }
 });
+
+crRoutes.get("/issues/:id/reminder-preview", async (req, res, next) => { try { await assertDatabaseConfigured(); res.json(await previewIssueReminder(numberQuery(req.params.id, 0), req.authUser!)); } catch (error) { next(error); } });
+crRoutes.post("/issues/:id/reminder", async (req, res, next) => { try { await assertDatabaseConfigured(); res.json(await sendIssueReminder(numberQuery(req.params.id, 0), { notes: String(req.body?.notes || "") }, req.authUser!)); } catch (error) { next(error); } });
 
 crRoutes.get("/issues/:id/glpi-prefill-actors", async (req, res, next) => {
   try {

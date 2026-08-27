@@ -4,13 +4,13 @@ import path from "node:path";
 import test from "node:test";
 import { resolveTransportRequestRuntime } from "../src/server/sap/transportRequestService.js";
 
-test("Create CR transport runtime is bundled inside cr-management-system", () => {
+test("Create CR transport runtime is bundled inside this application checkout", () => {
   const previousCreateDir = process.env.SAP_CR_CREATE_PLATFORM_DIR;
   delete process.env.SAP_CR_CREATE_PLATFORM_DIR;
 
   try {
     const runtime = resolveTransportRequestRuntime();
-    assert.equal(path.basename(runtime.cwd), "cr-management-system");
+    assert.equal(runtime.cwd, process.cwd());
     assert.equal(runtime.script, path.join(runtime.cwd, "scripts", "cr-transport-request.mjs"));
     assert.equal(fs.existsSync(runtime.script), true);
   } finally {

@@ -9,8 +9,8 @@ import {
   OPTIONAL_ISSUE_COLUMNS
 } from "../src/client/components/IssueColumnMenu";
 
-test("keeps the report defaults focused on scanning", () => {
-  assert.deepEqual(DEFAULT_ISSUE_COLUMNS, ["issue", "name", "abaper", "cr", "status", "completeness"]);
+test("keeps the report defaults focused on scanning with actions available", () => {
+  assert.deepEqual(DEFAULT_ISSUE_COLUMNS, ["issue", "name", "abaper", "cr", "status", "completeness", "actions"]);
   assert.deepEqual(OPTIONAL_ISSUE_COLUMNS.map((column) => column.key), ["glpi", "crHelpdesk"]);
 });
 

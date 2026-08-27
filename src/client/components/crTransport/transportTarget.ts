@@ -7,7 +7,7 @@ export const TRANSPORT_TARGETS: ReadonlyArray<{ code: TransportTargetSystem; lab
 
 export function normalizeTransportTarget(value: unknown): TransportTargetSystem {
   const str = String(value || "").trim().toUpperCase();
-  return str || "DEV_NC";
+  return TRANSPORT_TARGETS.some((target) => target.code === str) ? str as TransportTargetSystem : "DEV_NC";
 }
 
 export function transportTargetLabel(value?: TransportTargetSystem) {

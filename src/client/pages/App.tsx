@@ -3,7 +3,7 @@ import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { AlertTriangle, BarChart3, Ban, Calendar, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Copy, Database, ExternalLink, FileOutput, FileSearch, FileText, FolderKanban, GitPullRequest, KeyRound, LayoutGrid, Link as LinkIcon, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Tag, Trash2, Unlock, User, Users, X, XCircle } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportBatch, downloadCrTransportTemplate, downloadUserCrTemplate, fetchAdminSettings, fetchAdminPeople, fetchCrDetail, fetchCrList, fetchDashboard, fetchGlpiPrefillActors, fetchGlpiTicketDetail, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchSapSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind, type GlpiTicketDetail, type AdminPersonRow, type SapSystemRow } from "../api";
+import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportBatch, downloadCrTransportTemplate, downloadUserCrTemplate, fetchAdminSettings, fetchAdminPeople, fetchCrDetail, fetchCrList, fetchDashboard, fetchGlpiPrefillActors, fetchGlpiTicketDetail, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchSapSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, fetchIssueReminderPreview, sendIssueReminder, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind, type GlpiTicketDetail, type AdminPersonRow, type SapSystemRow } from "../api";
 import { buildGlpiPrefillSubmission, formatGlpiOpeningDate, submitGlpiPrefill } from "../glpiPrefill";
 import { runTemplatePreviewAction } from "../templatePreviewActions";
 import { buildTemplateClipboardPayload } from "../templateClipboard";
@@ -3740,6 +3740,16 @@ export function App() {
               setChangeIssueInitialItem(null);
               navigateTo("issue-change");
             }}
+            canSendReminder={Boolean(authUser?.isReminder)}
+            onSendReminder={async (issueId) => {
+              try {
+                const preview = await fetchIssueReminderPreview(issueId);
+                const notes = window.prompt(`To: ${preview.to.join(", ")}\n${preview.cc ? `CC: ${preview.cc}\n` : ""}\n${preview.body}\n\nNotes / Outstanding:`, preview.notesDraft);
+                if (notes === null) return;
+                await sendIssueReminder(issueId, notes);
+                showToast("success", "Reminder email sent successfully.");
+              } catch (err) { showToast("error", err instanceof Error ? err.message : String(err)); }
+            }}
             onGenerateCrForm={async (issueId) => {
               setError("");
               try {
@@ -5145,6 +5155,8 @@ function IssueDisplay({
   onCloseDetail,
   onChangeIssue,
   onIssueAction,
+  canSendReminder = false,
+  onSendReminder,
   onGenerateCrForm,
   onGenerateUserCrForm,
   selectedBatchIssueIds,
@@ -5167,6 +5179,8 @@ function IssueDisplay({
   onCloseDetail: () => void;
   onChangeIssue: (id: number, item?: IncompleteItem | null) => void;
   onIssueAction: (id: number, action: "cancel" | "delete") => void;
+  canSendReminder?: boolean;
+  onSendReminder?: (id: number) => void;
   onGenerateCrForm: (id: number) => void;
   onGenerateUserCrForm?: (id: number) => void;
   selectedBatchIssueIds: Set<number>;
@@ -5490,6 +5504,13 @@ function IssueDisplay({
                                   >
                                     <button
                                       type="button"
+                                      disabled={!canSendReminder}
+                                      onClick={() => { setRowMenuOpenId(null); setRowMenuPos(null); onSendReminder?.(issue.id); }}
+                                    >
+                                      <Mail size={14} /> Send Reminder Email
+                                    </button>
+                                    <button
+                                      type="button"
                                       onClick={() => {
                                         setRowMenuOpenId(null);
                                         setRowMenuPos(null);
@@ -5598,6 +5619,9 @@ function IssueDisplay({
                       </button>
                     </>
                   )}
+                  <button type="button" disabled={!canSendReminder} onClick={() => { setDetailMenuOpen(false); onSendReminder?.(selectedIssue.id); }}>
+                    <Mail size={15} /> Send Reminder Email
+                  </button>
                   <button type="button" disabled={selectedIssue.issue_status === "cancelled"} onClick={() => { setDetailMenuOpen(false); onIssueAction(selectedIssue.id, "cancel"); }}>
                     <XCircle size={15} /> Cancel Issue
                   </button>

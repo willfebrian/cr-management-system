@@ -3,7 +3,8 @@ import test from "node:test";
 import { parseMcpEmailConfig } from "../src/server/services/mcpEmailConfig.js";
 import {
   discoverMcpEmailServer,
-  searchMcpEmails
+  searchMcpEmails,
+  sendMcpEmail
 } from "../src/server/services/mcpEmailService.js";
 
 const config = parseMcpEmailConfig(JSON.stringify({
@@ -105,4 +106,28 @@ test("rejects an MCP server that does not expose the required email tools", asyn
     discoverMcpEmailServer(config, fakeFetch),
     /search_emails.*read_email/i
   );
+});
+
+test("sends one email with multiple To recipients and optional CC", async () => {
+  const toolCalls: Array<{ name: string; arguments: Record<string, unknown> }> = [];
+  const fakeFetch: typeof fetch = async (_input, init) => {
+    const request = JSON.parse(String(init?.body || "{}"));
+    if (request.method === "initialize") return rpcResponse({});
+    if (request.method === "notifications/initialized") return new Response(null, { status: 202 });
+    if (request.method === "tools/list") return rpcResponse({ tools: [{ name: "send_email" }] });
+    toolCalls.push(request.params);
+    return rpcResponse({ content: [{ type: "text", text: JSON.stringify({ status: "sent", messageId: "message-42" }) }] });
+  };
+
+  const result = await sendMcpEmail(config, {
+    to: "requester@example.test,abaper@example.test",
+    cc: "sap-abap@example.test",
+    subject: "Test",
+    body: "Hello World"
+  }, { fetchImpl: fakeFetch });
+
+  assert.deepEqual(toolCalls, [{ name: "send_email", arguments: {
+    to: "requester@example.test,abaper@example.test", cc: "sap-abap@example.test", subject: "Test", body: "Hello World"
+  } }]);
+  assert.deepEqual(result, { status: "sent", messageId: "message-42", to: "requester@example.test,abaper@example.test", cc: "sap-abap@example.test", subject: "Test" });
 });
