@@ -267,6 +267,7 @@ export type AdminPersonRow = {
   is_evaluator: boolean;
   is_approver: boolean;
   is_transporter: boolean;
+  is_reminder: boolean;
 };
 
 export async function fetchAdminPeople(): Promise<{ rows: AdminPersonRow[] }> {
@@ -560,7 +561,7 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return body;
 }
 
-export type AuthUser = { id: number; username: string; role: "ADMIN" | "USER"; mustChangePassword: boolean; lastLoginAt?: string | null };
+export type AuthUser = { id: number; username: string; role: "ADMIN" | "USER"; mustChangePassword: boolean; lastLoginAt?: string | null; isReminder: boolean };
 export async function login(username: string, password: string) { return fetchJson<{ user: AuthUser }>("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password }) }); }
 export async function fetchCurrentUser() { return fetchJson<{ user: AuthUser }>("/api/auth/me"); }
 export async function logout() { return fetchJson<{ ok: boolean }>("/api/auth/logout", { method: "POST" }); }

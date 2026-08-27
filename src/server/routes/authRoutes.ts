@@ -10,7 +10,8 @@ const publicUser = (user: any) => ({
   username: user.username,
   role: user.role,
   mustChangePassword: user.must_change_password ?? user.mustChangePassword,
-  lastLoginAt: user.last_login_at ?? user.lastLoginAt ?? null
+  lastLoginAt: user.last_login_at ?? user.lastLoginAt ?? null,
+  isReminder: Boolean(user.isReminder ?? user.is_reminder)
 });
 import { recordActivityLog } from "../db/auditRepository.js";
 

@@ -15,7 +15,7 @@ export const adminRoutes = Router();
 adminRoutes.get("/people", async (_req, res, next) => {
   try {
     const { rows } = await pool.query(`
-      SELECT id, full_name, nickname, email, department, is_active, is_approver, is_abaper, is_requester, is_tester, is_evaluator, is_transporter
+      SELECT id, full_name, nickname, email, department, is_active, is_approver, is_abaper, is_requester, is_tester, is_evaluator, is_transporter, is_reminder
       FROM issue_people
       ORDER BY coalesce(full_name, nickname)
     `);
@@ -29,9 +29,9 @@ adminRoutes.post("/people", async (req, res, next) => {
   try {
     const { full_name, nickname, email } = req.body;
     const { rows } = await pool.query(`
-      INSERT INTO issue_people (full_name, nickname, email, department, is_active, is_approver, is_abaper, is_requester, is_tester, is_evaluator, is_transporter)
-      VALUES ($1, $2, $3, 'IT', true, false, false, true, false, false, false)
-      RETURNING id, full_name, nickname, email, department, is_active, is_approver, is_abaper, is_requester, is_tester, is_evaluator, is_transporter
+      INSERT INTO issue_people (full_name, nickname, email, department, is_active, is_approver, is_abaper, is_requester, is_tester, is_evaluator, is_transporter, is_reminder)
+      VALUES ($1, $2, $3, 'IT', true, false, false, true, false, false, false, false)
+      RETURNING id, full_name, nickname, email, department, is_active, is_approver, is_abaper, is_requester, is_tester, is_evaluator, is_transporter, is_reminder
     `, [full_name || `New Person ${Date.now()}`, nickname || '', email || null]);
     const user = await resolveAuthUser(req);
     await recordActivityLog({
@@ -51,7 +51,7 @@ adminRoutes.post("/people", async (req, res, next) => {
 adminRoutes.put("/people/:id", async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const { is_active, is_approver, is_abaper, is_requester, is_tester, is_evaluator, is_transporter, full_name, nickname, email } = req.body;
+    const { is_active, is_approver, is_abaper, is_requester, is_tester, is_evaluator, is_transporter, is_reminder, full_name, nickname, email } = req.body;
     
     await pool.query(`
       UPDATE issue_people 
@@ -62,6 +62,7 @@ adminRoutes.put("/people/:id", async (req, res, next) => {
           is_tester = $6,
           is_evaluator = $7,
           is_transporter = $11,
+          is_reminder = $12,
           full_name = COALESCE($8, full_name),
           nickname = COALESCE($9, nickname),
           email = COALESCE($10, email),
@@ -78,7 +79,8 @@ adminRoutes.put("/people/:id", async (req, res, next) => {
       full_name ?? null, 
       nickname ?? null, 
       email ?? null,
-      is_transporter ?? null
+      is_transporter ?? null,
+      is_reminder ?? null
     ]);
     
     const user = await resolveAuthUser(req);
