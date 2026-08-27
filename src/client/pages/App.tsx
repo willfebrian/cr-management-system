@@ -314,6 +314,8 @@ export function App() {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [reportReminder, setReportReminder] = useState<{ issueId: number; preview: Awaited<ReturnType<typeof fetchIssueReminderPreview>>; notes: string } | null>(null);
+  const [reportReminderSending, setReportReminderSending] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncCrResult | null>(null);
   const [runningSyncSystems, setRunningSyncSystems] = useState<string[]>([]);
   const [syncRefreshToken, setSyncRefreshToken] = useState(0);
@@ -3744,10 +3746,7 @@ export function App() {
             onSendReminder={async (issueId) => {
               try {
                 const preview = await fetchIssueReminderPreview(issueId);
-                const notes = window.prompt(`To: ${preview.to.join(", ")}\n${preview.cc ? `CC: ${preview.cc}\n` : ""}\n${preview.body}\n\nNotes / Outstanding:`, preview.notesDraft);
-                if (notes === null) return;
-                await sendIssueReminder(issueId, notes);
-                showToast("success", "Reminder email sent successfully.");
+                setReportReminder({ issueId, preview, notes: preview.notesDraft });
               } catch (err) { showToast("error", err instanceof Error ? err.message : String(err)); }
             }}
             onGenerateCrForm={async (issueId) => {
@@ -3903,6 +3902,7 @@ export function App() {
             onTargetSystemChange={setCrTargetSystem}
             sapSystems={sapSystems}
             onNotify={showToast}
+            canSendReminder={Boolean(authUser?.isReminder)}
             onDirtyChange={setIssueFormDirty}
             onSave={async (payload) => {
               setError("");
@@ -4147,6 +4147,36 @@ export function App() {
           </div>
         </UIModal>
       )}
+      <UIModal
+        isOpen={Boolean(reportReminder)}
+        onClose={() => setReportReminder(null)}
+        title="Generate Reminder Email"
+        subtitle={reportReminder?.preview.subject}
+        type="primary"
+        maxWidth="680px"
+        confirmText="Send Email"
+        cancelText="Close"
+        confirmLoading={reportReminderSending}
+        confirmDisabled={!reportReminder?.notes.trim()}
+        onConfirm={async () => {
+          if (!reportReminder) return;
+          setReportReminderSending(true);
+          try {
+            await sendIssueReminder(reportReminder.issueId, reportReminder.notes);
+            showToast("success", "Reminder email sent successfully.");
+            setReportReminder(null);
+          } catch (err) { showToast("error", err instanceof Error ? err.message : String(err)); }
+          finally { setReportReminderSending(false); }
+        }}
+      >
+        {reportReminder ? <div style={{ display: "grid", gap: "14px" }}>
+          <div><strong>To:</strong> {reportReminder.preview.to.join(", ")}</div>
+          <div><strong>CC:</strong> {reportReminder.preview.cc || "-"}</div>
+          {reportReminder.preview.skippedRecipients.length ? <div><strong>Skipped:</strong> {reportReminder.preview.skippedRecipients.join(", ")}</div> : null}
+          <pre className="template-preview-body" style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", margin: 0 }}>{reportReminder.preview.body}</pre>
+          <label><strong>Notes / Outstanding</strong><textarea rows={5} value={reportReminder.notes} onChange={(event) => setReportReminder({ ...reportReminder, notes: event.target.value })} style={{ width: "100%", marginTop: "8px" }} /></label>
+        </div> : null}
+      </UIModal>
       <UIModal
         isOpen={confirmModal.isOpen}
         onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
@@ -6078,7 +6108,8 @@ function IssueEditor({
   onSave,
   onCancel,
   onDelete,
-  onDirtyChange
+  onDirtyChange,
+  canSendReminder = false
 }: {
   mode: "create" | "change";
   detail: IssueDetail | null;
@@ -6097,6 +6128,7 @@ function IssueEditor({
   onCancel?: (id: number, reason: string) => Promise<void>;
   onDelete?: (id: number) => Promise<void>;
   onDirtyChange?: (dirty: boolean) => void;
+  canSendReminder?: boolean;
 }) {
   const [form, setForm] = useState<IssueSavePayload>(() => issueFormFromDetail(detail));
   const initialFormRef = useRef<IssueSavePayload>(issueFormFromDetail(detail));
@@ -6495,6 +6527,9 @@ function IssueEditor({
     abaperGlpiUserIds?: number[];
   } | null>(null);
   const [copiedTemplate, setCopiedTemplate] = useState(false);
+  const [reminderPreview, setReminderPreview] = useState<Awaited<ReturnType<typeof fetchIssueReminderPreview>> | null>(null);
+  const [reminderNotes, setReminderNotes] = useState("");
+  const [reminderSending, setReminderSending] = useState(false);
 
   async function copyTemplateToClipboard(notify = true) {
     if (!templatePreview) return;
@@ -6523,7 +6558,7 @@ function IssueEditor({
     }
   }
 
-  const [templateBusy, setTemplateBusy] = useState<"" | "email" | "ticket" | "cr-transport" | "cr-user">("");
+  const [templateBusy, setTemplateBusy] = useState<"" | "email" | "ticket" | "reminder" | "cr-transport" | "cr-user">("");
   const [generateMenuOpen, setGenerateMenuOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [missingPeople, setMissingPeople] = useState<IssuePersonCheck[]>([]);
@@ -6805,7 +6840,7 @@ function IssueEditor({
     }
   }
 
-  async function generateTemplate(kind: "email" | "ticket") {
+  async function generateTemplate(kind: "email" | "ticket" | "reminder") {
     if (!detail?.issue?.id) {
       setTemplatePreview({
         title: kind === "email" ? "Generate Email Template" : "Generate GLPI Ticket Template",
@@ -6815,7 +6850,12 @@ function IssueEditor({
     }
     setTemplateBusy(kind);
     try {
-      if (kind === "ticket") {
+      if (kind === "reminder") {
+        const preview = await fetchIssueReminderPreview(detail.issue.id);
+        setReminderPreview(preview);
+        setReminderNotes(preview.notesDraft);
+        setTemplatePreview({ title: "Generate Reminder Email", body: preview.body });
+      } else if (kind === "ticket") {
         const [preview, actors] = await Promise.all([
           fetchIssueTemplate(detail.issue.id, kind),
           fetchGlpiPrefillActors(detail.issue.id)
@@ -6826,7 +6866,7 @@ function IssueEditor({
       }
     } catch (err) {
       setTemplatePreview({
-        title: kind === "email" ? "Generate Email Template" : "Generate GLPI Ticket Template",
+        title: kind === "reminder" ? "Generate Reminder Email" : kind === "email" ? "Generate Email Template" : "Generate GLPI Ticket Template",
         body: err instanceof Error ? err.message : String(err)
       });
     } finally {
@@ -7462,6 +7502,7 @@ function IssueEditor({
                         generateTemplate("email");
                       }}><FileOutput size={15} /> Email Template</button>
                     ) : null}
+                    {canSendReminder ? <button type="button" onClick={() => { setGenerateMenuOpen(false); generateTemplate("reminder"); }}><Mail size={15} /> Reminder Email</button> : null}
                     {hasSavedCrLink ? (
                       <>
                         <button type="button" onClick={() => {
@@ -7533,10 +7574,21 @@ function IssueEditor({
           <section className="modal-card template-preview-modal" role="dialog" aria-modal="true" aria-labelledby="template-preview-title" style={{ width: "90%", maxWidth: "680px", padding: "24px", borderRadius: "16px" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
               <h2 id="template-preview-title" style={{ margin: 0, fontSize: "1.25rem", fontWeight: 700 }}>{templatePreview.title}</h2>
-              <button type="button" onClick={() => setTemplatePreview(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)" }}>
+              <button type="button" onClick={() => { setTemplatePreview(null); setReminderPreview(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)" }}>
                 <X size={18} />
               </button>
             </div>
+
+            {reminderPreview ? (
+              <div className="template-preview-recipients">
+                <p><strong>To:</strong> {reminderPreview.to.join(", ")}</p>
+                <p><strong>CC:</strong> {reminderPreview.cc || "-"}</p>
+                {reminderPreview.skippedRecipients.length ? <p><strong>Skipped:</strong> {reminderPreview.skippedRecipients.join(", ")}</p> : null}
+                <label><strong>Notes / Outstanding</strong>
+                  <textarea value={reminderNotes} onChange={(event) => setReminderNotes(event.target.value)} rows={5} style={{ width: "100%", marginTop: "8px" }} />
+                </label>
+              </div>
+            ) : null}
 
             {templatePreview.previewHtml || templatePreview.bodyHtml ? (
               <div className="template-preview-body" dangerouslySetInnerHTML={{ __html: templatePreview.previewHtml || templatePreview.bodyHtml || "" }} />
@@ -7545,6 +7597,13 @@ function IssueEditor({
             )}
 
             <div className="modal-actions" style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "10px", marginTop: "20px", flexWrap: "wrap" }}>
+              {reminderPreview ? <button type="button" className="primary" disabled={reminderSending || !reminderNotes.trim()} onClick={async () => {
+                if (!detail?.issue?.id) return;
+                setReminderSending(true);
+                try { await sendIssueReminder(detail.issue.id, reminderNotes); onNotify?.("success", "Reminder email sent successfully."); setTemplatePreview(null); setReminderPreview(null); }
+                catch (err) { onNotify?.("error", err instanceof Error ? err.message : String(err)); }
+                finally { setReminderSending(false); }
+              }}><Mail size={15} /> {reminderSending ? "Sending..." : "Send Email"}</button> : null}
               <button type="button" className="secondary" onClick={() => void runTemplatePreviewAction("copy", {
                 copy: () => copyTemplateToClipboard(true),
                 openGlpi: () => undefined
@@ -7830,7 +7889,8 @@ function ChangeIssue({
   onCancel,
   onDelete,
   onNotify,
-  onDirtyChange
+  onDirtyChange,
+  canSendReminder = false
 }: {
   initialIssueId?: number | null;
   initialAction?: "" | "cancel" | "delete";
@@ -7845,6 +7905,7 @@ function ChangeIssue({
   onDelete: (id: number) => Promise<void>;
   onNotify: (type: "success" | "error", message: string) => void;
   onDirtyChange?: (dirty: boolean) => void;
+  canSendReminder?: boolean;
 }) {
   const [selection, setSelection] = useState({ q: "", glpi: "", crHelpdesk: "", cr: "" });
   const [candidates, setCandidates] = useState<IssueRow[]>([]);
@@ -7968,6 +8029,7 @@ function ChangeIssue({
           onCancel={onCancel}
           onDelete={onDelete}
           onDirtyChange={onDirtyChange}
+          canSendReminder={canSendReminder}
         />
       ) : searching ? (
         <section className="panel issue-editor-panel" style={{ display: "flex", alignItems: "center", gap: "10px", padding: "30px" }}>

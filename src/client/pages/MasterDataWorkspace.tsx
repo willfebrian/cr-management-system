@@ -92,6 +92,25 @@ Regards,
 <u>{FULLNAME}</u>
 ({USER_DEPARTMENT})`;
 
+  const DEFAULT_REMINDER_TEMPLATE = `Dear All,
+
+Please follow up on the outstanding Issue below:
+
+- Issue No.: **{ISSUE_KEY}**
+- Issue Description: **{ISSUE_NAME}**
+- CR Transport: **{CR_SAP}**
+- CR Transport Status: **{CR_STATUS}**
+- GLPI: {GLPI_LINK}
+- CR Helpdesk: **{CR_HELPDESK}**
+
+**Notes / Outstanding:**
+{NOTES}
+
+Regards,
+
+<u>{FULLNAME}</u>
+({USER_DEPARTMENT})`;
+
   const [settings, setSettings] = useState<Record<string, string>>({
     ai_primary_provider: "9router",
     ai_fallback_provider: "openrouter",
@@ -119,6 +138,7 @@ Regards,
     filename_pattern_project_cr_transport: "CR Transport Project {PROJECT_KEY}.docx",
     template_body_glpi: DEFAULT_GLPI_TEMPLATE,
     template_body_email: DEFAULT_EMAIL_TEMPLATE,
+    template_body_reminder: DEFAULT_REMINDER_TEMPLATE,
   });
 
   const [showNineRouterKey, setShowNineRouterKey] = useState(false);
@@ -130,18 +150,20 @@ Regards,
 
   const glpiTextareaRef = useRef<HTMLTextAreaElement>(null);
   const emailTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const [activeTemplateTab, setActiveTemplateTab] = useState<"glpi" | "email">("glpi");
+  const reminderTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const [activeTemplateTab, setActiveTemplateTab] = useState<"glpi" | "email" | "reminder">("glpi");
 
   function applyToolbarFormatting(prefix: string, suffix = "") {
     const isGlpi = activeTemplateTab === "glpi";
-    const key = isGlpi ? "template_body_glpi" : "template_body_email";
-    const ref = isGlpi ? glpiTextareaRef : emailTextareaRef;
+    const key = isGlpi ? "template_body_glpi" : activeTemplateTab === "reminder" ? "template_body_reminder" : "template_body_email";
+    const ref = isGlpi ? glpiTextareaRef : activeTemplateTab === "reminder" ? reminderTextareaRef : emailTextareaRef;
     const textarea = ref.current;
     if (!textarea) return;
 
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
-    const currentVal = settings[key] !== undefined ? settings[key] : (isGlpi ? DEFAULT_GLPI_TEMPLATE : DEFAULT_EMAIL_TEMPLATE);
+    const fallback = isGlpi ? DEFAULT_GLPI_TEMPLATE : activeTemplateTab === "reminder" ? DEFAULT_REMINDER_TEMPLATE : DEFAULT_EMAIL_TEMPLATE;
+    const currentVal = settings[key] !== undefined ? settings[key] : fallback;
     const selectedText = currentVal.substring(start, end) || "text";
     const newVal = currentVal.substring(0, start) + prefix + selectedText + suffix + currentVal.substring(end);
 
@@ -154,14 +176,14 @@ Regards,
 
   function insertTemplateToken(token: string) {
     const isGlpi = activeTemplateTab === "glpi";
-    const key = isGlpi ? "template_body_glpi" : "template_body_email";
-    const ref = isGlpi ? glpiTextareaRef : emailTextareaRef;
+    const key = isGlpi ? "template_body_glpi" : activeTemplateTab === "reminder" ? "template_body_reminder" : "template_body_email";
+    const ref = isGlpi ? glpiTextareaRef : activeTemplateTab === "reminder" ? reminderTextareaRef : emailTextareaRef;
     const textarea = ref.current;
 
     if (textarea) {
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
-      const currentVal = settings[key] !== undefined ? settings[key] : (isGlpi ? DEFAULT_GLPI_TEMPLATE : DEFAULT_EMAIL_TEMPLATE);
+      const currentVal = settings[key] !== undefined ? settings[key] : (isGlpi ? DEFAULT_GLPI_TEMPLATE : activeTemplateTab === "reminder" ? DEFAULT_REMINDER_TEMPLATE : DEFAULT_EMAIL_TEMPLATE);
       const newVal = currentVal.substring(0, start) + token + currentVal.substring(end);
       setSettings((prev) => ({ ...prev, [key]: newVal }));
       setTimeout(() => {
@@ -170,7 +192,7 @@ Regards,
       }, 50);
     } else {
       setSettings((prev) => {
-        const currentVal = prev[key] !== undefined ? prev[key] : (isGlpi ? DEFAULT_GLPI_TEMPLATE : DEFAULT_EMAIL_TEMPLATE);
+        const currentVal = prev[key] !== undefined ? prev[key] : (isGlpi ? DEFAULT_GLPI_TEMPLATE : activeTemplateTab === "reminder" ? DEFAULT_REMINDER_TEMPLATE : DEFAULT_EMAIL_TEMPLATE);
         return { ...prev, [key]: `${currentVal} ${token}` };
       });
     }
@@ -178,10 +200,10 @@ Regards,
 
   function resetTemplateToDefault() {
     const isGlpi = activeTemplateTab === "glpi";
-    const key = isGlpi ? "template_body_glpi" : "template_body_email";
-    const defaultVal = isGlpi ? DEFAULT_GLPI_TEMPLATE : DEFAULT_EMAIL_TEMPLATE;
+    const key = isGlpi ? "template_body_glpi" : activeTemplateTab === "reminder" ? "template_body_reminder" : "template_body_email";
+    const defaultVal = isGlpi ? DEFAULT_GLPI_TEMPLATE : activeTemplateTab === "reminder" ? DEFAULT_REMINDER_TEMPLATE : DEFAULT_EMAIL_TEMPLATE;
     setSettings((prev) => ({ ...prev, [key]: defaultVal }));
-    showToast("success", `Reset ${isGlpi ? "GLPI Ticket" : "Email"} template to standard default format! Click Save Settings to store.`);
+    showToast("success", `Reset ${isGlpi ? "GLPI Ticket" : activeTemplateTab === "reminder" ? "Reminder Email" : "Email"} template to standard default format! Click Save Settings to store.`);
   }
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -338,6 +360,7 @@ Regards,
           ...localAppearance,
           template_body_glpi: glpiTemplateVal,
           template_body_email: emailTemplateVal,
+          template_body_reminder: settingsRes.template_body_reminder || DEFAULT_REMINDER_TEMPLATE,
         };
         setSettings(merged);
       })
@@ -2241,6 +2264,13 @@ Regards,
                       >
                         Email Template
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTemplateTab("reminder")}
+                        style={{ padding: "6px 14px", borderRadius: "6px", border: "none", background: activeTemplateTab === "reminder" ? "var(--color-primary, #0f766e)" : "transparent", color: activeTemplateTab === "reminder" ? "#ffffff" : "var(--color-text-muted)", fontWeight: activeTemplateTab === "reminder" ? "700" : "500", fontSize: "0.85rem", cursor: "pointer" }}
+                      >
+                        Reminder Email Template
+                      </button>
                     </div>
 
                     <button
@@ -2328,7 +2358,7 @@ Regards,
 
                   {/* Dynamic Tokens */}
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
-                    {["{ISSUE_KEY}", "{ISSUE_NAME}", "{CR_SAP}", "{CR_DESCRIPTION}", "{OBJECT_LIST}", "{GLPI_NO}", "{GLPI_LINK}", "{USERNAME}", "{FULLNAME}", "{USER_NICKNAME}", "{USER_DEPARTMENT}", "{REQUESTER}", "{ABAPER}"].map((token) => (
+                    {["{ISSUE_KEY}", "{ISSUE_NAME}", "{CR_SAP}", "{CR_DESCRIPTION}", "{CR_STATUS}", "{CR_HELPDESK}", "{NOTES}", "{OBJECT_LIST}", "{GLPI_NO}", "{GLPI_LINK}", "{USERNAME}", "{FULLNAME}", "{USER_NICKNAME}", "{USER_DEPARTMENT}", "{REQUESTER}", "{ABAPER}"].map((token) => (
                       <button
                         key={token}
                         type="button"
@@ -2352,7 +2382,7 @@ Regards,
                     rows={12}
                     placeholder="Compose custom GLPI ticket template format..."
                   />
-                ) : (
+                ) : activeTemplateTab === "email" ? (
                   <textarea
                     ref={emailTextareaRef}
                     className="template-editor-textarea"
@@ -2360,6 +2390,15 @@ Regards,
                     onChange={(e) => setSettings({ ...settings, template_body_email: e.target.value })}
                     rows={12}
                     placeholder="Compose custom Email template format..."
+                  />
+                ) : (
+                  <textarea
+                    ref={reminderTextareaRef}
+                    className="template-editor-textarea"
+                    value={settings.template_body_reminder !== undefined ? settings.template_body_reminder : DEFAULT_REMINDER_TEMPLATE}
+                    onChange={(e) => setSettings({ ...settings, template_body_reminder: e.target.value })}
+                    rows={12}
+                    placeholder="Compose custom Reminder Email template format..."
                   />
                 )}
               </div>

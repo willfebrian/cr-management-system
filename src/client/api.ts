@@ -94,8 +94,8 @@ export async function fetchIssueDetail(id: number): Promise<IssueDetail> {
   return fetchJson(`/api/issues/${id}`);
 }
 
-export async function fetchIssueTemplate(id: number, kind: "email" | "ticket"): Promise<{
-  kind: "email" | "ticket";
+export async function fetchIssueTemplate(id: number, kind: "email" | "ticket" | "reminder"): Promise<{
+  kind: "email" | "ticket" | "reminder";
   title: string;
   templatePath: string;
   body: string;

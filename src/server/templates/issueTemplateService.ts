@@ -7,7 +7,7 @@ import { getCrDetailForSystem } from "../db/crRepository.js";
 import { getIssueDetail } from "../db/issueRepository.js";
 import type { CrDetail } from "../../shared/types.js";
 
-export type IssueTemplateKind = "email" | "ticket";
+export type IssueTemplateKind = "email" | "ticket" | "reminder";
 
 export function renderCustomIssueTemplate(
   template: string,
@@ -65,7 +65,7 @@ export async function buildIssueTemplatePreview(
   const requester = detail.issue.requester_name || "-";
   const abaper = detail.issue.abaper_name || "-";
 
-  const settingKey = kind === "email" ? "template_body_email" : "template_body_glpi";
+  const settingKey = kind === "email" ? "template_body_email" : kind === "reminder" ? "template_body_reminder" : "template_body_glpi";
   const customTemplate = await getAppSetting(settingKey, "");
 
   if (customTemplate && customTemplate.trim()) {
@@ -90,7 +90,7 @@ export async function buildIssueTemplatePreview(
     const renderedMarkdown = renderCustomIssueTemplate(customTemplate, tokens, objectListHtml, kind);
     return {
       kind,
-      title: kind === "email" ? "Generate Email Template" : "Generate GLPI Ticket Template",
+      title: kind === "reminder" ? "Generate Reminder Email" : kind === "email" ? "Generate Email Template" : "Generate GLPI Ticket Template",
       templatePath: "Custom App Setting",
       body: renderedMarkdown.body,
       bodyHtml: renderedMarkdown.bodyHtml,

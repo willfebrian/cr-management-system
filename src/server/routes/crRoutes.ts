@@ -293,8 +293,8 @@ crRoutes.get("/issues/:id/templates/:kind", async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     const kind = stringQuery(req.params.kind);
-    if (kind !== "email" && kind !== "ticket") {
-      res.status(400).json({ ok: false, message: "Template kind must be email or ticket." });
+    if (kind !== "email" && kind !== "ticket" && kind !== "reminder") {
+      res.status(400).json({ ok: false, message: "Template kind must be email, ticket, or reminder." });
       return;
     }
     const authUser = await resolveAuthUser(req);
