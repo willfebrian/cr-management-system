@@ -110,7 +110,7 @@ export function transportTargetEnvironment(target: SapTransportTarget): NodeJS.P
 }
 
 export function resolveTransportRequestRuntime() {
-  const cwd = fileURLToPath(new URL("../../../", import.meta.url));
+  const cwd = path.resolve(fileURLToPath(new URL("../../../", import.meta.url)));
   return { cwd, script: path.join(cwd, "scripts", "cr-transport-request.mjs") };
 }
 
