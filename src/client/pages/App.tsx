@@ -4173,7 +4173,7 @@ export function App() {
           <div><strong>To:</strong> {reportReminder.preview.to.join(", ")}</div>
           <div><strong>CC:</strong> {reportReminder.preview.cc || "-"}</div>
           {reportReminder.preview.skippedRecipients.length ? <div><strong>Skipped:</strong> {reportReminder.preview.skippedRecipients.join(", ")}</div> : null}
-          <pre className="template-preview-body" style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", margin: 0 }}>{reportReminder.preview.body}</pre>
+          <div className="template-preview-body" dangerouslySetInnerHTML={{ __html: reportReminder.preview.previewHtml }} />
           <label><strong>Notes / Outstanding</strong><textarea rows={5} value={reportReminder.notes} onChange={(event) => setReportReminder({ ...reportReminder, notes: event.target.value })} style={{ width: "100%", marginTop: "8px" }} /></label>
         </div> : null}
       </UIModal>
@@ -6854,7 +6854,7 @@ function IssueEditor({
         const preview = await fetchIssueReminderPreview(detail.issue.id);
         setReminderPreview(preview);
         setReminderNotes(preview.notesDraft);
-        setTemplatePreview({ title: "Generate Reminder Email", body: preview.body });
+        setTemplatePreview({ title: "Generate Reminder Email", body: preview.body, previewHtml: preview.previewHtml });
       } else if (kind === "ticket") {
         const [preview, actors] = await Promise.all([
           fetchIssueTemplate(detail.issue.id, kind),

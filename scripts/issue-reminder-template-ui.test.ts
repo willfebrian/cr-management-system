@@ -10,5 +10,7 @@ test("exposes a configurable Reminder Email template and styled send preview", (
   assert.match(settings, /template_body_reminder/);
   assert.match(app, /Notes \/ Outstanding/);
   assert.match(app, /Send Email/);
+  assert.match(app, /preview\.previewHtml/);
   assert.match(service, /template_body_reminder/);
+  assert.match(service, /previewHtml/);
 });

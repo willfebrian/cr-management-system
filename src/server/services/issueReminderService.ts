@@ -3,7 +3,7 @@ import { getIssueDetail } from "../db/issueRepository.js";
 import { recordActivityLog } from "../db/auditRepository.js";
 import { sendConfiguredMcpEmail } from "./outlookService.js";
 import type { AuthUser } from "../auth/authService.js";
-import { getAppSetting } from "../utils/namingPattern.js";
+import { getAppSetting, renderMarkdownTemplate } from "../utils/namingPattern.js";
 
 const GROUP_NAME = "SAP ABAP Group";
 const DEFAULT_TEMPLATE = `Dear All,
@@ -51,8 +51,9 @@ export async function previewIssueReminder(issueId: number, actor: AuthUser) {
     CR_HELPDESK: helpdesk, NOTES: notesDraft, REQUESTER: issue.requester_name_snapshot || "-",
     ABAPER: issue.abaper_name_snapshot || "-", FULLNAME: actor.username, USER_DEPARTMENT: "IT"
   });
+  const previewHtml = renderMarkdownTemplate(body, {}, undefined, { htmlProfile: "glpi" }).bodyHtml;
   const last = await pool.query(`SELECT sent_at FROM issue_reminder_emails WHERE issue_id = $1 AND mcp_status = 'sent' ORDER BY sent_at DESC LIMIT 1`, [issueId]);
-  return { eligible: true, to, cc, skippedRecipients, subject: `[Reminder] Issue ${issue.issue_key}: ${issue.issue_name}`, notesDraft, body, lastSentAt: last.rows[0]?.sent_at || null, primaryCr: primary?.trkorr || null, primaryCrStatus: primary?.lifecycle_status || null };
+  return { eligible: true, to, cc, skippedRecipients, subject: `[Reminder] Issue ${issue.issue_key}: ${issue.issue_name}`, notesDraft, body, previewHtml, lastSentAt: last.rows[0]?.sent_at || null, primaryCr: primary?.trkorr || null, primaryCrStatus: primary?.lifecycle_status || null };
 }
 
 export async function sendIssueReminder(issueId: number, input: { notes: string }, actor: AuthUser) {
