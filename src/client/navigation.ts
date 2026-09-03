@@ -16,3 +16,9 @@ export function nextExpandedSidebarGroup(
 ): SidebarGroup | null {
   return current === requested ? null : requested;
 }
+
+export function nextIssuePageRefreshToken(current: number, destination: string): number {
+  return destination === "issue-create" || destination === "issue-change"
+    ? current + 1
+    : current;
+}

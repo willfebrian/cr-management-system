@@ -17,7 +17,7 @@ export type OutlookEmailMatch = {
   body: string;
 };
 
-export type McpEmailSendInput = { to: string; cc?: string; bcc?: string; subject: string; body: string };
+export type McpEmailSendInput = { to: string; cc?: string; bcc?: string; subject: string; body: string; bodyHtml?: string };
 export type McpEmailSendResult = { status: string; messageId?: string; to: string; cc?: string; subject: string };
 
 type JsonRpcResponse = {
@@ -105,22 +105,30 @@ class McpHttpClient {
   }
 }
 
+type McpToolDefinition = { name: string; inputSchema?: { properties?: Record<string, unknown> } };
+
 async function connectMcpEmailServer(config: McpEmailConfig, fetchImpl: typeof fetch, requiredTools: readonly string[] = REQUIRED_EMAIL_TOOLS) {
   const failures: string[] = [];
   for (const server of config.servers) {
     try {
       const client = new McpHttpClient(server, fetchImpl);
-      await client.initialize();
+      try {
+        await client.initialize();
+      } catch (error) {
+        // Legacy MCP endpoints can expose tools without the initialize handshake.
+        if (!(error instanceof Error) || !/method not found/i.test(error.message)) throw error;
+      }
       const list = await client.request("tools/list", {});
-      const tools = Array.isArray(list?.tools)
-        ? list.tools.map((tool: any) => String(tool?.name || "")).filter(Boolean)
+      const toolDefinitions: McpToolDefinition[] = Array.isArray(list?.tools)
+        ? list.tools.filter((tool: any) => typeof tool?.name === "string")
         : [];
+      const tools = toolDefinitions.map((tool) => tool.name);
       const missing = requiredTools.filter((name) => !tools.includes(name));
       if (missing.length) {
         failures.push(`${server.name}: missing ${missing.join(", ")}`);
         continue;
       }
-      return { client, server, tools };
+      return { client, server, tools, toolDefinitions };
     } catch (error) {
       failures.push(`${server.name}: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -232,7 +240,9 @@ export async function sendMcpEmail(
   if (!input.to.trim()) throw new Error("At least one To recipient is required.");
   if (!input.subject.trim()) throw new Error("Email subject is required.");
   if (!input.body.trim()) throw new Error("Email body is required.");
-  const { client } = await connectMcpEmailServer(config, options.fetchImpl || fetch, REQUIRED_SEND_EMAIL_TOOLS);
+  const { client, toolDefinitions } = await connectMcpEmailServer(config, options.fetchImpl || fetch, REQUIRED_SEND_EMAIL_TOOLS);
+  const inputProperties = toolDefinitions.find((tool) => tool.name === "send_email")?.inputSchema?.properties || {};
+  const htmlField = ["htmlBody", "bodyHtml", "html"].find((field) => field in inputProperties);
   const result = await client.request("tools/call", {
     name: "send_email",
     arguments: {
@@ -240,7 +250,8 @@ export async function sendMcpEmail(
       ...(input.cc?.trim() ? { cc: input.cc.trim() } : {}),
       ...(input.bcc?.trim() ? { bcc: input.bcc.trim() } : {}),
       subject: input.subject,
-      body: input.body
+      body: input.body,
+      ...(htmlField && input.bodyHtml?.trim() ? { [htmlField]: input.bodyHtml } : {})
     }
   });
   const payload = toolPayload(result, "send_email");

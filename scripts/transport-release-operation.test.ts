@@ -134,6 +134,24 @@ test("runReleaseOperation records SAP success before scheduling background sync"
   assert.equal(scheduled.length, 1);
 });
 
+test("release background sync refreshes the exact released request", async () => {
+  const service = await import("../src/server/sap/transportReleaseOperationService.js");
+  const synced: Array<{ trkorr: string; targetSystem: string }> = [];
+
+  await service.runReleaseSync("42", {
+    updateSync: async () => ({} as any),
+    sync: async (trkorr: string, targetSystem: string) => {
+      synced.push({ trkorr, targetSystem });
+      return { ok: true, requestCount: 1 };
+    }
+  }, {
+    trkorr: "TRDK924752",
+    targetSystem: "TRD"
+  });
+
+  assert.deepEqual(synced, [{ trkorr: "TRDK924752", targetSystem: "TRD" }]);
+});
+
 test("runReleaseOperation keeps complete SAP failure details and classifies timeout", async () => {
   const service = await import("../src/server/sap/transportReleaseOperationService.js").catch(() => null);
   assert.equal(typeof service?.runReleaseOperation, "function");

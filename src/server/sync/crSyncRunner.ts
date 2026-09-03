@@ -13,7 +13,7 @@ import {
   upsertCrHeader
 } from "../db/crRepository.js";
 import { config, getSapCrSystem } from "../config.js";
-import { readCrCreationLogs, readCrDetail, readCrDetailFromServer, readCrList, readTransportImportLogs } from "../sap/crExtractor.js";
+import { readCrCreationLogs, readCrDetail, readCrDetailFromServer, readCrList, readTransportImportLogs, type CrHeader } from "../sap/crExtractor.js";
 import {
   reconcileLegacyTransportLifecycle,
   type LifecycleReconciliationTargetResult,
@@ -138,7 +138,17 @@ export async function syncCreatedTransportRequest(
     }
     await dependencies.replaceCrObjects(detail, system.code);
     await dependencies.finishSyncRun(syncRunId, "success", null, 1);
-    return { ok: true, trkorr: requestNumber, syncRunId };
+    return {
+      ok: true,
+      trkorr: requestNumber,
+      syncRunId,
+      cr: {
+        trkorr: detail.header.trkorr,
+        description: detail.header.description,
+        statusGroup: detail.header.statusGroup,
+        sapSystemCode: system.code
+      }
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await dependencies.finishSyncRun(syncRunId, "failed", message, 0).catch(() => undefined);
@@ -193,7 +203,7 @@ export async function runCrSync(options: RunCrSyncOptions): Promise<RunCrSyncRes
         rowCount
       });
 
-      const scopedParentRequests = list.requests.filter((request) => isScopedParentRequest(request, owner));
+      const scopedParentRequests = resolveScopedParentRequests(list.requests, owner);
       const cachedRefreshSignatures = new Map<string, Awaited<ReturnType<typeof getCachedCrRefreshSignature>>>();
       let systemRequestCount = 0;
       for (const request of scopedParentRequests) {
@@ -507,6 +517,27 @@ function isScopedParentRequest(
       !request.parentRequest &&
       String(request.owner || "").trim().toUpperCase() === owner
   );
+}
+
+export function resolveScopedParentRequests(rows: CrHeader[], owner: string) {
+  const expectedOwner = String(owner || "").trim().toUpperCase();
+  const parentRequests = new Map<string, CrHeader>();
+
+  for (const row of rows) {
+    if (String(row.owner || "").trim().toUpperCase() !== expectedOwner) continue;
+    const parentRequest = String(row.parentRequest || "").trim().toUpperCase();
+    const parentTrkorr = parentRequest || String(row.trkorr || "").trim().toUpperCase();
+    if (!parentTrkorr) continue;
+
+    const parentCandidate = parentRequest
+      ? { ...row, trkorr: parentTrkorr, parentRequest: "" }
+      : row;
+    if (!parentRequests.has(parentTrkorr) || !parentRequest) {
+      parentRequests.set(parentTrkorr, parentCandidate);
+    }
+  }
+
+  return [...parentRequests.values()];
 }
 
 export function shouldRefreshDetail(

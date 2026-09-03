@@ -13,7 +13,7 @@ import { normalizeLookbackDays, normalizeSyncMode, normalizeSystemCodes, runCrSy
 import { buildCrTransportBatchArchive, buildCrTransportDocument, buildUserCrDocument } from "../templates/crTransportTemplateService.js";
 import { buildIssueTemplatePreview, type IssueTemplateKind } from "../templates/issueTemplateService.js";
 import { resolveGlpiPrefillActors } from "../services/glpiPrefillActorService.js";
-import { previewIssueReminder, sendIssueReminder } from "../services/issueReminderService.js";
+import { draftIssueReminderWithAi, previewIssueReminder, sendIssueReminder } from "../services/issueReminderService.js";
 
 export const crRoutes = Router();
 
@@ -211,8 +211,34 @@ crRoutes.get("/issues/:id", async (req, res, next) => {
   }
 });
 
-crRoutes.get("/issues/:id/reminder-preview", async (req, res, next) => { try { await assertDatabaseConfigured(); res.json(await previewIssueReminder(numberQuery(req.params.id, 0), req.authUser!)); } catch (error) { next(error); } });
-crRoutes.post("/issues/:id/reminder", async (req, res, next) => { try { await assertDatabaseConfigured(); res.json(await sendIssueReminder(numberQuery(req.params.id, 0), { notes: String(req.body?.notes || "") }, req.authUser!)); } catch (error) { next(error); } });
+crRoutes.get("/issues/:id/reminder-preview", async (req, res, next) => {
+  try {
+    await assertDatabaseConfigured();
+    const actions = typeof req.query.actions === "string" ? req.query.actions.split(",") : undefined;
+    res.json(await previewIssueReminder(numberQuery(req.params.id, 0), req.authUser!, {
+      to: stringQuery(req.query.to), cc: stringQuery(req.query.cc), bcc: stringQuery(req.query.bcc),
+      notes: stringQuery(req.query.notes), actions: actions as any, otherAction: stringQuery(req.query.otherAction)
+    }));
+  } catch (error) { next(error); }
+});
+crRoutes.post("/issues/:id/reminder", async (req, res, next) => {
+  try {
+    await assertDatabaseConfigured();
+    res.json(await sendIssueReminder(numberQuery(req.params.id, 0), {
+      to: req.body?.to, cc: req.body?.cc, bcc: req.body?.bcc, notes: req.body?.notes,
+      actions: Array.isArray(req.body?.actions) ? req.body.actions : undefined, otherAction: req.body?.otherAction
+    }, req.authUser!));
+  } catch (error) { next(error); }
+});
+crRoutes.post("/issues/:id/reminder-ai-draft", async (req, res, next) => {
+  try {
+    await assertDatabaseConfigured();
+    res.json(await draftIssueReminderWithAi(numberQuery(req.params.id, 0), {
+      to: req.body?.to, cc: req.body?.cc, bcc: req.body?.bcc, notes: req.body?.notes,
+      actions: Array.isArray(req.body?.actions) ? req.body.actions : undefined, otherAction: req.body?.otherAction
+    }, req.authUser!));
+  } catch (error) { next(error); }
+});
 
 crRoutes.get("/issues/:id/glpi-prefill-actors", async (req, res, next) => {
   try {

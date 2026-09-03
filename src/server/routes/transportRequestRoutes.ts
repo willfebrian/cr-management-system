@@ -32,6 +32,7 @@ transportRequestRoutes.post("/create", asyncHandler(async (req, res) => {
   const syncPlan = createdTransportSyncPlan(targetSystem, result);
   let syncCompleted = false;
   let syncMessage: string | undefined;
+  let syncedCr: Awaited<ReturnType<typeof syncCreatedTransportRequest>>["cr"] | undefined;
   await recordActivityLog({
     activityType: "admin",
     action: "create_sap_transport_request",
@@ -42,8 +43,9 @@ transportRequestRoutes.post("/create", asyncHandler(async (req, res) => {
   });
   if (syncPlan) {
     try {
-      await syncCreatedTransportRequest(syncPlan.trkorr, syncPlan.sourceSystemCode);
+      const syncResult = await syncCreatedTransportRequest(syncPlan.trkorr, syncPlan.sourceSystemCode);
       syncCompleted = true;
+      syncedCr = syncResult.cr;
       await recordActivityLog({
         activityType: "admin",
         action: "sync_cr_after_transport_create",
@@ -64,7 +66,7 @@ transportRequestRoutes.post("/create", asyncHandler(async (req, res) => {
       });
     }
   }
-  res.status(201).json({ ...result, targetSystem, syncQueued: false, syncCompleted, syncMessage });
+  res.status(201).json({ ...result, targetSystem, syncQueued: false, syncCompleted, syncMessage, cr: syncedCr });
 }));
 
 function asyncHandler(handler: (req: Request, res: Response) => Promise<void>) {

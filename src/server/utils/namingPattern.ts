@@ -173,7 +173,13 @@ export function renderMarkdownTemplate(
 function processInlineFormatting(str: string, isGlpi = false): string {
   const strongOpen = isGlpi ? "<strong>" : "<b>";
   const strongClose = isGlpi ? "</strong>" : "</b>";
-  let res = str
+  const markdownLinks: string[] = [];
+  let res = str.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/gi, (_match, label: string, url: string) => {
+    const index = markdownLinks.push(`<a href="${url.replace(/"/g, "&quot;")}" target="_blank">${label}</a>`) - 1;
+    return `\u0000MARKDOWN_LINK_${index}\u0000`;
+  });
+
+  res = res
     .replace(/\*\*(.*?)\*\*/g, `${strongOpen}$1${strongClose}`)
     .replace(/\*(.*?)\*/g, "<i>$1</i>")
     .replace(/<u>(.*?)<\/u>/gi, "<u>$1</u>")
@@ -187,6 +193,8 @@ function processInlineFormatting(str: string, isGlpi = false): string {
       ? `<a href="${url}" target="_blank">${url}</a>`
       : `<a href="${url}" target="_blank" style="color: var(--color-primary, #0f766e); text-decoration: underline;">${url}</a>`;
   });
+
+  res = res.replace(/\u0000MARKDOWN_LINK_(\d+)\u0000/g, (_match, index: string) => markdownLinks[Number(index)] || "");
 
   return res;
 }

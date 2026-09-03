@@ -27,7 +27,17 @@ test("syncs only the newly created request, its child task, and its objects into
     finishSyncRun: async (...args: [number, string, string | null, number]) => { finished.push(args); }
   });
 
-  assert.deepEqual(result, { ok: true, trkorr: "TRDK999003", syncRunId: 71 });
+  assert.deepEqual(result, {
+    ok: true,
+    trkorr: "TRDK999003",
+    syncRunId: 71,
+    cr: {
+      trkorr: "TRDK999003",
+      description: undefined,
+      statusGroup: "outstanding",
+      sapSystemCode: "DEV"
+    }
+  });
   assert.deepEqual(persistedHeaders, ["TRDK999003", "TRDK999004"]);
   assert.deepEqual(snapshots, ["TRDK999003", "TRDK999004"]);
   assert.deepEqual(finished, [[71, "success", null, 1]]);

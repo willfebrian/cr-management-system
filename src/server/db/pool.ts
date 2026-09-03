@@ -21,3 +21,34 @@ export async function assertDatabaseConfigured() {
     throw new Error("PostgreSQL credential is not configured yet. Fill DATABASE_URL or PGUSER/PGPASSWORD in .env.");
   }
 }
+
+export function databaseConnectionMessage(error: unknown, host = config.pg.host, port = config.pg.port) {
+  const code = typeof error === "object" && error && "code" in error ? String((error as { code?: unknown }).code || "") : "";
+  if (["EACCES", "ECONNREFUSED", "ETIMEDOUT", "EHOSTUNREACH", "ENETUNREACH"].includes(code)) {
+    return `Database is unreachable at ${host}:${port}. Check the network, VPN, firewall, and PostgreSQL service.`;
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
+export function configuredDatabaseTarget() {
+  if (config.databaseUrl) {
+    try {
+      const url = new URL(config.databaseUrl);
+      return { host: url.hostname, port: Number(url.port || 5432) };
+    } catch {
+      return { host: config.pg.host, port: config.pg.port };
+    }
+  }
+  return { host: config.pg.host, port: config.pg.port };
+}
+
+export async function checkDatabaseHealth() {
+  const target = configuredDatabaseTarget();
+  try {
+    await assertDatabaseConfigured();
+    await pool.query("SELECT 1");
+    return { ok: true as const };
+  } catch (error) {
+    return { ok: false as const, message: databaseConnectionMessage(error, target.host, target.port) };
+  }
+}

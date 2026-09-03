@@ -90,7 +90,7 @@ export async function buildIssueTemplatePreview(
     const renderedMarkdown = renderCustomIssueTemplate(customTemplate, tokens, objectListHtml, kind);
     return {
       kind,
-      title: kind === "reminder" ? "Generate Reminder Email" : kind === "email" ? "Generate Email Template" : "Generate GLPI Ticket Template",
+      title: kind === "reminder" ? "Generate Reminder Email" : kind === "email" ? "Generate Confirmation Email" : "Generate GLPI Ticket Template",
       templatePath: "Custom App Setting",
       body: renderedMarkdown.body,
       bodyHtml: renderedMarkdown.bodyHtml,
@@ -110,7 +110,7 @@ export async function buildIssueTemplatePreview(
 
   return {
     kind,
-    title: kind === "email" ? "Generate Email Template" : "Generate GLPI Ticket Template",
+    title: kind === "email" ? "Generate Confirmation Email" : "Generate GLPI Ticket Template",
     templatePath,
     ...renderTemplateParagraphs(paragraphs, values, kind)
   };

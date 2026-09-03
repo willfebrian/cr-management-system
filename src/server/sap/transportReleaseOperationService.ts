@@ -9,8 +9,8 @@ import {
   type ReleaseOperationStatus,
   type ReleaseOperationSyncStatus
 } from "./transportReleaseOperationRepository.js";
-import { runCrSync } from "../sync/crSyncRunner.js";
-import { transportCreateSyncOptions } from "../sync/transportRequestSync.js";
+import { syncCreatedTransportRequest } from "../sync/crSyncRunner.js";
+import { createdTransportSyncPlan } from "../sync/transportRequestSync.js";
 
 type Schedule = (work: () => void) => void;
 
@@ -19,7 +19,7 @@ export type ReleaseOperationRunnerDependencies = {
   update: typeof updateReleaseOperation;
   updateSync: typeof updateReleaseOperationSync;
   execute: (trkorr: string, targetSystem: string) => Promise<ReleaseResult>;
-  sync: () => Promise<unknown>;
+  sync: (trkorr: string, targetSystem: string) => Promise<unknown>;
   schedule: Schedule;
 };
 
@@ -35,7 +35,11 @@ const defaultDependencies: ReleaseOperationStartDependencies = {
   update: updateReleaseOperation,
   updateSync: updateReleaseOperationSync,
   execute: executeRelease,
-  sync: () => runCrSync(transportCreateSyncOptions()),
+  sync: (trkorr, targetSystem) => {
+    const plan = createdTransportSyncPlan(targetSystem, { ok: true, trkorr });
+    if (!plan) throw new Error(`CR synchronization is not configured for target system ${targetSystem}.`);
+    return syncCreatedTransportRequest(plan.trkorr, plan.sourceSystemCode);
+  },
   schedule: scheduleImmediate
 };
 
@@ -83,7 +87,7 @@ export async function runReleaseOperation(
       syncStatus: "queued"
     });
     dependencies.schedule(() => {
-      void runReleaseSync(id, dependencies);
+      void runReleaseSync(id, dependencies, operation);
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -100,12 +104,13 @@ export async function runReleaseOperation(
 
 export async function runReleaseSync(
   id: string,
-  dependencies: Pick<ReleaseOperationRunnerDependencies, "updateSync" | "sync">
+  dependencies: Pick<ReleaseOperationRunnerDependencies, "updateSync" | "sync">,
+  request: Pick<ReleaseOperation, "trkorr" | "targetSystem"> = { trkorr: "", targetSystem: "" }
 ): Promise<void> {
   await dependencies.updateSync(id, "running", "CR synchronization is running in the background");
   try {
-    const result = await dependencies.sync();
-    const requestCount = Number((result as { requestCount?: number })?.requestCount || 0);
+    const result = await dependencies.sync(request.trkorr, request.targetSystem);
+    const requestCount = Number((result as { requestCount?: number })?.requestCount ?? ((result as { ok?: boolean })?.ok ? 1 : 0));
     await dependencies.updateSync(id, "succeeded", `CR synchronization completed (${requestCount} request(s))`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

@@ -15,6 +15,7 @@ import { auditRoutes } from "./routes/auditRoutes.js";
 import { ProjectRepositoryError } from "./db/projectRepository.js";
 import { transportRequestRoutes } from "./routes/transportRequestRoutes.js";
 import { transportReleaseRoutes } from "./routes/transportReleaseRoutes.js";
+import { checkDatabaseHealth } from "./db/pool.js";
 
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -33,6 +34,10 @@ app.use((req, res, next) => {
 app.options("*", (_req, res) => res.sendStatus(204));
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
+app.get("/api/health/database", async (_req, res) => {
+  const result = await checkDatabaseHealth();
+  res.status(result.ok ? 200 : 503).json(result);
+});
 app.use("/api/auth", authRoutes);
 app.use("/api/users", requireAuth, userRoutes);
 app.use("/api/projects", projectRoutes);

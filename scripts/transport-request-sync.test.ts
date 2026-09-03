@@ -14,6 +14,10 @@ test("queues automatic sync after a successful DEV AIX release using trkorr", ()
   assert.equal(shouldQueueTransportCreateSync("DEV_AIX", { ok: true, trkorr: "TRDK999002" }), true);
 });
 
+test("queues automatic sync after a successful release through the configured TRD alias", () => {
+  assert.equal(shouldQueueTransportCreateSync("TRD", { ok: true, trkorr: "TRDK999002" }), true);
+});
+
 test("plans a direct SQL sync for only the newly created DEV AIX request", () => {
   assert.deepEqual(
     createdTransportSyncPlan("DEV_AIX", { ok: true, request: "TRDK999003" }),
@@ -24,6 +28,13 @@ test("plans a direct SQL sync for only the newly created DEV AIX request", () =>
     { sourceSystemCode: "DEV_NC", trkorr: "TRDK999003" }
   );
   assert.equal(createdTransportSyncPlan("DEV_AIX", { ok: false, request: "TRDK999003" }), null);
+});
+
+test("plans direct SQL sync for the configured TRD alias used by Create CR", () => {
+  assert.deepEqual(
+    createdTransportSyncPlan("TRD", { ok: true, request: "TRDK999005" }),
+    { sourceSystemCode: "DEV", trkorr: "TRDK999005" }
+  );
 });
 
 test("automatic sync uses the fixed DEV, QA, PRD incremental three-day scope", () => {

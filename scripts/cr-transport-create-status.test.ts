@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { normalizeTransportTarget, transportTargetLabel } from "../src/client/components/crTransport/transportTarget.js";
-import { getTransportCreateState } from "../src/client/components/crTransport/CrTransportCreate.js";
+import { getCreatedCrPreview, getTransportCreateState } from "../src/client/components/crTransport/CrTransportCreate.js";
 
 test("marks selected objects as assigned after SAP CR creation", () => {
   const state = getTransportCreateState({
@@ -28,6 +28,25 @@ test("keeps create action unavailable while an object is already locked in SAP",
   assert.equal(state.assigned, true);
   assert.equal(state.request, "TRDK921778");
   assert.equal(state.canCreate, false);
+});
+
+test("exposes synced CR metadata for an Issue preview immediately after creation", () => {
+  assert.deepEqual(getCreatedCrPreview({
+    ok: true,
+    message: "REQUEST_CREATED",
+    request: "TRDK924760",
+    syncCompleted: true,
+    cr: {
+      trkorr: "TRDK924760",
+      description: "AB - Update ZQM039 case batch digit validation",
+      statusGroup: "modifiable",
+      sapSystemCode: "DEV"
+    }
+  }), {
+    description: "AB - Update ZQM039 case batch digit validation",
+    status: "modifiable",
+    system: "DEV"
+  });
 });
 
 test("uses English neutral guidance in the create transport form", () => {

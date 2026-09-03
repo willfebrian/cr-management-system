@@ -71,17 +71,15 @@ function view(overrides: Partial<React.ComponentProps<typeof UserManagementWorks
 }
 
 test("renders loading, error, and empty states accessibly", () => {
-  assert.match(view({ loading: true, users: [] }), /role="status"[^>]*>Memuat user/i);
+  assert.match(view({ loading: true, users: [] }), /Loading user accounts/i);
   assert.match(view({ error: "Network down", users: [] }), /role="alert"[^>]*>Network down/i);
-  assert.match(view({ users: [], selectedUserId: null }), /Belum ada user/i);
+  assert.match(view({ users: [], selectedUserId: null }), /No users found in this scope/i);
 });
 
-test("renders Users and Archived Users tabs, filters, and selected inactive row", () => {
+test("renders filters and the selected inactive row in the workspace", () => {
   const html = view();
-  assert.match(html, /role="tablist"/);
-  assert.match(html, />Users</);
-  assert.match(html, />Archived Users</);
-  assert.match(html, /aria-label="Cari user"/);
+  assert.doesNotMatch(html, /role="tablist"/);
+  assert.match(html, /aria-label="Search users"/);
   assert.match(html, /aria-label="Filter role"/);
   assert.match(html, /aria-label="Filter status"/);
   assert.match(html, /user-management__row--selected/);
@@ -89,13 +87,12 @@ test("renders Users and Archived Users tabs, filters, and selected inactive row"
   assert.match(html, /Inactive/);
 });
 
-test("archived scope shows archived accounts separately with restore context", () => {
+test("archived scope renders archived accounts without a duplicate workspace toolbar", () => {
   const html = view({
     scope: "archived",
     users: [archived],
     selectedUserId: 3
   });
-  assert.match(html, /aria-selected="true"[^>]*>Archived Users/);
   assert.match(html, /Archived/);
   assert.doesNotMatch(html, /Create User/);
 });
@@ -116,8 +113,8 @@ test("detail panel disables protected self actions but keeps self rename availab
   assert.match(html, /Edit username/);
   assert.match(html, /Reset Password[^<]*<\/button>/);
   assert.match(html, /Reset Password[\s\S]*disabled/);
-  assert.match(html, /Tidak dapat menonaktifkan akun sendiri/);
-  assert.match(html, /Tidak dapat mengarsipkan akun sendiri/);
+  assert.match(html, /Cannot deactivate own account/);
+  assert.match(html, /Cannot archive own account/);
 });
 
 test("detail panel renders immutable audit entries without secret fields", () => {
@@ -142,7 +139,7 @@ test("detail panel renders immutable audit entries without secret fields", () =>
     onArchive={noop}
     onRestore={noop}
   />);
-  assert.match(html, /USERNAME_CHANGED/);
+  assert.match(html, /USERNAME CHANGED/);
   assert.match(html, /OLD/);
   assert.match(html, /ALICE/);
   assert.doesNotMatch(html, /password_hash|token_hash/i);

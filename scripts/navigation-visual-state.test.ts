@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { getSidebarGroupDestination, nextExpandedSidebarGroup } from "../src/client/navigation";
+import { getSidebarGroupDestination, nextExpandedSidebarGroup, nextIssuePageRefreshToken } from "../src/client/navigation";
 
 test("opens only the requested sidebar group", () => {
   assert.equal(nextExpandedSidebarGroup("project", "issue"), "issue");
@@ -17,6 +17,12 @@ test("opens each sidebar group at its report destination", () => {
   assert.equal(getSidebarGroupDestination("cr-transport"), "report");
   assert.equal(getSidebarGroupDestination("issue"), "issue-display");
   assert.equal(getSidebarGroupDestination("project"), "project-report");
+});
+
+test("refreshes Issue page state whenever Create or Change Issue is opened", () => {
+  assert.equal(nextIssuePageRefreshToken(4, "issue-create"), 5);
+  assert.equal(nextIssuePageRefreshToken(4, "issue-change"), 5);
+  assert.equal(nextIssuePageRefreshToken(4, "issue-display"), 4);
 });
 
 test("uses semantic responsive header classes", () => {

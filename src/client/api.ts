@@ -4,9 +4,22 @@ export async function fetchDashboard(): Promise<DashboardData> {
   return fetchJson("/api/dashboard");
 }
 
-export type IssueReminderPreview = { eligible: boolean; to: string[]; cc?: string; skippedRecipients: string[]; subject: string; body: string; previewHtml: string; notesDraft: string; lastSentAt?: string | null };
-export async function fetchIssueReminderPreview(id: number) { return fetchJson<IssueReminderPreview>(`/api/issues/${id}/reminder-preview`); }
-export async function sendIssueReminder(id: number, notes: string) { return fetchJson(`/api/issues/${id}/reminder`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ notes }) }); }
+export type ReminderAction = "cr_not_prd" | "progress_update" | "information_or_documents" | "other";
+export type IssueReminderInput = { to?: string; cc?: string; bcc?: string; notes?: string; actions?: ReminderAction[]; otherAction?: string };
+export type IssueReminderPreview = { eligible: boolean; to: string[]; cc?: string; bcc?: string; defaultRecipients: { to: string; cc: string; bcc: string }; actions: ReminderAction[]; otherAction: string; skippedRecipients: string[]; subject: string; body: string; previewHtml: string; notesDraft: string; lastSentAt?: string | null };
+export async function fetchIssueReminderPreview(id: number, input: IssueReminderInput = {}) {
+  const query = new URLSearchParams();
+  if (input.to !== undefined) query.set("to", input.to);
+  if (input.cc !== undefined) query.set("cc", input.cc);
+  if (input.bcc !== undefined) query.set("bcc", input.bcc);
+  if (input.notes !== undefined) query.set("notes", input.notes);
+  if (input.actions) query.set("actions", input.actions.join(","));
+  if (input.otherAction !== undefined) query.set("otherAction", input.otherAction);
+  const params = query.size ? `?${query}` : "";
+  return fetchJson<IssueReminderPreview>(`/api/issues/${id}/reminder-preview${params}`);
+}
+export async function sendIssueReminder(id: number, input: IssueReminderInput) { return fetchJson(`/api/issues/${id}/reminder`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) }); }
+export async function draftIssueReminderWithAi(id: number, input: IssueReminderInput) { return fetchJson<{ notes: string; providerUsed?: string }>(`/api/issues/${id}/reminder-ai-draft`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) }); }
 
 export async function fetchStatusTrend(filters: { fromPeriod: string; toPeriod: string }): Promise<StatusTrendData> {
   const params = new URLSearchParams({

@@ -22,6 +22,12 @@ export type TransportRequestResult = {
   syncQueued?: boolean;
   syncCompleted?: boolean;
   syncMessage?: string;
+  cr?: {
+    trkorr: string;
+    description?: string;
+    statusGroup?: string;
+    sapSystemCode?: string;
+  };
 };
 
 export async function resolveTransportObject(query: string, targetSystem: TransportTargetSystem = "DEV_NC"): Promise<{ ok: boolean; message: string; rows: ResolvedTransportObject[] }> {

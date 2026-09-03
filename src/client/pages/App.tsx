@@ -3,7 +3,7 @@ import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { AlertTriangle, BarChart3, Ban, Calendar, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Copy, Database, ExternalLink, FileOutput, FileSearch, FileText, FolderKanban, GitPullRequest, KeyRound, LayoutGrid, Link as LinkIcon, Loader2, LogIn, LogOut, Mail, Moon, MoreVertical, PencilLine, Plus, RefreshCw, Save, Search, ShieldCheck, Sliders, Sparkles, Sun, Tag, Trash2, Unlock, User, Users, X, XCircle } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportBatch, downloadCrTransportTemplate, downloadUserCrTemplate, fetchAdminSettings, fetchAdminPeople, fetchCrDetail, fetchCrList, fetchDashboard, fetchGlpiPrefillActors, fetchGlpiTicketDetail, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchSapSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, fetchIssueReminderPreview, sendIssueReminder, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind, type GlpiTicketDetail, type AdminPersonRow, type SapSystemRow } from "../api";
+import { cancelIssue as cancelIssueRequest, deleteIssue as deleteIssueRequest, downloadCrTransportBatch, downloadCrTransportTemplate, downloadUserCrTemplate, fetchAdminSettings, fetchAdminPeople, fetchCrDetail, fetchCrList, fetchDashboard, fetchGlpiPrefillActors, fetchGlpiTicketDetail, fetchIssueDetail, fetchIssueList, fetchIssueTemplate, fetchNextIssueNumber, fetchNextSubIssueNumber, fetchStatusTrend, fetchSystems, fetchSapSystems, fetchValueHelp, registerIssuePeople, saveIssue, syncCr, validateIssuePeople, fetchCurrentUser, fetchIssueReminderPreview, sendIssueReminder, draftIssueReminderWithAi, login, logout, changePassword, searchOutlookEmail, generateAnalysis, type ReminderAction, type IssueReminderInput, type OutlookSearchEmailResult, type AuthUser, type CrFilters, type IssueFilters, type IssuePersonCheck, type IssuePersonRegistration, type IssueSavePayload, type SyncCrOptions, type SyncCrResult, type ValueHelpKind, type GlpiTicketDetail, type AdminPersonRow, type SapSystemRow } from "../api";
 import { buildGlpiPrefillSubmission, formatGlpiOpeningDate, submitGlpiPrefill } from "../glpiPrefill";
 import { runTemplatePreviewAction } from "../templatePreviewActions";
 import { buildTemplateClipboardPayload } from "../templateClipboard";
@@ -18,14 +18,15 @@ import { ProjectReport } from "../components/projects/ProjectReport";
 import { UserManagementWorkspace } from "../components/users/UserManagementWorkspace";
 import { MasterDataWorkspace } from "./MasterDataWorkspace";
 import { AuditLogReport } from "./AuditLogReport";
-import { CrTransportCreate } from "../components/crTransport/CrTransportCreate";
+import { CrTransportCreate, getCreatedCrPreview } from "../components/crTransport/CrTransportCreate";
 import { CrTransportRelease, nextReleaseRefreshToken } from "../components/crTransport/CrTransportRelease";
 import { getCrTransportLeaveWarning } from "../components/crTransport/crTransportProgress";
 import { TRANSPORT_TARGETS, transportSystemOptionLabel, transportTargetLabel } from "../components/crTransport/transportTarget";
 import { UIModal, type ModalType } from "../components/common/UIModal";
+import { buildReferenceLookupTrigger, canonicalizeAiParticipantName, createIssueAiFieldPolicy, findExactCrValueHelpRow, hasBlockingIssueDialog } from "../issueAiFormPolicy";
 import { fetchProjectDetail } from "../api/projectApi";
 import { afterIncompleteSectionRender, expandSection, getActiveIncompleteNavigation, getIncompleteItems, getIssueRowMissingItems, groupIncompleteItems, markIncompleteTarget, type ExpandedIssueSections, type IncompleteItem, type IssueSection } from "../issueIncomplete";
-import { getSidebarGroupDestination, nextExpandedSidebarGroup, type SidebarGroup } from "../navigation";
+import { getSidebarGroupDestination, nextExpandedSidebarGroup, nextIssuePageRefreshToken, type SidebarGroup } from "../navigation";
 import { startReportDbRefresh } from "../reportDbRefresh";
 import type { CrDetail, CrRequest, DashboardData, IssueDetail, IssueRow, SapSystemConfig, StatusTrendData } from "../../shared/types";
 import { AppLoadingScreen, SkeletonDetailLoader, TableDataLoader } from "../components/InteractiveLoaders";
@@ -53,6 +54,40 @@ const DASHBOARD_DB_REFRESH_MS = 60000;
 const REPORT_DB_REFRESH_MS = 120000;
 const PROJECTS_ENABLED = import.meta.env.VITE_ENABLE_PROJECTS !== "false";
 const USER_MANAGEMENT_ENABLED = import.meta.env.VITE_ENABLE_USER_MANAGEMENT !== "false";
+type ReminderDraft = Required<Pick<IssueReminderInput, "to" | "cc" | "bcc" | "notes" | "otherAction">> & { actions: ReminderAction[] };
+const reminderActionOptions: Array<{ value: ReminderAction; label: string }> = [
+  { value: "cr_not_prd", label: "CR has not reached PRD" },
+  { value: "progress_update", label: "Request a progress update" },
+  { value: "information_or_documents", label: "Waiting for information or documents" },
+  { value: "other", label: "Other" }
+];
+
+function ReminderEmailFields({ draft, onChange, aiBusy, onDraftWithAi }: { draft: ReminderDraft; onChange: (draft: ReminderDraft) => void; aiBusy?: boolean; onDraftWithAi?: () => void }) {
+  const toggleAction = (action: ReminderAction) => onChange({ ...draft, actions: draft.actions.includes(action) ? draft.actions.filter((item) => item !== action) : [...draft.actions, action] });
+  const update = (key: keyof ReminderDraft, value: string) => onChange({ ...draft, [key]: value });
+  return <div className="reminder-composer">
+    <section className="reminder-composer-section">
+      <div className="reminder-section-heading"><div><strong>Recipients</strong><span>Review or adjust the email recipients before sending.</span></div></div>
+      <div className="reminder-recipient-grid">
+        {(["to", "cc", "bcc"] as const).map((field) => <label key={field} className="reminder-recipient-field"><span>{field.toUpperCase()}</span><input className="reminder-form-control" value={draft[field]} onChange={(event) => update(field, event.target.value)} placeholder={field === "bcc" ? "Optional" : "Separate addresses with commas"} /></label>)}
+      </div>
+    </section>
+
+    <section className="reminder-followup-card">
+      <div className="reminder-section-heading"><div><strong>Required Follow-up</strong><span>Select one or more items to include in the reminder.</span></div></div>
+      <div className="reminder-action-grid">{reminderActionOptions.map((option) => <label key={option.value} className="reminder-action-option"><input className="reminder-action-checkbox" type="checkbox" checked={draft.actions.includes(option.value)} onChange={() => toggleAction(option.value)} /><span>{option.label}</span></label>)}</div>
+      {draft.actions.includes("other") ? <label className="reminder-other-field"><span>Other Follow-up</span><input className="reminder-form-control" value={draft.otherAction} onChange={(event) => update("otherAction", event.target.value)} placeholder="Describe the follow-up required" /></label> : null}
+    </section>
+
+    <section className="reminder-composer-section">
+      <div className="reminder-notes-heading">
+        <div><strong>Notes / Outstanding</strong><span>Optional — add context or generate a draft from the Issue data.</span></div>
+        {onDraftWithAi ? <button type="button" className="secondary reminder-ai-button" disabled={aiBusy} onClick={onDraftWithAi}><Sparkles size={15} /> {aiBusy ? "Drafting..." : "Draft with AI"}</button> : null}
+      </div>
+      <textarea className="reminder-form-control reminder-notes-input" rows={4} value={draft.notes} onChange={(event) => update("notes", event.target.value)} placeholder="Add any additional context for the recipients" />
+    </section>
+  </div>;
+}
 
 function LoginScreen({ onLogin }: { onLogin: (user: AuthUser) => void }) {
   const [username, setUsername] = useState(() => {
@@ -314,11 +349,30 @@ export function App() {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
-  const [reportReminder, setReportReminder] = useState<{ issueId: number; preview: Awaited<ReturnType<typeof fetchIssueReminderPreview>>; notes: string } | null>(null);
+  const [reportReminder, setReportReminder] = useState<{ issueId: number; preview: Awaited<ReturnType<typeof fetchIssueReminderPreview>>; draft: ReminderDraft } | null>(null);
   const [reportReminderSending, setReportReminderSending] = useState(false);
+  const [reportReminderAiBusy, setReportReminderAiBusy] = useState(false);
+
+  useEffect(() => {
+    if (!reportReminder) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void fetchIssueReminderPreview(reportReminder.issueId, reportReminder.draft).then((preview) => {
+        if (cancelled) return;
+        setReportReminder((current) => current && current.issueId === reportReminder.issueId && current.draft === reportReminder.draft
+          ? { ...current, preview }
+          : current);
+      }).catch(() => undefined);
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [reportReminder?.issueId, reportReminder?.draft]);
   const [syncResult, setSyncResult] = useState<SyncCrResult | null>(null);
   const [runningSyncSystems, setRunningSyncSystems] = useState<string[]>([]);
   const [syncRefreshToken, setSyncRefreshToken] = useState(0);
+  const [issuePageRefreshToken, setIssuePageRefreshToken] = useState(0);
   const [loading, setLoading] = useState(false);
   const [syncPopoverOpen, setSyncPopoverOpen] = useState(false);
   const [formLayoutPopoverOpen, setFormLayoutPopoverOpen] = useState(false);
@@ -711,7 +765,11 @@ export function App() {
   }
 
   function navigateTo(nextView: View) {
-    if (nextView === view) return true;
+    if (nextView === view && nextView !== "issue-create" && nextView !== "issue-change") return true;
+    const commitViewNavigation = () => {
+      setIssuePageRefreshToken((current) => nextIssuePageRefreshToken(current, nextView));
+      setView(nextView);
+    };
     const crTransportWarning = getCrTransportLeaveWarning(
       view,
       crTransportCreateIncomplete,
@@ -731,7 +789,7 @@ export function App() {
           setCrTransportReleaseIncomplete(false);
           setIssueFormDirty(false);
           setProjectFormDirty(false);
-          setView(nextView);
+          commitViewNavigation();
         }
       });
       return false;
@@ -748,7 +806,7 @@ export function App() {
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
           setIssueFormDirty(false);
           setProjectFormDirty(false);
-          setView(nextView);
+          commitViewNavigation();
         }
       });
       return false;
@@ -765,14 +823,14 @@ export function App() {
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
           setIssueFormDirty(false);
           setProjectFormDirty(false);
-          setView(nextView);
+          commitViewNavigation();
         }
       });
       return false;
     }
     setIssueFormDirty(false);
     setProjectFormDirty(false);
-    setView(nextView);
+    commitViewNavigation();
     return true;
   }
 
@@ -824,7 +882,7 @@ export function App() {
     if (view === "issue-create") {
       fetchNextIssueNumber().then((res) => setNextIssueNo(res.issueNo)).catch(() => setNextIssueNo(null));
     }
-  }, [view]);
+  }, [view, issuePageRefreshToken]);
 
   useEffect(() => {
     if (!showBaseIssueModal) return;
@@ -3679,6 +3737,13 @@ export function App() {
               try { localStorage.setItem("cr_transport_target_system", val); } catch {}
             }}
             availableSystems={sapSystems}
+            onRequestCreated={() => {
+              setSyncRefreshToken((current) => current + 1);
+              void Promise.all([
+                loadReport({ ...filters, page: 1 }),
+                loadIssues({ ...issueFilters, page: 1 })
+              ]).catch((err) => setError(err instanceof Error ? err.message : String(err)));
+            }}
           />
         ) : view === "cr-transport-release" ? (
           <CrTransportRelease
@@ -3746,7 +3811,7 @@ export function App() {
             onSendReminder={async (issueId) => {
               try {
                 const preview = await fetchIssueReminderPreview(issueId);
-                setReportReminder({ issueId, preview, notes: preview.notesDraft });
+                setReportReminder({ issueId, preview, draft: { to: preview.to.join(", "), cc: preview.cc || "", bcc: preview.bcc || "", notes: preview.notesDraft, actions: preview.actions, otherAction: preview.otherAction } });
               } catch (err) { showToast("error", err instanceof Error ? err.message : String(err)); }
             }}
             onGenerateCrForm={async (issueId) => {
@@ -3805,6 +3870,7 @@ export function App() {
           />
         ) : view === "issue-create" ? (
           <IssueEditor
+            key={`issue-create-${issuePageRefreshToken}`}
             mode="create"
             detail={null}
             layoutStyleOverride={createFormLayoutStyle}
@@ -3893,6 +3959,7 @@ export function App() {
           />
         ) : (
           <ChangeIssue
+            key={`issue-change-${issuePageRefreshToken}`}
             initialIssueId={changeIssueInitialId}
             layoutStyleOverride={changeFormLayoutStyle}
             initialAction={changeIssueInitialAction}
@@ -4157,12 +4224,12 @@ export function App() {
         confirmText="Send Email"
         cancelText="Close"
         confirmLoading={reportReminderSending}
-        confirmDisabled={!reportReminder?.notes.trim()}
+        confirmDisabled={!reportReminder?.draft.to.trim() || !reportReminder.draft.actions.length || (reportReminder.draft.actions.includes("other") && !reportReminder.draft.otherAction.trim())}
         onConfirm={async () => {
           if (!reportReminder) return;
           setReportReminderSending(true);
           try {
-            await sendIssueReminder(reportReminder.issueId, reportReminder.notes);
+            await sendIssueReminder(reportReminder.issueId, reportReminder.draft);
             showToast("success", "Reminder email sent successfully.");
             setReportReminder(null);
           } catch (err) { showToast("error", err instanceof Error ? err.message : String(err)); }
@@ -4170,11 +4237,13 @@ export function App() {
         }}
       >
         {reportReminder ? <div style={{ display: "grid", gap: "14px" }}>
-          <div><strong>To:</strong> {reportReminder.preview.to.join(", ")}</div>
-          <div><strong>CC:</strong> {reportReminder.preview.cc || "-"}</div>
           {reportReminder.preview.skippedRecipients.length ? <div><strong>Skipped:</strong> {reportReminder.preview.skippedRecipients.join(", ")}</div> : null}
-          <div className="template-preview-body" dangerouslySetInnerHTML={{ __html: reportReminder.preview.previewHtml }} />
-          <label><strong>Notes / Outstanding</strong><textarea rows={5} value={reportReminder.notes} onChange={(event) => setReportReminder({ ...reportReminder, notes: event.target.value })} style={{ width: "100%", marginTop: "8px" }} /></label>
+          <ReminderEmailFields draft={reportReminder.draft} onChange={(draft) => setReportReminder({ ...reportReminder, draft })} aiBusy={reportReminderAiBusy} onDraftWithAi={async () => {
+            setReportReminderAiBusy(true);
+            try { const result = await draftIssueReminderWithAi(reportReminder.issueId, reportReminder.draft); setReportReminder((current) => current ? { ...current, draft: { ...current.draft, notes: result.notes } } : current); }
+            catch (err) { showToast("error", err instanceof Error ? err.message : String(err)); }
+            finally { setReportReminderAiBusy(false); }
+          }} />
         </div> : null}
       </UIModal>
       <UIModal
@@ -6294,12 +6363,12 @@ function IssueEditor({
   function getExistingFormFields() {
     const list: Array<{ key: string; label: string; currentValue: string; category: "Analysis" | "People" | "Timeline" }> = [];
     
-    if (form.issueName?.trim()) {
+    if (aiFieldPolicy.canUpdateCoreField() && form.issueName?.trim()) {
       list.push({ key: "issueName", label: "Issue Name", currentValue: form.issueName.trim(), category: "Analysis" });
     }
     // Only include Request Description in AI generation list when currently EMPTY (prevents overwriting existing descriptions)
     const currentReqDesc = form.requestDescription?.trim() || primaryCr?.cr_description_snapshot?.trim() || "";
-    if (!currentReqDesc) {
+    if (aiFieldPolicy.canUpdateCoreField() && !currentReqDesc) {
       list.push({
         key: "requestDescription",
         label: "Request Description (CR SAP)",
@@ -6308,10 +6377,10 @@ function IssueEditor({
       });
     }
 
-    if (form.problemAnalysis?.trim()) {
+    if (aiFieldPolicy.canUpdateCoreField() && form.problemAnalysis?.trim()) {
       list.push({ key: "problemAnalysis", label: "Problem Analysis", currentValue: form.problemAnalysis.trim(), category: "Analysis" });
     }
-    if (form.impactAnalysis?.trim()) {
+    if (aiFieldPolicy.canUpdateCoreField() && form.impactAnalysis?.trim()) {
       list.push({ key: "impactAnalysis", label: "Impact Analysis", currentValue: form.impactAnalysis.trim(), category: "Analysis" });
     }
 
@@ -6329,28 +6398,31 @@ function IssueEditor({
       executor: "PRD Transporter"
     };
 
-    if (form.participants) {
-      for (const [role, label] of Object.entries(participantLabels)) {
-        const val = form.participants[role]?.trim();
-        if (val) {
-          list.push({ key: `participant:${role}`, label, currentValue: val, category: "People" });
-        }
+    for (const [role, label] of Object.entries(participantLabels)) {
+      if (!aiFieldPolicy.canUpdateParticipant(role)) continue;
+      const val = role === "requester"
+        ? form.requesterNames?.trim()
+        : role === "abaper"
+          ? form.abaperNames?.trim()
+          : form.participants?.[role]?.trim();
+      if (val) {
+        list.push({ key: `participant:${role}`, label, currentValue: val, category: "People" });
       }
     }
 
     const timelineLabels: Record<string, string> = {
-      testing_date: "DEV Testing Date",
-      evaluation_date: "DEV Evaluation Date",
-      qa_transport_date: "QA Transport Date",
-      qa_testing_date: "QA Testing Date",
-      qa_evaluation_date: "QA Evaluation Date",
-      request_date: "PRD Request Date",
+      dev_tested_date: "DEV Testing Date",
+      dev_evaluated_date: "DEV Evaluation Date",
+      qa_tested_date: "QA Testing Date",
+      qa_evaluated_date: "QA Evaluation Date",
+      prd_requested_date: "PRD Request Date",
       prd_evaluated_date: "PRD Evaluation Date",
       approval_date: "PRD Approval Date"
     };
 
     if (form.timeline) {
       for (const [tKey, label] of Object.entries(timelineLabels)) {
+        if (!aiFieldPolicy.canUpdateTimeline(tKey)) continue;
         const val = form.timeline[tKey]?.trim();
         if (val) {
           list.push({ key: `timeline:${tKey}`, label, currentValue: val, category: "Timeline" });
@@ -6389,13 +6461,15 @@ function IssueEditor({
     }
 
     // Fetch Master Data People directory to include in AI context for accurate name & role matching
+    let peopleDirectory: AdminPersonRow[] = [];
     try {
       const peopleRes = await fetchAdminPeople();
+      peopleDirectory = peopleRes.rows || [];
       if (peopleRes.rows?.length) {
         const activePeopleStr = peopleRes.rows
           .filter((p) => p.is_active)
           .map((p) => {
-            const name = [p.full_name, p.nickname ? `(${p.nickname})` : null].filter(Boolean).join(" ");
+            const name = p.full_name?.trim() || "";
             const roles = [
               p.is_requester && "Requester",
               p.is_abaper && "ABAPer",
@@ -6404,11 +6478,11 @@ function IssueEditor({
               p.is_approver && "PRD Approver",
               p.is_transporter && "QA/PRD Transporter"
             ].filter(Boolean).join(", ");
-            return `• Name: "${name}" | Email: ${p.email || "N/A"} | Dept: ${p.department || "N/A"}${roles ? ` | System Roles: [${roles}]` : ""}`;
+            return `• Full Name: "${name}"${p.nickname ? ` | Nickname: "${p.nickname}"` : ""} | Email: ${p.email || "N/A"} | Dept: ${p.department || "N/A"}${roles ? ` | System Roles: [${roles}]` : ""}`;
           })
           .join("\n");
         if (activePeopleStr) {
-          combinedContext = `=== MASTER DATA PEOPLE DIRECTORY (MATCH GLPI/EMAIL PERSONS TO THESE OFFICIAL NAMES & ROLES) ===\n${activePeopleStr}\n\n` + combinedContext;
+          combinedContext = `=== MASTER DATA PEOPLE DIRECTORY (RETURN ONLY THE EXACT FULL NAME, NEVER APPEND A NICKNAME IN PARENTHESES) ===\n${activePeopleStr}\n\n` + combinedContext;
         }
       }
     } catch (err) {
@@ -6421,26 +6495,26 @@ function IssueEditor({
       
       let updatedCount = 0;
       
-      const canUpdateName = selections.issueName !== false || !form.issueName?.trim();
+      const canUpdateName = aiFieldPolicy.canUpdateCoreField() && (selections.issueName !== false || !form.issueName?.trim());
       if (canUpdateName && result.issueName) {
         update("issueName", result.issueName);
         updatedCount++;
       }
 
       const currentReqDesc = form.requestDescription?.trim() || primaryCr?.cr_description_snapshot?.trim() || "";
-      const canUpdateRequestDescription = !currentReqDesc && (selections.requestDescription !== false);
+      const canUpdateRequestDescription = aiFieldPolicy.canUpdateCoreField() && !currentReqDesc && (selections.requestDescription !== false);
       if (canUpdateRequestDescription && result.requestDescription) {
         update("requestDescription", result.requestDescription);
         updatedCount++;
       }
       
-      const canUpdateProblem = selections.problemAnalysis !== false || !form.problemAnalysis?.trim();
+      const canUpdateProblem = aiFieldPolicy.canUpdateCoreField() && (selections.problemAnalysis !== false || !form.problemAnalysis?.trim());
       if (canUpdateProblem && result.problemAnalysis) {
         update("problemAnalysis", result.problemAnalysis);
         updatedCount++;
       }
       
-      const canUpdateImpact = selections.impactAnalysis !== false || !form.impactAnalysis?.trim();
+      const canUpdateImpact = aiFieldPolicy.canUpdateCoreField() && (selections.impactAnalysis !== false || !form.impactAnalysis?.trim());
       if (canUpdateImpact && result.impactAnalysis) {
         update("impactAnalysis", result.impactAnalysis);
         updatedCount++;
@@ -6457,11 +6531,18 @@ function IssueEditor({
         };
         for (const [rawRole, nameVal] of Object.entries(result.participants)) {
           const role = roleAliases[rawRole.toLowerCase()] || rawRole;
-          if (nameVal && nameVal.trim() && nameVal.trim().toUpperCase() !== "N/A") {
-            const existingVal = form.participants?.[role]?.trim();
+          if (aiFieldPolicy.canUpdateParticipant(role) && nameVal && nameVal.trim() && nameVal.trim().toUpperCase() !== "N/A") {
+            const fullName = canonicalizeAiParticipantName(nameVal, peopleDirectory);
+            const existingVal = role === "requester"
+              ? form.requesterNames?.trim()
+              : role === "abaper"
+                ? form.abaperNames?.trim()
+                : form.participants?.[role]?.trim();
             const canOverwrite = !existingVal || selections[`participant:${role}`] !== false;
             if (canOverwrite) {
-              updateParticipant(role, nameVal.trim());
+              if (role === "requester") update("requesterNames", fullName);
+              else if (role === "abaper") update("abaperNames", fullName);
+              else updateParticipant(role, fullName);
               updatedCount++;
             }
           }
@@ -6471,7 +6552,7 @@ function IssueEditor({
       // Auto-fill timeline date fields
       if (result.timeline) {
         for (const [tKey, dateVal] of Object.entries(result.timeline)) {
-          if (dateVal && dateVal.trim() && dateVal.trim().toUpperCase() !== "N/A") {
+          if (aiFieldPolicy.canUpdateTimeline(tKey) && dateVal && dateVal.trim() && dateVal.trim().toUpperCase() !== "N/A") {
             const existingVal = form.timeline?.[tKey]?.trim();
             const canOverwrite = !existingVal || selections[`timeline:${tKey}`] !== false;
             if (canOverwrite) {
@@ -6528,8 +6609,28 @@ function IssueEditor({
   } | null>(null);
   const [copiedTemplate, setCopiedTemplate] = useState(false);
   const [reminderPreview, setReminderPreview] = useState<Awaited<ReturnType<typeof fetchIssueReminderPreview>> | null>(null);
-  const [reminderNotes, setReminderNotes] = useState("");
+  const [reminderDraft, setReminderDraft] = useState<ReminderDraft>({ to: "", cc: "", bcc: "", notes: "", actions: ["cr_not_prd"], otherAction: "" });
   const [reminderSending, setReminderSending] = useState(false);
+  const [reminderAiBusy, setReminderAiBusy] = useState(false);
+
+  useEffect(() => {
+    if (!detail?.issue?.id || !reminderPreview) return;
+    let cancelled = false;
+    const issueId = detail.issue.id;
+    const timer = window.setTimeout(() => {
+      void fetchIssueReminderPreview(issueId, reminderDraft).then((preview) => {
+        if (cancelled) return;
+        setReminderPreview(preview);
+        setTemplatePreview((current) => current?.title === "Generate Reminder Email"
+          ? { ...current, body: preview.body, previewHtml: preview.previewHtml }
+          : current);
+      }).catch(() => undefined);
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [detail?.issue?.id, reminderDraft]);
 
   async function copyTemplateToClipboard(notify = true) {
     if (!templatePreview) return;
@@ -6692,8 +6793,9 @@ function IssueEditor({
 
   const primaryCr = detail?.crLinks[0];
   const crTokens = splitTokenValues(form.crLinks);
+  const crLookupKey = crTokens.join("|");
   const glpiTokens = splitTokenValues(form.glpiTickets).filter((token) => /^\d+$/.test(token));
-  const glpiLookupKey = glpiTokens.join("|");
+  const glpiLookupKey = buildReferenceLookupTrigger(glpiTokens, detail?.issue?.id);
   const hasSavedGlpiNo = Boolean(detail?.glpi?.length);
   const hasSavedCrLink = Boolean(detail?.crLinks?.length);
   const hasCrAssigned = crTokens.length > 0;
@@ -6709,6 +6811,7 @@ function IssueEditor({
   const qaDisabled = isCancelled || !qaReady;
   const prdRequestDisabled = isCancelled || !qaReady;
   const prdTransportDisabled = isCancelled || !prdReady;
+  const aiFieldPolicy = createIssueAiFieldPolicy({ formDisabled, devDisabled, qaDisabled, prdRequestDisabled, prdTransportDisabled });
   const detailCrMap = new Map((detail?.crLinks || []).map((link) => [link.trkorr, {
     description: link.cr_description_snapshot,
     status: link.lifecycle_status || link.status_group,
@@ -6720,7 +6823,7 @@ function IssueEditor({
   }
 
   useEffect(() => {
-    if (!glpiLookupKey) return;
+    if (!glpiTokens.length) return;
     const missing = glpiTokens.filter((token) => !glpiPreview[token]);
     if (!missing.length) return;
     let cancelled = false;
@@ -6754,6 +6857,45 @@ function IssueEditor({
       window.clearTimeout(timeout);
     };
   }, [glpiLookupKey]);
+
+  useEffect(() => {
+    if (!crLookupKey) return;
+    const missing = crTokens.filter((token) => !crPreview[token] && !detailCrMap.has(token));
+    if (!missing.length) return;
+    let cancelled = false;
+    const timeout = window.setTimeout(() => {
+      Promise.all(missing.map(async (token) => {
+        try {
+          const result = await fetchValueHelp("cr", token);
+          const row = findExactCrValueHelpRow(token, result.rows);
+          if (!row) return null;
+          return {
+            token,
+            preview: {
+              description: String(row.description || ""),
+              status: String(row.status_group || ""),
+              system: String(row.sap_system_code || "")
+            }
+          };
+        } catch {
+          return null;
+        }
+      })).then((items) => {
+        if (cancelled) return;
+        setCrPreview((current) => {
+          const next = { ...current };
+          for (const item of items) {
+            if (item) next[item.token] = item.preview;
+          }
+          return next;
+        });
+      });
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [crLookupKey]);
 
   useEffect(() => {
     setExpandedPhases({
@@ -6843,7 +6985,7 @@ function IssueEditor({
   async function generateTemplate(kind: "email" | "ticket" | "reminder") {
     if (!detail?.issue?.id) {
       setTemplatePreview({
-        title: kind === "email" ? "Generate Email Template" : "Generate GLPI Ticket Template",
+        title: kind === "email" ? "Generate Confirmation Email" : "Generate GLPI Ticket Template",
         body: "Save issue terlebih dahulu sebelum generate template."
       });
       return;
@@ -6853,7 +6995,7 @@ function IssueEditor({
       if (kind === "reminder") {
         const preview = await fetchIssueReminderPreview(detail.issue.id);
         setReminderPreview(preview);
-        setReminderNotes(preview.notesDraft);
+        setReminderDraft({ to: preview.to.join(", "), cc: preview.cc || "", bcc: preview.bcc || "", notes: preview.notesDraft, actions: preview.actions, otherAction: preview.otherAction });
         setTemplatePreview({ title: "Generate Reminder Email", body: preview.body, previewHtml: preview.previewHtml });
       } else if (kind === "ticket") {
         const [preview, actors] = await Promise.all([
@@ -6866,7 +7008,7 @@ function IssueEditor({
       }
     } catch (err) {
       setTemplatePreview({
-        title: kind === "reminder" ? "Generate Reminder Email" : kind === "email" ? "Generate Email Template" : "Generate GLPI Ticket Template",
+        title: kind === "reminder" ? "Generate Reminder Email" : kind === "email" ? "Generate Confirmation Email" : "Generate GLPI Ticket Template",
         body: err instanceof Error ? err.message : String(err)
       });
     } finally {
@@ -7480,7 +7622,12 @@ function IssueEditor({
 
       <div className="editor-safe-space" aria-hidden="true" />
       <div className="issue-save-bar">
-        <ModalAwareActionDock modalOpen={Boolean(templatePreview)}>
+        <ModalAwareActionDock modalOpen={hasBlockingIssueDialog({
+          hasTemplatePreview: Boolean(templatePreview),
+          actionDialog,
+          missingPeopleCount: missingPeople.length,
+          showAiOverwriteModal
+        })}>
           {mode === "change" ? (
             <>
               <div className="sticky-action-menu">
@@ -7500,7 +7647,7 @@ function IssueEditor({
                       <button type="button" onClick={() => {
                         setGenerateMenuOpen(false);
                         generateTemplate("email");
-                      }}><FileOutput size={15} /> Email Template</button>
+                      }}><FileOutput size={15} /> Confirmation Email</button>
                     ) : null}
                     {canSendReminder ? <button type="button" onClick={() => { setGenerateMenuOpen(false); generateTemplate("reminder"); }}><Mail size={15} /> Reminder Email</button> : null}
                     {hasSavedCrLink ? (
@@ -7581,26 +7728,28 @@ function IssueEditor({
 
             {reminderPreview ? (
               <div className="template-preview-recipients">
-                <p><strong>To:</strong> {reminderPreview.to.join(", ")}</p>
-                <p><strong>CC:</strong> {reminderPreview.cc || "-"}</p>
                 {reminderPreview.skippedRecipients.length ? <p><strong>Skipped:</strong> {reminderPreview.skippedRecipients.join(", ")}</p> : null}
-                <label><strong>Notes / Outstanding</strong>
-                  <textarea value={reminderNotes} onChange={(event) => setReminderNotes(event.target.value)} rows={5} style={{ width: "100%", marginTop: "8px" }} />
-                </label>
+                <ReminderEmailFields draft={reminderDraft} onChange={setReminderDraft} aiBusy={reminderAiBusy} onDraftWithAi={async () => {
+                  if (!detail?.issue?.id) return;
+                  setReminderAiBusy(true);
+                  try { const result = await draftIssueReminderWithAi(detail.issue.id, reminderDraft); setReminderDraft((current) => ({ ...current, notes: result.notes })); }
+                  catch (err) { onNotify?.("error", err instanceof Error ? err.message : String(err)); }
+                  finally { setReminderAiBusy(false); }
+                }} />
               </div>
             ) : null}
 
-            {templatePreview.previewHtml || templatePreview.bodyHtml ? (
+            {!reminderPreview && (templatePreview.previewHtml || templatePreview.bodyHtml) ? (
               <div className="template-preview-body" dangerouslySetInnerHTML={{ __html: templatePreview.previewHtml || templatePreview.bodyHtml || "" }} />
             ) : (
               <pre className="template-preview-body" style={{ whiteSpace: "pre-wrap", fontFamily: "inherit" }}>{templatePreview.body}</pre>
             )}
 
             <div className="modal-actions" style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "10px", marginTop: "20px", flexWrap: "wrap" }}>
-              {reminderPreview ? <button type="button" className="primary" disabled={reminderSending || !reminderNotes.trim()} onClick={async () => {
+              {reminderPreview ? <button type="button" className="primary" disabled={reminderSending || !reminderDraft.to.trim() || !reminderDraft.actions.length || (reminderDraft.actions.includes("other") && !reminderDraft.otherAction.trim())} onClick={async () => {
                 if (!detail?.issue?.id) return;
                 setReminderSending(true);
-                try { await sendIssueReminder(detail.issue.id, reminderNotes); onNotify?.("success", "Reminder email sent successfully."); setTemplatePreview(null); setReminderPreview(null); }
+                try { await sendIssueReminder(detail.issue.id, reminderDraft); onNotify?.("success", "Reminder email sent successfully."); setTemplatePreview(null); setReminderPreview(null); }
                 catch (err) { onNotify?.("error", err instanceof Error ? err.message : String(err)); }
                 finally { setReminderSending(false); }
               }}><Mail size={15} /> {reminderSending ? "Sending..." : "Send Email"}</button> : null}
@@ -7865,10 +8014,19 @@ function IssueEditor({
           onTargetSystemChange={setCrTargetSystem}
           availableSystems={sapSystems}
           isModal={true}
-          onRequestCreated={(requestNo) => {
+          onRequestCreated={(requestNo, _taskNo, response) => {
             update("crLinks", requestNo);
+            const preview = getCreatedCrPreview(response);
+            if (preview) {
+              setCrPreview((current) => ({ ...current, [requestNo]: preview }));
+            }
             setCreateCrModalOpen(false);
-            onNotify?.("success", `Created and linked CR Transport ${requestNo}`);
+            onNotify?.(
+              response.syncCompleted ? "success" : "error",
+              response.syncCompleted
+                ? `Created, synced, and linked CR Transport ${requestNo}`
+                : `Created and linked CR Transport ${requestNo}, but CR sync failed: ${response.syncMessage || "Unknown sync error"}`
+            );
           }}
         />
       </UIModal>

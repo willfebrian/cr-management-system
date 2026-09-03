@@ -50,7 +50,7 @@ interface CrTransportCreateProps {
   onTargetSystemChange?: (val: string) => void;
   availableSystems?: SapSystemRow[];
   isModal?: boolean;
-  onRequestCreated?: (requestNo: string, taskNo?: string) => void;
+  onRequestCreated?: (requestNo: string, taskNo: string | undefined, result: TransportRequestResult) => void;
   onIncompleteChange?: (incomplete: boolean) => void;
 }
 
@@ -196,7 +196,7 @@ export function CrTransportCreate({
       const response = await createTransportRequest(fullDescription, objects, targetSystem);
       setCreated(response); setPreflight(null); setConfirmOpen(false);
       if (response.ok && response.request && onRequestCreated) {
-        onRequestCreated(response.request, response.task);
+        onRequestCreated(response.request, response.task, response);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -276,4 +276,13 @@ export function getTransportCreateState({ created, selected = false, locked = fa
   const request = createdRequest || (locked ? String(lockOrder || "").trim() : "");
   const assigned = Boolean(request);
   return { assigned, request, canCreate: !assigned, createLabel: assigned ? "CR already created" : "Create SAP CR" };
+}
+
+export function getCreatedCrPreview(result: TransportRequestResult) {
+  if (!result.syncCompleted || !result.cr) return null;
+  return {
+    description: result.cr.description || "",
+    status: result.cr.statusGroup || "",
+    system: result.cr.sapSystemCode || ""
+  };
 }
