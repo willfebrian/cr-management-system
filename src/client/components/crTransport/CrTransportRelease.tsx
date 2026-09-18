@@ -378,7 +378,7 @@ export function ReleaseConfirmationDialog({
   );
 }
 
-export function ReleaseResultsPanel({ title, result }: { title: string; result: ReleaseResult }) {
+export function ReleaseResultsPanel({ title, result, compact = false }: { title: string; result: ReleaseResult; compact?: boolean }) {
   const cls = result.ok ? "cr-release-result-ok" : "cr-release-result-error";
   const Icon = result.ok ? CheckCircle2 : XCircle;
   const orderedTasks = [...result.tasks].sort((left, right) => {
@@ -389,11 +389,12 @@ export function ReleaseResultsPanel({ title, result }: { title: string; result: 
   });
 
   return (
-    <div className={`cr-release-result ${cls}`}>
+    <div className={`cr-release-result ${cls}${compact ? " cr-release-result-compact" : ""}`}>
       <div className="cr-release-result-header">
         <Icon size={16} /> <span>{title}</span> <small>{result.message}</small>
       </div>
-      <table className="cr-release-table">
+      <div className="cr-release-result-table-wrap">
+        <table className="cr-release-table">
         <thead>
           <tr>
             <th className="center">#</th>
@@ -440,7 +441,8 @@ export function ReleaseResultsPanel({ title, result }: { title: string; result: 
             );
           })}
         </tbody>
-      </table>
+        </table>
+      </div>
     </div>
   );
 }

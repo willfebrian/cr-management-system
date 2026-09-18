@@ -22,7 +22,9 @@ export class TransportRequestGuard {
     if (!normalizedObjects.length) throw denied("OBJECTS_REQUIRED");
 
     for (const object of normalizedObjects) {
-      if (object.pgmid !== "R3TR") throw denied("MAIN_OBJECT_REQUIRED");
+      const isMainObject = object.pgmid === "R3TR";
+      const isFunctionModule = object.pgmid === "LIMU" && object.objectType === "FUNC";
+      if (!isMainObject && !isFunctionModule) throw denied("MAIN_OBJECT_REQUIRED");
       if (!["$TMP", target.package].includes(object.sourcePackage)) throw denied("SOURCE_PACKAGE_NOT_ALLOWED");
       if (object.targetPackage !== target.package) throw denied("TARGET_PACKAGE_REQUIRED");
       if (!/^(Z|Y|\/)/.test(object.objectName)) throw denied("CUSTOM_NAMESPACE_REQUIRED");

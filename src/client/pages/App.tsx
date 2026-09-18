@@ -20,6 +20,8 @@ import { MasterDataWorkspace } from "./MasterDataWorkspace";
 import { AuditLogReport } from "./AuditLogReport";
 import { CrTransportCreate, getCreatedCrPreview } from "../components/crTransport/CrTransportCreate";
 import { CrTransportRelease, nextReleaseRefreshToken } from "../components/crTransport/CrTransportRelease";
+import { IssueCrTransportRelease } from "../components/crTransport/IssueCrTransportRelease";
+import { getChangeIssueReleaseCandidates, normalizeIssueReleaseLifecycle } from "../components/crTransport/issueReleaseModel";
 import { getCrTransportLeaveWarning } from "../components/crTransport/crTransportProgress";
 import { TRANSPORT_TARGETS, transportSystemOptionLabel, transportTargetLabel } from "../components/crTransport/transportTarget";
 import { UIModal, type ModalType } from "../components/common/UIModal";
@@ -6177,6 +6179,7 @@ function IssueEditor({
   onSave,
   onCancel,
   onDelete,
+  onCrReleased,
   onDirtyChange,
   canSendReminder = false
 }: {
@@ -6196,6 +6199,7 @@ function IssueEditor({
   onSave: (payload: IssueSavePayload) => Promise<void>;
   onCancel?: (id: number, reason: string) => Promise<void>;
   onDelete?: (id: number) => Promise<void>;
+  onCrReleased?: () => void | Promise<void>;
   onDirtyChange?: (dirty: boolean) => void;
   canSendReminder?: boolean;
 }) {
@@ -6236,6 +6240,9 @@ function IssueEditor({
     try { localStorage.setItem("cr_transport_target_system", val); } catch {}
   };
   const [createCrModalOpen, setCreateCrModalOpen] = useState(false);
+  const [releaseCrModalOpen, setReleaseCrModalOpen] = useState(false);
+  const [releaseCrBusy, setReleaseCrBusy] = useState(false);
+  const [releaseCrCandidates, setReleaseCrCandidates] = useState<ReturnType<typeof getChangeIssueReleaseCandidates>>([]);
   const [aiOverwriteSelections, setAiOverwriteSelections] = useState<Record<string, boolean>>({});
   const [internalLayoutStyle, setInternalLayoutStyle] = useState<"tabs" | "quick_toggle" | "classic">(() => {
     try {
@@ -6612,6 +6619,7 @@ function IssueEditor({
   const [reminderDraft, setReminderDraft] = useState<ReminderDraft>({ to: "", cc: "", bcc: "", notes: "", actions: ["cr_not_prd"], otherAction: "" });
   const [reminderSending, setReminderSending] = useState(false);
   const [reminderAiBusy, setReminderAiBusy] = useState(false);
+  const previousDetailIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!detail?.issue?.id || !reminderPreview) return;
@@ -6667,10 +6675,24 @@ function IssueEditor({
   const [pendingSavePayload, setPendingSavePayload] = useState<IssueSavePayload | null>(null);
 
   useEffect(() => {
-    // ALWAYS clear AI context (Email & GLPI) first whenever opening/switching an Issue in Create or Change mode
-    setFetchedGlpiContext(null);
-    setFetchedEmailContext(null);
-    fetchedGlpiTicketRef.current = null;
+    // Clear fetched context when switching issues, but preserve it across a save
+    // response for the same issue so the linked GLPI ticket remains visible.
+    const nextDetailId = detail?.issue?.id ?? null;
+    if (previousDetailIdRef.current !== nextDetailId) {
+      setFetchedGlpiContext(null);
+      setFetchedEmailContext(null);
+      fetchedGlpiTicketRef.current = null;
+    }
+    previousDetailIdRef.current = nextDetailId;
+    if (nextDetailId && detail?.glpi?.length && fetchedGlpiTicketRef.current === null) {
+      const ticketNo = Number(detail.glpi[0]?.ticket_number || 0);
+      if (ticketNo) {
+        fetchedGlpiTicketRef.current = ticketNo;
+        void fetchGlpiTicketDetail(ticketNo).then((result) => {
+          if (result.ok && result.ticket) setFetchedGlpiContext(result.ticket);
+        }).catch(() => undefined);
+      }
+    }
 
     const nextForm = issueFormFromDetail(detail);
     initialFormRef.current = nextForm;
@@ -6814,9 +6836,15 @@ function IssueEditor({
   const aiFieldPolicy = createIssueAiFieldPolicy({ formDisabled, devDisabled, qaDisabled, prdRequestDisabled, prdTransportDisabled });
   const detailCrMap = new Map((detail?.crLinks || []).map((link) => [link.trkorr, {
     description: link.cr_description_snapshot,
-    status: link.lifecycle_status || link.status_group,
+    status: normalizeIssueReleaseLifecycle(link.lifecycle_status || link.status_group),
     system: link.sap_system_code
   }]));
+  const eligibleIssueReleaseCandidates = getChangeIssueReleaseCandidates(mode, detail?.crLinks || []);
+
+  function openIssueReleaseModal() {
+    setReleaseCrCandidates(eligibleIssueReleaseCandidates);
+    setReleaseCrModalOpen(true);
+  }
 
   function previewForCr(trkorr: string) {
     return crPreview[trkorr] || detailCrMap.get(trkorr);
@@ -7449,11 +7477,15 @@ function IssueEditor({
                     <div className="reference-hints">
                       {glpiTokens.map((ticket) => {
                         const preview = glpiPreview[ticket];
-                        const meta = [formatValueHelpDate(preview?.openedAt), formatGlpiStatus(preview?.status)].filter(Boolean).join(" - ");
+                        const fetched = fetchedGlpiContext && String(fetchedGlpiContext.ticketNumber) === ticket ? fetchedGlpiContext : null;
+                        const title = preview?.title || fetched?.title || `GLPI ticket #${ticket}`;
+                        const openedAt = preview?.openedAt || fetched?.date || "";
+                        const status = String(preview?.status || fetched?.status || "");
+                        const meta = [formatValueHelpDate(openedAt), formatGlpiStatus(status)].filter(Boolean).join(" - ");
                         return (
                           <div className={`reference-hint glpi-reference-hint ${preview?.notFound ? "muted" : ""}`} key={ticket}>
                             <div>
-                              <strong>{preview?.notFound ? "Ticket not found" : preview?.title || "Looking up GLPI ticket..."}</strong>
+                              <strong>{preview?.notFound && !fetched ? "Ticket not found" : title}</strong>
                               {meta ? <small>{meta}</small> : null}
                             </div>
                           </div>
@@ -7511,6 +7543,16 @@ function IssueEditor({
                     >
                             <Plus size={15} />
                             <span>Create CR</span>
+                    </button>
+                  ) : null}
+                  {eligibleIssueReleaseCandidates.length > 0 && !formDisabled ? (
+                    <button
+                      type="button"
+                      className="primary issue-release-cr-button"
+                      onClick={openIssueReleaseModal}
+                    >
+                      <Unlock size={15} />
+                      <span>Release CR</span>
                     </button>
                   ) : null}
                 </div>
@@ -8030,6 +8072,66 @@ function IssueEditor({
           }}
         />
       </UIModal>
+      <UIModal
+        isOpen={releaseCrModalOpen}
+        onClose={() => {
+          if (releaseCrBusy) {
+            onNotify?.("error", "The CR operation is still in progress. Wait for it to finish before closing this dialog.");
+            return;
+          }
+          setReleaseCrModalOpen(false);
+        }}
+        title="Release CR Transport"
+        subtitle="Test and release the Created CR transports linked to this Issue."
+        maxWidth="920px"
+        hideFooter={true}
+        headerActions={
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "4px 10px",
+              borderRadius: "6px",
+              background: "#ecfdf5",
+              color: "#0f766e",
+              border: "1px solid #a7f3d0",
+              fontWeight: "600",
+              fontSize: "0.8rem",
+              marginRight: "4px"
+            }}
+          >
+            <Database size={13} />
+            <span>{(() => {
+              const target = releaseCrCandidates[0]?.targetSystem || crTargetSystem;
+              const configured = sapSystems?.find((system) => system.code === target);
+              return configured?.description || transportTargetLabel(target);
+            })()}</span>
+          </span>
+        }
+      >
+        <IssueCrTransportRelease
+          candidates={releaseCrCandidates}
+          targetLabel={(() => {
+            const target = releaseCrCandidates[0]?.targetSystem || crTargetSystem;
+            const configured = sapSystems?.find((system) => system.code === target);
+            return transportSystemOptionLabel(target, configured?.description);
+          })()}
+          targetLabels={Object.fromEntries(
+            [...new Set(releaseCrCandidates.map((candidate) => candidate.targetSystem).filter(Boolean))]
+              .map((target) => {
+                const code = String(target);
+                const configured = sapSystems?.find((system) => system.code === code);
+                return [code, transportSystemOptionLabel(code, configured?.description)];
+              })
+          )}
+          onBusyChange={setReleaseCrBusy}
+          onReleased={async (requests) => {
+            onNotify?.("success", `${requests.length === 1 ? requests[0] : `${requests.length} CR transports`} released successfully.`);
+            await onCrReleased?.();
+          }}
+        />
+      </UIModal>
     </>
   );
 }
@@ -8186,6 +8288,11 @@ function ChangeIssue({
           onSave={onSave}
           onCancel={onCancel}
           onDelete={onDelete}
+          onCrReleased={async () => {
+            if (!changeDetail.issue?.id) return;
+            const refreshed = await fetchIssueDetail(changeDetail.issue.id);
+            setChangeDetail(refreshed);
+          }}
           onDirtyChange={onDirtyChange}
           canSendReminder={canSendReminder}
         />

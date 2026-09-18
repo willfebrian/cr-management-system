@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { normalizeTransportTarget, transportTargetLabel } from "../src/client/components/crTransport/transportTarget.js";
-import { getCreatedCrPreview, getTransportCreateState } from "../src/client/components/crTransport/CrTransportCreate.js";
+import { getCreatedCrPreview, getResolvedObjectHint, getTransportCreateState } from "../src/client/components/crTransport/CrTransportCreate.js";
 
 test("marks selected objects as assigned after SAP CR creation", () => {
   const state = getTransportCreateState({
@@ -47,6 +47,19 @@ test("exposes synced CR metadata for an Issue preview immediately after creation
     status: "modifiable",
     system: "DEV"
   });
+});
+
+test("explains when SAP resolves a searched function module to its transport root", () => {
+  assert.equal(getResolvedObjectHint("ZMM_MD_DL", {
+    pgmid: "R3TR",
+    objectType: "FUGR",
+    objectName: "ZMM_MD",
+    sourcePackage: "ZTRD",
+    targetPackage: "ZTRD",
+    locked: false,
+    lockOrder: "",
+    lockUser: ""
+  }), "ZMM_MD_DL resolves to transport root ZMM_MD (Function Group).");
 });
 
 test("uses English neutral guidance in the create transport form", () => {
