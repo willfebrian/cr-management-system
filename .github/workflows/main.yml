@@ -2,21 +2,45 @@ name: Deploy CR Management
 
 on:
   push:
-    branches:
-      - master
+    branches: [master]
+
+concurrency:
+  group: cr-management-production
+  cancel-in-progress: false
 
 jobs:
-  deploy:
+  test-and-deploy:
     runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 30
 
     steps:
-      - name: Deploy to server
+      - name: Checkout deployment repository
+        shell: bash
         run: |
-          set -e
+          set -Eeuo pipefail
+          git -C /var/www/cr-management-system fetch origin master
+          git -C /var/www/cr-management-system reset --hard "$GITHUB_SHA"
+
+      - name: Validate Docker configuration
+        shell: bash
+        run: |
+          set -Eeuo pipefail
           cd /var/www/cr-management-system
-          git fetch origin master
-          git reset --hard origin/master
-          npm install
-          npm run build
-          sudo systemctl restart cr-management || true
-          sudo systemctl status cr-management --no-pager || true
+          docker compose --env-file .env config --quiet
+          bash -n scripts/deploy-docker.sh
+
+      - name: Build, health-check, and switch blue-green slot
+        shell: bash
+        env:
+          APP_DIR: /var/www/cr-management-system
+          CR_ENV_FILE: /var/www/cr-management-system/.env
+          SAPNWRFC_SDK_PATH: /usr/local/sap/nwrfcsdk
+        run: /var/www/cr-management-system/scripts/deploy-docker.sh
+
+      - name: Verify production endpoint
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          curl --fail --show-error --silent http://127.0.0.1:3001/api/health/database
+          curl --fail --show-error --silent --output /dev/null http://127.0.0.1:3001/
+          docker ps --filter label=id.web.abap.service=cr-management

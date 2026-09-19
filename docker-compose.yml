@@ -1,0 +1,63 @@
+name: cr-management
+
+x-app-common: &app-common
+  restart: unless-stopped
+  env_file:
+    - ${CR_ENV_FILE:-/var/www/cr-management-system/.env}
+  environment:
+    NODE_ENV: production
+    HOST: 0.0.0.0
+    PORT: 3001
+    # PostgreSQL currently runs on the Docker host.
+    PGHOST: host.docker.internal
+  extra_hosts:
+    - host.docker.internal:host-gateway
+  volumes:
+    - ${SAPNWRFC_INI_FILE:-/usr/local/sap/nwrfcsdk/demo/sapnwrfc.ini}:/usr/local/sap/nwrfcsdk/demo/sapnwrfc.ini:ro
+  healthcheck:
+    test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/health/database').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+    interval: 10s
+    timeout: 5s
+    start_period: 25s
+    retries: 6
+  networks: [cr-management]
+
+services:
+  blue:
+    <<: *app-common
+    image: cr-management:${BLUE_IMAGE_TAG:-latest}
+    container_name: cr-management-blue
+    profiles: ["blue"]
+    ports:
+      - 127.0.0.1:${BLUE_PORT:-3002}:3001
+    labels:
+      id.web.abap.service: cr-management
+      id.web.abap.slot: blue
+
+  green:
+    <<: *app-common
+    image: cr-management:${GREEN_IMAGE_TAG:-latest}
+    container_name: cr-management-green
+    profiles: ["green"]
+    ports:
+      - 127.0.0.1:${GREEN_PORT:-3003}:3001
+    labels:
+      id.web.abap.service: cr-management
+      id.web.abap.slot: green
+
+  proxy:
+    image: nginx:1.27-alpine
+    container_name: cr-management-proxy
+    restart: unless-stopped
+    ports:
+      - 127.0.0.1:3001:80
+    volumes:
+      - ${DEPLOY_STATE_DIR:-.deploy}/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks: [cr-management]
+    labels:
+      id.web.abap.service: cr-management
+      id.web.abap.role: proxy
+
+networks:
+  cr-management:
+    name: cr-management
