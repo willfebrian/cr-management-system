@@ -81,7 +81,9 @@ server {
   }
 }
 EOF
-mv "$STATE_DIR/nginx.conf.tmp" "$STATE_DIR/nginx.conf"
+# Keep the bind-mounted inode stable so the running proxy sees the new slot.
+cat "$STATE_DIR/nginx.conf.tmp" > "$STATE_DIR/nginx.conf"
+rm -f "$STATE_DIR/nginx.conf.tmp"
 
 # First Docker rollout: systemd may still own port 3001. Stop it only after
 # the candidate passed all health checks, then immediately bring up the proxy.
@@ -91,7 +93,13 @@ if systemctl is-active --quiet cr-management.service 2>/dev/null; then
   sudo -n systemctl disable cr-management.service >/dev/null
 fi
 
-"${COMPOSE[@]}" up -d proxy
+if docker inspect cr-management-proxy >/dev/null 2>&1; then
+  log "Reloading proxy to slot $next without dropping active connections"
+  docker exec cr-management-proxy nginx -t
+  docker exec cr-management-proxy nginx -s reload
+else
+  "${COMPOSE[@]}" up -d proxy
+fi
 for _ in $(seq 1 12); do
   curl -fsS http://127.0.0.1:3001/api/health/database >/dev/null && break
   sleep 2

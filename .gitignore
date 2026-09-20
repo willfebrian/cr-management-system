@@ -12,6 +12,12 @@ logs/
 _noderfc.log
 dev_rfc.log
 outputs/
+.deploy/
+actions-runner/
+*.db
+*.sqlite
+*.sqlite3
+nginx-docker.conf
 
 # Local spreadsheet/source-data files
 *.xls

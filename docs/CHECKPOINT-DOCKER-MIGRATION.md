@@ -1,45 +1,58 @@
 # Checkpoint Migrasi Docker — CR Management System
 
 Tanggal checkpoint: 20 September 2026 (WIB)
-Status: Blueprint/alur deployment disepakati; implementasi dan switchover belum dijalankan.
+Status: Migrasi selesai; deployment production menggunakan Docker blue-green.
 
-## Kondisi Saat Ini
+## Pembagian Direktori
 
-- Repository development: `/data/Projects/cr-management-system`
-- Branch: `master`
-- Commit saat pemeriksaan: `79f4402`
-- Repository production: `/var/www/cr-management-system`
-- Service production lama: `cr-management.service`
-- Service lama aktif pada port `3001`.
-- GitHub Actions self-hosted runner aktif.
-- Workflow saat ini: `.github/workflows/main.yml`
-- Workflow lama masih melakukan `git reset`, `npm install`, `npm run build`, lalu restart systemd.
-- Folder production memiliki file Docker lokal yang belum masuk Git: `Dockerfile`, `docker-compose.yml`, dan `nginx-docker.conf`.
-- Belum ada container/image CR Management yang aktif.
+- Development/source of truth: `/data/Projects/cr-management-system`
+- Production checkout: `/var/www/cr-management-system`
+- Branch deployment: `master`
+- Environment rahasia production: `/var/www/cr-management-system/.env` (tidak masuk Git/image)
+- State blue-green production: `/var/www/cr-management-system/.deploy`
 
-## Temuan yang Wajib Dikoreksi
+## Arsitektur Production
 
-- Repository development harus menjadi source of truth; jangan membuat perubahan utama langsung di `/var/www`.
-- Compose lama memakai build context absolut `/var/www/cr-management-system`, sehingga tidak portabel.
-- Bind mount seluruh source sebagai `/app:ro` akan menimpa isi image dan berisiko menghilangkan dependency/build hasil image.
-- `proxy_pass http://cr-management:3001/;` memakai trailing slash dan berisiko membuang prefix `/api`; target seharusnya mempertahankan path API.
-- Port produksi `3001` masih dipakai systemd lama, sehingga Docker wajib diuji dahulu pada port staging yang tidak bentrok.
-- Database, `.env`, konfigurasi, dan data persisten tidak boleh dimasukkan ke image atau tertimpa saat deploy.
+- `cr-management-proxy` menerima trafik production di `127.0.0.1:3001`.
+- Slot aplikasi bergantian:
+  - blue: `127.0.0.1:3002`
+  - green: `127.0.0.1:3003`
+- Setiap image memuat frontend build, Express backend, dan SAP NW RFC SDK/runtime.
+- PostgreSQL dan sumber GLPI tetap eksternal; tidak dipindahkan atau ditimpa oleh image.
+- Container berjalan sebagai user non-root `node` dan memakai restart policy `unless-stopped`.
+- Service lama `cr-management.service` sudah dihentikan dan dinonaktifkan setelah container pertama lolos health gate.
 
-## Pipeline Target
+## Pipeline Otomatis
 
-1. Sinkronkan repository development di `/data/Projects/cr-management-system` dengan remote (`git fetch/pull`) dan pastikan working tree aman.
-2. Buat/perbaiki Dockerfile, compose, konfigurasi Nginx, `.dockerignore`, dokumentasi deploy, healthcheck, serta strategi volume persisten di repository development.
-3. Build image Docker dari commit yang sama dan jalankan container pada port staging.
-4. Lakukan live-test lengkap tanpa menghentikan `cr-management.service` (zero downtime gate).
-5. Setelah staging tervalidasi, lakukan switchover atomik ke container produksi dan baru nonaktifkan systemd lama.
-6. Ubah `.github/workflows/main.yml` agar setiap push ke `master` otomatis men-deploy ke `/var/www/cr-management-system` menggunakan Docker Compose, bukan npm/systemd host.
-7. Commit dan push perubahan dari repository development. Self-hosted runner kemudian otomatis memperbarui `/var/www`, membangun image, menjalankan healthcheck, dan mempertahankan/rollback layanan lama jika deploy gagal.
-8. Verifikasi URL produksi, API, log, restart policy, data persisten, serta status container; lalu catat checkpoint final.
+1. Push ke `master` memicu self-hosted GitHub Actions runner.
+2. Runner menyinkronkan checkout production di `/var/www/cr-management-system` ke SHA yang dipush.
+3. Runner memvalidasi Compose dan skrip deployment.
+4. Image baru dibangun dari checkout production dengan tag SHA commit.
+5. Slot pasif dijalankan dan harus lolos healthcheck aplikasi + database.
+6. Konfigurasi proxy diarahkan ke slot baru dan Nginx di-reload tanpa memutus koneksi aktif.
+7. Endpoint production diuji kembali, lalu slot lama dihentikan.
+8. Jika kandidat tidak sehat, proxy dan slot aktif lama tidak disentuh.
 
-## Batas Keamanan
+## Bukti Verifikasi Migrasi Pertama
 
-- Tidak menghentikan service systemd lama sebelum live-test staging tervalidasi.
-- Tidak menyalin database atau `.env` ke Git/image.
-- Tidak melakukan `docker compose down` pada layanan produksi sebelum container pengganti dinyatakan sehat.
-- Push Git dilakukan setelah perubahan dan pengujian lokal lolos.
+- Full test suite: 253 pengujian lulus (140 baseline + 45 project + 64 users + 4 integration).
+- Build frontend/TypeScript production: berhasil.
+- Build image Docker: berhasil.
+- Staging port 3002: frontend HTTP 200, aplikasi sehat, database sehat.
+- Runtime SAP: modul `node-rfc` berhasil dimuat di dalam container.
+- GitHub Actions deployment pertama: `Succeeded`.
+- Production checkout sesuai commit Git.
+- Endpoint lokal `/api/health` dan `/api/health/database`: HTTP 200 / `ok=true`.
+- Endpoint publik `https://cr.abap.web.id/`: HTTP 200.
+- Endpoint publik `https://cr.abap.web.id/api/health/database`: `ok=true`.
+- Container production sehat, restart count 0 saat verifikasi.
+
+## File Deployment Resmi
+
+- `Dockerfile`
+- `.dockerignore`
+- `docker-compose.yml`
+- `scripts/deploy-docker.sh`
+- `.github/workflows/main.yml`
+
+Artefak Docker lama yang pernah dibuat langsung di `/var/www` bukan source of truth dan telah digantikan oleh versi repository development.
