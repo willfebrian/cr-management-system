@@ -108,8 +108,9 @@ curl -fsS http://127.0.0.1:3001/api/health/database >/dev/null || die "Productio
 
 printf '%s\n' "$next" > "$STATE_DIR/active-slot"
 if [[ -n "$active" && "$active" != "$next" ]]; then
-  log "Stopping old slot $active"
+  log "Stopping and removing old slot $active"
   "${COMPOSE[@]}" --profile "$active" stop "$active" || true
+  "${COMPOSE[@]}" --profile "$active" rm -f "$active" || true
 fi
 
 docker image prune -f --filter 'label=org.opencontainers.image.revision' >/dev/null || true

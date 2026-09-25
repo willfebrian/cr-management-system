@@ -15,7 +15,7 @@ import { auditRoutes } from "./routes/auditRoutes.js";
 import { ProjectRepositoryError } from "./db/projectRepository.js";
 import { transportRequestRoutes } from "./routes/transportRequestRoutes.js";
 import { transportReleaseRoutes } from "./routes/transportReleaseRoutes.js";
-import { checkDatabaseHealth } from "./db/pool.js";
+import { checkDatabaseHealth, pool } from "./db/pool.js";
 
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -63,7 +63,25 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
   res.status(500).json({ ok: false, message });
 });
 
-app.listen(config.port, config.host, () => {
+const server = app.listen(config.port, config.host, () => {
   console.log(`CR Management System listening on http://${config.host}:${config.port}`);
   startCrAutoSyncScheduler();
 });
+
+let shuttingDown = false;
+function gracefulShutdown(signal: string) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`Received ${signal}, shutting down CR Management System gracefully...`);
+  server.close(() => {
+    pool.end().catch(() => {}).finally(() => {
+      process.exit(0);
+    });
+  });
+  setTimeout(() => {
+    process.exit(0);
+  }, 5000).unref();
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
