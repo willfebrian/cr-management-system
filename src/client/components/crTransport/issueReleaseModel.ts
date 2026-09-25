@@ -56,3 +56,10 @@ export function isIssueReleaseReady(
     return Boolean(result?.ok && !result.hasErrors);
   });
 }
+
+export function hasPendingIssueReleases(
+  selected: string[],
+  releases: Record<string, Pick<IssueReleaseCheck, "ok"> | undefined>
+) {
+  return selected.some((request) => !releases[request]?.ok);
+}

@@ -51,6 +51,7 @@ interface CrTransportCreateProps {
   availableSystems?: SapSystemRow[];
   isModal?: boolean;
   onRequestCreated?: (requestNo: string, taskNo: string | undefined, result: TransportRequestResult) => void;
+  onExistingRequestSelected?: (requestNo: string) => void;
   onIncompleteChange?: (incomplete: boolean) => void;
 }
 
@@ -61,6 +62,7 @@ export function CrTransportCreate({
   availableSystems: externalAvailableSystems,
   isModal = false,
   onRequestCreated,
+  onExistingRequestSelected,
   onIncompleteChange
 }: CrTransportCreateProps = {}) {
   const [internalTargetSystem, setInternalTargetSystem] = useState<string>(() => {
@@ -92,6 +94,7 @@ export function CrTransportCreate({
   const [description, setDescription] = useState(() => cleanPrefix(initialDescription).slice(0, MAX_DESCRIPTION));
   const [busy, setBusy] = useState<"resolve" | "preflight" | "create" | "">("");
   const [error, setError] = useState("");
+  const [errorStage, setErrorStage] = useState<"resolve" | "preflight" | "create" | "">("");
   const [preflight, setPreflight] = useState<TransportRequestResult | null>(null);
   const [created, setCreated] = useState<TransportRequestResult | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -99,7 +102,8 @@ export function CrTransportCreate({
   const resolveRequestRef = useRef(0);
   const fullDescription = `${PREFIX}${description.trim()}`;
   const selectedKeys = useMemo(() => new Set(objects.map(objectKey)), [objects]);
-  const canPreflight = objects.length > 0 && description.trim().length > 0 && !busy && !created?.ok;
+  const assignedObject = objects.find((item) => item.locked && item.lockOrder);
+  const canPreflight = objects.length > 0 && !objects.some((item) => item.locked) && description.trim().length > 0 && !busy && !created?.ok;
 
   useEffect(() => {
     onIncompleteChange?.(isCreateCrIncomplete({
@@ -139,11 +143,11 @@ export function CrTransportCreate({
       .catch(() => {});
   }, [externalAvailableSystems, externalTargetSystem]);
 
-  function invalidatePreflight() { setPreflight(null); setCreated(null); setConfirmError(""); }
+  function invalidatePreflight() { setPreflight(null); setCreated(null); setError(""); setErrorStage(""); setConfirmError(""); }
 
   function startNewRequest() {
     setQuery(""); setResolvedQuery(""); setResults([]); setObjects([]); setDescription("");
-    setPreflight(null); setCreated(null); setError(""); setConfirmError(""); setConfirmOpen(false);
+    setPreflight(null); setCreated(null); setError(""); setErrorStage(""); setConfirmError(""); setConfirmOpen(false);
   }
 
   function changeTarget(value: string) {
@@ -156,7 +160,7 @@ export function CrTransportCreate({
       localStorage.setItem(TARGET_SYSTEM_STORAGE_KEY, value);
     } catch {}
     setQuery(""); setResolvedQuery(""); setResults([]); setObjects([]);
-    setPreflight(null); setCreated(null); setError(""); setConfirmError(""); setConfirmOpen(false);
+    setPreflight(null); setCreated(null); setError(""); setErrorStage(""); setConfirmError(""); setConfirmOpen(false);
   }
 
   async function runResolve(event?: FormEvent | React.SyntheticEvent) {
@@ -164,18 +168,21 @@ export function CrTransportCreate({
     event?.stopPropagation();
     const value = query.trim();
     if (value.length < 3) { setResults([]); setResolvedQuery(""); return; }
-    setBusy("resolve"); setError(""); setResults([]);
+    setBusy("resolve"); setError(""); setErrorStage(""); setResults([]);
     try {
       const response = await resolveTransportObject(value, targetSystem);
       setResolvedQuery(value.toUpperCase()); setResults(response.rows || []);
-      if (!response.rows?.length) setError(`SAP object was not found in ${transportTargetLabel(targetSystem)}.`);
-    } catch (err) { setResolvedQuery(value.toUpperCase()); setError(err instanceof Error ? err.message : String(err)); }
+      if (!response.rows?.length) { setError(`SAP object was not found in ${transportTargetLabel(targetSystem)}.`); setErrorStage("resolve"); }
+    } catch (err) { setResolvedQuery(value.toUpperCase()); setError(err instanceof Error ? err.message : String(err)); setErrorStage("resolve"); }
     finally { setBusy(""); }
   }
 
   function updateQuery(value: string) {
     setQuery(value);
-    if (!value.trim() || value.trim().toUpperCase() !== resolvedQuery) { setResults([]); setResolvedQuery(""); }
+    if (!value.trim() || value.trim().toUpperCase() !== resolvedQuery) {
+      setResults([]); setResolvedQuery("");
+      if (errorStage === "resolve") { setError(""); setErrorStage(""); }
+    }
   }
 
   function addObject(item: ResolvedTransportObject) {
@@ -184,14 +191,30 @@ export function CrTransportCreate({
   }
 
   async function runPreflight() {
-    setBusy("preflight"); setError(""); setPreflight(null); setCreated(null);
-    try { setPreflight(await preflightTransportRequest(fullDescription, objects, targetSystem)); }
-    catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+    setBusy("preflight"); setError(""); setErrorStage(""); setPreflight(null); setCreated(null);
+    try {
+      const response = await preflightTransportRequest(fullDescription, objects, targetSystem);
+      setPreflight(response);
+      if (!response.ok) { setError(response.message || "Preflight failed."); setErrorStage("preflight"); }
+    }
+    catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (/OBJECT_ALREADY_LOCKED/i.test(message)) {
+        const refreshed = await Promise.all(objects.map((item) => resolveTransportObject(item.objectName, targetSystem).then((response) => response.rows || []).catch(() => [])));
+        const conflict = getLockedObjectConflict(objects, refreshed);
+        if (conflict) {
+          setObjects((current) => current.map((item) => refreshed.flat().find((row) => objectKey(row) === objectKey(item) && row.locked) || item));
+          setError(""); setErrorStage("");
+          return;
+        }
+      }
+      setError(message); setErrorStage("preflight");
+    }
     finally { setBusy(""); }
   }
 
   async function runCreate() {
-    setBusy("create"); setError(""); setConfirmError("");
+    setBusy("create"); setError(""); setErrorStage(""); setConfirmError("");
     try {
       const response = await createTransportRequest(fullDescription, objects, targetSystem);
       setCreated(response); setPreflight(null); setConfirmOpen(false);
@@ -200,7 +223,16 @@ export function CrTransportCreate({
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      setError(message); setConfirmError(message);
+      if (/OBJECT_ALREADY_LOCKED/i.test(message)) {
+        const refreshed = await Promise.all(objects.map((item) => resolveTransportObject(item.objectName, targetSystem).then((response) => response.rows || []).catch(() => [])));
+        const conflict = getLockedObjectConflict(objects, refreshed);
+        if (conflict) {
+          setObjects((current) => current.map((item) => refreshed.flat().find((row) => objectKey(row) === objectKey(item) && row.locked) || item));
+          setPreflight(null); setConfirmOpen(false); setConfirmError("");
+          return;
+        }
+      }
+      setError(message); setErrorStage("create"); setConfirmError(message);
     } finally { setBusy(""); }
   }
 
@@ -250,14 +282,14 @@ export function CrTransportCreate({
           {busy === "resolve" ? <Loader2 className="spin" size={17} /> : <Search size={17} />} Resolve
         </button>
       </div>
-      {error ? <div className="cr-search-error-state"><div className="cr-search-error-icon"><SearchX size={20} /></div><div><strong>SAP Object Not Found</strong><p>{friendlyMessage(error)}</p></div></div> : null}
-      {results.length ? <div className="cr-resolve-results"><div className="cr-result-caption"><span>Resolved from <strong>{resolvedQuery}</strong> ({results.length} objects)</span><button type="button" className="cr-close-results-btn" onClick={() => setResults([])} title="Close results"><X size={14} /> Close</button></div>{results.map((item) => { const selected = selectedKeys.has(objectKey(item)); const state = getTransportCreateState({ created, selected, locked: item.locked, lockOrder: item.lockOrder }); const typeMeta = getSapObjectTypeMeta(item.objectType); const resolvedHint = getResolvedObjectHint(resolvedQuery, item); return <div className="cr-result-row" key={objectKey(item)}><div className="cr-object-icon"><PackageCheck size={18} /></div><div className="cr-object-main"><strong>{item.objectName}</strong><div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "2px" }}><span className="cr-object-type-badge" style={{ background: typeMeta.bg, color: typeMeta.color }}>{typeMeta.label}</span><span style={{ fontSize: "0.725rem", color: "var(--color-text-muted, #64748b)" }}>{item.pgmid} · {item.objectType}</span></div>{resolvedHint ? <small>{resolvedHint}</small> : null}</div><div className="cr-object-package"><span>Package</span><strong>{item.sourcePackage} → ZTRD</strong></div><div className="cr-result-status-action">{state.assigned ? <span className="cr-assigned-badge"><Check size={14} /> Assigned · {state.request}</span> : item.locked ? <span className="cr-lock-warning">Locked: {item.lockOrder}</span> : <button type="button" className={`secondary cr-row-action ${selected ? "is-added" : ""}`} disabled={selected} onClick={() => addObject(item)}>{selected ? <Check size={15} /> : <Plus size={15} />} {selected ? "Added" : "Add"}</button>}</div></div>; })}</div> : null}
-      {objects.length ? <div className="cr-selected-list"><h4>Selected transport roots</h4>{objects.map((item) => { const state = getTransportCreateState({ created, selected: true, locked: item.locked, lockOrder: item.lockOrder }); return <div className="cr-selected-row" key={objectKey(item)}><span className="cr-object-type">{item.objectType}</span><div><strong>{item.objectName}</strong><small>{item.pgmid} · {item.sourcePackage} → ZTRD{state.assigned ? ` · Assigned to ${state.request}` : ""}</small></div>{state.assigned ? <span className="cr-assigned-badge">Assigned</span> : <button type="button" aria-label={`Remove ${item.objectName}`} onClick={() => { setObjects((current) => current.filter((row) => objectKey(row) !== objectKey(item))); invalidatePreflight(); }}><Trash2 size={16} /></button>}</div>; })}</div> : <div className="cr-empty-selection">No SAP objects selected.</div>}
+      {error && errorStage === "resolve" ? <div className="cr-search-error-state"><div className="cr-search-error-icon"><SearchX size={20} /></div><div><strong>Object resolution failed</strong><p>{friendlyMessage(error)}</p></div></div> : null}
+      {results.length ? <div className="cr-resolve-results"><div className="cr-result-caption"><span>Resolved from <strong>{resolvedQuery}</strong> ({results.length} objects)</span><button type="button" className="cr-close-results-btn" onClick={() => setResults([])} title="Close results"><X size={14} /> Close</button></div>{results.map((item) => { const selected = selectedKeys.has(objectKey(item)); const state = getTransportCreateState({ created, selected, locked: item.locked, lockOrder: item.lockOrder }); const typeMeta = getSapObjectTypeMeta(item.objectType); const resolvedHint = getResolvedObjectHint(resolvedQuery, item); return <div className="cr-result-row" key={objectKey(item)}><div className="cr-object-icon"><PackageCheck size={18} /></div><div className="cr-object-main"><strong>{item.objectName}</strong><div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "2px" }}><span className="cr-object-type-badge" style={{ background: typeMeta.bg, color: typeMeta.color }}>{typeMeta.label}</span><span style={{ fontSize: "0.725rem", color: "var(--color-text-muted, #64748b)" }}>{item.pgmid} · {item.objectType}</span></div>{resolvedHint ? <small>{resolvedHint}</small> : null}{state.assignmentKind === "existing" && state.request ? <small className="cr-existing-guidance">Continue changes in the existing CR while it remains modifiable. Creating a separate CR requires releasing or reassigning this object in SAP.</small> : null}</div><div className="cr-object-package"><span>Package</span><strong>{item.sourcePackage} → ZTRD</strong></div><div className="cr-result-status-action">{state.assignmentKind === "existing" && state.request ? <div className="cr-existing-request-action"><span className="cr-assigned-badge"><Check size={14} /> Assigned to {state.request}</span>{onExistingRequestSelected ? <button type="button" className="secondary" onClick={() => onExistingRequestSelected(state.request)}>{isModal ? "Use this CR" : "View CR"}</button> : null}</div> : state.assigned ? <span className="cr-assigned-badge"><Check size={14} /> Assigned · {state.request}</span> : item.locked ? <span className="cr-lock-warning">Object locked in SAP</span> : <button type="button" className={`secondary cr-row-action ${selected ? "is-added" : ""}`} disabled={selected} onClick={() => addObject(item)}>{selected ? <Check size={15} /> : <Plus size={15} />} {selected ? "Added" : "Add"}</button>}</div></div>; })}</div> : null}
+      {objects.length ? <div className="cr-selected-list"><h4>Selected transport roots</h4>{objects.map((item) => { const state = getTransportCreateState({ created, selected: true, locked: item.locked, lockOrder: item.lockOrder }); return <div className="cr-selected-row" key={objectKey(item)}><span className="cr-object-type">{item.objectType}</span><div><strong>{item.objectName}</strong><small>{item.pgmid} · {item.sourcePackage} → ZTRD{state.assignmentKind === "existing" && state.request ? ` · Assigned to existing CR ${state.request}` : ""}</small></div><button type="button" aria-label={`Remove ${item.objectName}`} disabled={Boolean(created?.ok)} onClick={() => { setObjects((current) => current.filter((row) => objectKey(row) !== objectKey(item))); invalidatePreflight(); }}><Trash2 size={16} /></button></div>; })}</div> : <div className="cr-empty-selection">No SAP objects selected.</div>}
     </section>
 
     <section className="card cr-create-card"><div className="cr-create-section-heading"><div><span className="cr-create-step">2</span><h3>Request Details</h3><p>The “AB - ” prefix is applied automatically and cannot be removed.</p></div></div><label className="cr-description-label"><span>Request Description</span><div className={`cr-prefix-field ${description.length === MAX_DESCRIPTION ? "at-limit" : ""}`}><span>{PREFIX}</span><input maxLength={MAX_DESCRIPTION} value={description} onChange={(event) => { setDescription(event.target.value); invalidatePreflight(); }} placeholder="Describe the requested change" /></div><small className={description.length === MAX_DESCRIPTION ? "limit" : ""}>{description.length}/{MAX_DESCRIPTION} characters{description.length === MAX_DESCRIPTION ? " · Maximum reached" : ""}</small></label></section>
 
-    <section className="card cr-create-card cr-create-actions"><div><span className="cr-create-step">3</span><h3>Preflight & Create</h3><p>Preflight checks the package, namespace, CTS lock, target, and authorization before creating the request.</p></div>{created?.ok ? <div className="cr-preflight-ok"><CheckCircle2 size={18} /><span><strong>CR already created</strong><small>Selected objects are assigned to {created.request}.</small></span></div> : preflight?.ok ? <div className="cr-preflight-ok"><CheckCircle2 size={18} /><span><strong>Ready to create</strong><small>All selected objects passed the {transportTargetLabel(targetSystem)} checks.</small></span></div> : null}<div className="cr-create-buttons"><button type="button" className="secondary" disabled={!canPreflight} onClick={runPreflight}>{busy === "preflight" ? <Loader2 className="spin" size={17} /> : <ShieldCheck size={17} />} Run Preflight</button><button type="button" className="primary" disabled={!preflight?.ok || Boolean(busy) || Boolean(created?.ok)} onClick={() => { setConfirmError(""); setConfirmOpen(true); }}><PackageCheck size={17} /> {created?.ok ? "CR already created" : "Create SAP CR"}</button></div></section>
+    <section className="card cr-create-card cr-create-actions"><div><span className="cr-create-step">3</span><h3>Preflight & Create</h3><p>Preflight checks the package, namespace, CTS lock, target, and authorization before creating the request.</p></div>{created?.ok ? <div className="cr-preflight-ok"><CheckCircle2 size={18} /><span><strong>CR already created</strong><small>Selected objects are assigned to {created.request}.</small></span></div> : preflight?.ok ? <div className="cr-preflight-ok"><CheckCircle2 size={18} /><span><strong>Ready to create</strong><small>All selected objects passed the {transportTargetLabel(targetSystem)} checks.</small></span></div> : null}{assignedObject ? <div className="cr-assignment-notice"><div><strong>{assignedObject.objectName} is already assigned to CR {assignedObject.lockOrder}.</strong><span>Continue editing in that CR while it remains modifiable. To create a separate CR, release or reassign the object in SAP first.</span></div>{onExistingRequestSelected ? <button type="button" className="secondary" onClick={() => onExistingRequestSelected(assignedObject.lockOrder)}>{isModal ? "Use this CR" : "View CR"}</button> : null}</div> : null}{error && errorStage === "preflight" ? <div className="cr-confirm-error cr-preflight-error"><AlertTriangle size={16} /> Preflight failed: {friendlyMessage(error)}</div> : null}<div className="cr-create-buttons"><button type="button" className="secondary" disabled={!canPreflight} onClick={runPreflight}>{busy === "preflight" ? <Loader2 className="spin" size={17} /> : <ShieldCheck size={17} />} Run Preflight</button><button type="button" className="primary" disabled={!preflight?.ok || Boolean(busy) || Boolean(created?.ok)} onClick={() => { setConfirmError(""); setConfirmOpen(true); }}><PackageCheck size={17} /> {created?.ok ? "CR already created" : "Create SAP CR"}</button></div></section>
 
     <UIModal isOpen={confirmOpen} onClose={() => !busy && setConfirmOpen(false)} title="Create SAP transport request?" subtitle={`This action changes CTS ${transportTargetLabel(targetSystem)} and is not a preview.`} type="warning" confirmText="Create Request" confirmLoading={busy === "create"} onConfirm={runCreate}><div className="cr-confirm-summary"><div><span>Request Description</span><strong>{fullDescription}</strong></div><div><span>Objects</span><strong>{objects.length} transport root(s)</strong></div><div><span>Target</span><strong>{transportTargetLabel(targetSystem)} · ZTRD · TRSTDEV</strong></div></div>{confirmError ? <div className="cr-confirm-error"><AlertTriangle size={16} /> {friendlyMessage(confirmError)}</div> : null}</UIModal>
   </div>;
@@ -275,7 +307,26 @@ export function getTransportCreateState({ created, selected = false, locked = fa
   const createdRequest = created?.ok && selected ? String(created.request || "").trim() : "";
   const request = createdRequest || (locked ? String(lockOrder || "").trim() : "");
   const assigned = Boolean(request);
-  return { assigned, request, canCreate: !assigned, createLabel: assigned ? "CR already created" : "Create SAP CR" };
+  const assignmentKind = createdRequest ? "created" : locked ? "existing" : "none";
+  return { assigned, request, assignmentKind, canCreate: !createdRequest && !locked, createLabel: createdRequest ? "CR already created" : "Create SAP CR" };
+}
+
+export function getLockedObjectConflict(
+  selected: ResolvedTransportObject[],
+  refreshed: ResolvedTransportObject[][]
+): { objectName: string; request: string } | null {
+  for (let index = 0; index < selected.length; index += 1) {
+    const matching = refreshed[index]?.find((row) => objectKey(row) === objectKey(selected[index]) && row.locked && row.lockOrder);
+    if (matching) return { objectName: matching.objectName, request: matching.lockOrder };
+  }
+  return null;
+}
+
+export function appendExistingCrLink(links: string, request: string): string {
+  const current = String(links || "").split(/[;,]/).map((value) => value.trim().toUpperCase()).filter(Boolean);
+  const next = String(request || "").trim().toUpperCase();
+  if (next && !current.includes(next)) current.push(next);
+  return current.join("; ");
 }
 
 export function getCreatedCrPreview(result: TransportRequestResult) {

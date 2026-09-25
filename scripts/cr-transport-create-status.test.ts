@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { normalizeTransportTarget, transportTargetLabel } from "../src/client/components/crTransport/transportTarget.js";
-import { getCreatedCrPreview, getResolvedObjectHint, getTransportCreateState } from "../src/client/components/crTransport/CrTransportCreate.js";
+import * as createModule from "../src/client/components/crTransport/CrTransportCreate.js";
+
+const { getCreatedCrPreview, getResolvedObjectHint, getTransportCreateState } = createModule;
 
 test("marks selected objects as assigned after SAP CR creation", () => {
   const state = getTransportCreateState({
@@ -13,6 +15,7 @@ test("marks selected objects as assigned after SAP CR creation", () => {
   assert.deepEqual(state, {
     assigned: true,
     request: "TRDK921778",
+    assignmentKind: "created",
     canCreate: false,
     createLabel: "CR already created"
   });
@@ -27,7 +30,34 @@ test("keeps create action unavailable while an object is already locked in SAP",
 
   assert.equal(state.assigned, true);
   assert.equal(state.request, "TRDK921778");
+  assert.equal(state.assignmentKind, "existing");
   assert.equal(state.canCreate, false);
+});
+
+test("prevents a new CR when SAP reports a lock without a request number", () => {
+  const state = getTransportCreateState({ created: null, locked: true, lockOrder: "" });
+
+  assert.equal(state.assigned, false);
+  assert.equal(state.canCreate, false);
+});
+
+test("identifies the matching SAP request after a preflight lock race", () => {
+  const getLockedObjectConflict = (createModule as typeof createModule & { getLockedObjectConflict?: (...args: unknown[]) => unknown }).getLockedObjectConflict;
+  assert.equal(typeof getLockedObjectConflict, "function");
+  const selected = [{ pgmid: "LIMU", objectType: "FUNC", objectName: "ZFI_GL_DL", sourcePackage: "ZTRD", targetPackage: "ZTRD" as const, locked: false, lockOrder: "", lockUser: "" }];
+  const refreshed = [[{ ...selected[0], locked: true, lockOrder: "TRDK924831", lockUser: "TRSTDEV" }]];
+
+  assert.deepEqual(getLockedObjectConflict!(selected, refreshed), {
+    objectName: "ZFI_GL_DL",
+    request: "TRDK924831"
+  });
+});
+
+test("links an existing CR to an Issue without replacing other linked CRs", () => {
+  const appendExistingCrLink = (createModule as typeof createModule & { appendExistingCrLink?: (links: string, request: string) => string }).appendExistingCrLink;
+  assert.equal(typeof appendExistingCrLink, "function");
+  assert.equal(appendExistingCrLink!("TRDK924730; TRDK924682", "TRDK924831"), "TRDK924730; TRDK924682; TRDK924831");
+  assert.equal(appendExistingCrLink!("TRDK924831", "trdk924831"), "TRDK924831");
 });
 
 test("exposes synced CR metadata for an Issue preview immediately after creation", () => {

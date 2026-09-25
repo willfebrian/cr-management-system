@@ -61,7 +61,11 @@
             var colorConfigs = [
               { key: "outstanding", defaultBg: "#fef3c7", defaultText: "#d97706", defaultBorder: "#fde68a", selectors: [".status.outstanding", ".status.open"] },
               { key: "released", defaultBg: "#d1fae5", defaultText: "#059669", defaultBorder: "#a7f3d0", selectors: [".status.released", ".status.completed", ".status.ok", ".status.active"] },
-              { key: "in_progress", defaultBg: "#dbeafe", defaultText: "#2563eb", defaultBorder: "#bfdbfe", selectors: [".status.in_progress", ".status.in_qa", ".status.in_prd", ".status.pending_qa", ".status.pending_prd", ".status.planned"] },
+              { key: "pending_qa", defaultBg: "#fef3c7", defaultText: "#b45309", defaultBorder: "#fde68a", selectors: [".status.pending_qa"] },
+              { key: "in_qa", defaultBg: "#dbeafe", defaultText: "#2563eb", defaultBorder: "#bfdbfe", selectors: [".status.in_qa"] },
+              { key: "pending_prd", defaultBg: "#ffedd5", defaultText: "#c2410c", defaultBorder: "#fed7aa", selectors: [".status.pending_prd"] },
+              { key: "in_prd", defaultBg: "#d1fae5", defaultText: "#047857", defaultBorder: "#a7f3d0", selectors: [".status.in_prd"] },
+              { key: "in_progress", defaultBg: "#dbeafe", defaultText: "#2563eb", defaultBorder: "#bfdbfe", selectors: [".status.in_progress", ".status.planned"] },
               { key: "created", defaultBg: "#f3e8ff", defaultText: "#7c3aed", defaultBorder: "#ddd6fe", selectors: [".status.created"] },
               { key: "cancelled", defaultBg: "#ffe4e6", defaultText: "#e11d48", defaultBorder: "#fecdd3", selectors: [".status.cancelled", ".status.deleted", ".status.on_hold"] }
             ];

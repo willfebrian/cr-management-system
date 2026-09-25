@@ -42,6 +42,27 @@ export type CrFilters = {
   pageSize?: number;
 };
 
+export async function downloadReportExcel(kind: "cr" | "issue", filters: CrFilters | IssueFilters): Promise<void> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== "" && key !== "page" && key !== "pageSize") params.set(key, String(value));
+  }
+  const url = `/api/${kind === "cr" ? "cr" : "issues"}/export?${params}`;
+  const response = await fetch(url, { credentials: "include" });
+  if (!response.ok) throw new Error(`Excel export failed (${response.status}).`);
+  if (!response.headers.get("content-type")?.includes("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) {
+    throw new Error("The server did not return an Excel file. Restart the application server and try again.");
+  }
+  const blob = await response.blob();
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = kind === "cr" ? "cr-transport-report.xlsx" : "issue-report.xlsx";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
 export async function fetchCrList(filters: CrFilters = {}): Promise<{
   rows: CrRequest[];
   page: number;

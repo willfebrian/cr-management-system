@@ -18,7 +18,7 @@ import { ProjectReport } from "../components/projects/ProjectReport";
 import { UserManagementWorkspace } from "../components/users/UserManagementWorkspace";
 import { MasterDataWorkspace } from "./MasterDataWorkspace";
 import { AuditLogReport } from "./AuditLogReport";
-import { CrTransportCreate, getCreatedCrPreview } from "../components/crTransport/CrTransportCreate";
+import { CrTransportCreate, appendExistingCrLink, getCreatedCrPreview } from "../components/crTransport/CrTransportCreate";
 import { CrTransportRelease, nextReleaseRefreshToken } from "../components/crTransport/CrTransportRelease";
 import { IssueCrTransportRelease } from "../components/crTransport/IssueCrTransportRelease";
 import { getChangeIssueReleaseCandidates, normalizeIssueReleaseLifecycle } from "../components/crTransport/issueReleaseModel";
@@ -30,6 +30,7 @@ import { fetchProjectDetail } from "../api/projectApi";
 import { afterIncompleteSectionRender, expandSection, getActiveIncompleteNavigation, getIncompleteItems, getIssueRowMissingItems, groupIncompleteItems, markIncompleteTarget, type ExpandedIssueSections, type IncompleteItem, type IssueSection } from "../issueIncomplete";
 import { getSidebarGroupDestination, nextExpandedSidebarGroup, nextIssuePageRefreshToken, type SidebarGroup } from "../navigation";
 import { startReportDbRefresh } from "../reportDbRefresh";
+import { downloadReportExcel } from "../api";
 import type { CrDetail, CrRequest, DashboardData, IssueDetail, IssueRow, SapSystemConfig, StatusTrendData } from "../../shared/types";
 import { AppLoadingScreen, SkeletonDetailLoader, TableDataLoader } from "../components/InteractiveLoaders";
 import type { ProjectDetail as ProjectDetailModel, ProjectStatus } from "../../shared/projectTypes";
@@ -376,6 +377,7 @@ export function App() {
   const [syncRefreshToken, setSyncRefreshToken] = useState(0);
   const [issuePageRefreshToken, setIssuePageRefreshToken] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [exportingReport, setExportingReport] = useState(false);
   const [syncPopoverOpen, setSyncPopoverOpen] = useState(false);
   const [formLayoutPopoverOpen, setFormLayoutPopoverOpen] = useState(false);
   const [createFormLayoutStyle, setCreateFormLayoutStyle] = useState<"tabs" | "quick_toggle" | "classic">(() => {
@@ -1169,7 +1171,7 @@ export function App() {
       </aside>
 
       <section className="workspace" ref={workspaceRef}>
-        <header className="topbar report-topbar">
+        <header className={`topbar report-topbar ${view === "report" || view === "issue-display" ? "report-layout-b" : ""}`}>
           <div className="page-identity">
             <h1>{VIEW_META[view].title}</h1>
             <p className="page-description">{VIEW_META[view].description}</p>
@@ -1683,297 +1685,7 @@ export function App() {
               </div>
             </div>
           ) : view === "report" ? (
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-              {/* Custom Modern Status Filter Dropdown */}
-              {(() => {
-                const statusOptions = [
-                  { value: "all", label: "All Status", color: "#64748b" },
-                  { value: "outstanding", label: "Outstanding", color: "#ea580c" },
-                  { value: "released", label: "Released", color: "#059669" },
-                  { value: "pending_qa", label: "Pending to QA", color: "#d97706" },
-                  { value: "in_qa", label: "In QA", color: "#2563eb" },
-                  { value: "pending_prd", label: "Pending to PRD", color: "#4f46e5" },
-                  { value: "in_prd", label: "In PRD", color: "#7c3aed" }
-                ];
-                const currentStatusVal = draftFilters.lifecycleStatus && draftFilters.lifecycleStatus !== "all"
-                  ? draftFilters.lifecycleStatus
-                  : draftFilters.status || "all";
-                const currentStatusObj = statusOptions.find(o => o.value === currentStatusVal) || statusOptions[0];
-
-                return (
-                  <div style={{ position: "relative", display: "inline-block" }}>
-                    <button
-                      type="button"
-                      onClick={() => setStatusPopoverOpen((prev) => !prev)}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        padding: "6px 12px",
-                        borderRadius: "8px",
-                        border: "1px solid var(--color-border, #cbd5e1)",
-                        background: "var(--color-bg, #ffffff)",
-                        color: "var(--color-text, #1e293b)",
-                        fontSize: "0.85rem",
-                        fontWeight: "500",
-                        height: "36px",
-                        cursor: "pointer"
-                      }}
-                    >
-                      <span
-                        style={{
-                          width: "8px",
-                          height: "8px",
-                          borderRadius: "50%",
-                          backgroundColor: currentStatusObj.color,
-                          display: "inline-block"
-                        }}
-                      />
-                      <span>{currentStatusObj.label}</span>
-                      <ChevronDown size={14} style={{ opacity: 0.7, transform: statusPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
-                    </button>
-
-                    {statusPopoverOpen ? (
-                      <div
-                        style={{
-                          position: "absolute",
-                          top: "calc(100% + 6px)",
-                          left: 0,
-                          zIndex: 1000,
-                          width: "190px",
-                          background: "var(--color-bg-elevated, #ffffff)",
-                          border: "1px solid var(--color-border, #cbd5e1)",
-                          borderRadius: "12px",
-                          boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.18)",
-                          padding: "6px",
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "2px"
-                        }}
-                      >
-                        {statusOptions.map((opt) => {
-                          const isSelected = opt.value === currentStatusVal;
-                          return (
-                            <button
-                              key={opt.value}
-                              type="button"
-                              onClick={() => {
-                                setStatusPopoverOpen(false);
-                                const val = opt.value;
-                                const status = ["all", "outstanding", "released"].includes(val) ? val : "all";
-                                const lifecycleStatus = val.startsWith("pending_") || val.startsWith("in_") ? val : "all";
-                                const nextFilters = { ...draftFilters, status, lifecycleStatus, page: 1 };
-                                setDraftFilters(nextFilters);
-                                setFilters(nextFilters);
-                                loadReport(nextFilters).catch((err) => setError(err instanceof Error ? err.message : String(err)));
-                              }}
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                padding: "8px 10px",
-                                borderRadius: "7px",
-                                border: "none",
-                                background: isSelected ? "var(--color-bg-subtle, #f1f5f9)" : "transparent",
-                                cursor: "pointer",
-                                fontSize: "0.825rem",
-                                fontWeight: isSelected ? "700" : "500",
-                                color: isSelected ? "var(--color-primary, #0f766e)" : "var(--color-text, #334155)",
-                                textAlign: "left",
-                                transition: "background 0.15s ease"
-                              }}
-                            >
-                              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                <span
-                                  style={{
-                                    width: "8px",
-                                    height: "8px",
-                                    borderRadius: "50%",
-                                    backgroundColor: opt.color,
-                                    display: "inline-block"
-                                  }}
-                                />
-                                <span>{opt.label}</span>
-                              </div>
-                              {isSelected && <CheckCircle2 size={14} color="#0f766e" />}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })()}
-
-              {/* Search Bar */}
-              <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
-                <Search size={15} style={{ position: "absolute", left: "10px", color: "#64748b", pointerEvents: "none" }} />
-                <input
-                  type="text"
-                  value={draftFilters.q || ""}
-                  onChange={(e) => {
-                    const nextFilters = { ...draftFilters, q: e.target.value, page: 1 };
-                    setDraftFilters(nextFilters);
-                    setFilters(nextFilters);
-                    loadReport(nextFilters).catch((err) => setError(err instanceof Error ? err.message : String(err)));
-                  }}
-                  placeholder="Search CR, description..."
-                  style={{
-                    padding: "6px 12px 6px 32px",
-                    borderRadius: "8px",
-                    border: "1px solid var(--color-border, #cbd5e1)",
-                    background: "var(--color-bg, #ffffff)",
-                    fontSize: "0.85rem",
-                    width: "200px",
-                    height: "36px",
-                    boxSizing: "border-box"
-                  }}
-                />
-              </div>
-
-              {/* 1 Single Period Picker Field Button + Popover */}
-              <div style={{ position: "relative", display: "inline-block" }}>
-                <button
-                  type="button"
-                  onClick={() => setPeriodPopoverOpen((prev) => !prev)}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    padding: "6px 12px",
-                    borderRadius: "8px",
-                    border: "1px solid var(--color-border, #cbd5e1)",
-                    background: (draftFilters.fromDate || draftFilters.toDate) ? "#f0fdf4" : "var(--color-bg, #ffffff)",
-                    color: (draftFilters.fromDate || draftFilters.toDate) ? "#0f766e" : "var(--color-text, #334155)",
-                    fontSize: "0.85rem",
-                    fontWeight: "500",
-                    height: "36px",
-                    cursor: "pointer"
-                  }}
-                >
-                  <Calendar size={15} color={draftFilters.fromDate || draftFilters.toDate ? "#0f766e" : "#64748b"} />
-                  <span>
-                    {draftFilters.fromDate || draftFilters.toDate
-                      ? `${draftFilters.fromDate || "..."} - ${draftFilters.toDate || "..."}`
-                      : "Select Period"}
-                  </span>
-                  <ChevronDown size={14} style={{ opacity: 0.7, transform: periodPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
-                </button>
-
-                {periodPopoverOpen ? (
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "calc(100% + 6px)",
-                      right: 0,
-                      zIndex: 1000,
-                      width: "290px",
-                      background: "var(--color-bg-elevated, #ffffff)",
-                      border: "1px solid var(--color-border, #cbd5e1)",
-                      borderRadius: "12px",
-                      boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.2)",
-                      padding: "16px",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "12px",
-                      textAlign: "left"
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--color-border-soft, #e2e8f0)", paddingBottom: "8px" }}>
-                      <span style={{ fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)" }}>
-                        Filter by Period
-                      </span>
-                      {(draftFilters.fromDate || draftFilters.toDate) && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const nextFilters = { ...draftFilters, fromDate: "", toDate: "", page: 1 };
-                            setDraftFilters(nextFilters);
-                            setFilters(nextFilters);
-                            setPeriodPopoverOpen(false);
-                            loadReport(nextFilters).catch((err) => setError(err instanceof Error ? err.message : String(err)));
-                          }}
-                          style={{ border: "none", background: "none", color: "#dc2626", fontSize: "0.75rem", fontWeight: "600", cursor: "pointer", padding: 0 }}
-                        >
-                          Clear
-                        </button>
-                      )}
-                    </div>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                        <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>From Date</label>
-                        <input
-                          type="date"
-                          value={draftFilters.fromDate || ""}
-                          onChange={(e) => setDraftFilters((prev) => ({ ...prev, fromDate: e.target.value }))}
-                          style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.8rem", width: "100%", boxSizing: "border-box" }}
-                        />
-                      </div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                        <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>To Date</label>
-                        <input
-                          type="date"
-                          value={draftFilters.toDate || ""}
-                          onChange={(e) => setDraftFilters((prev) => ({ ...prev, toDate: e.target.value }))}
-                          style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.8rem", width: "100%", boxSizing: "border-box" }}
-                        />
-                      </div>
-                    </div>
-
-                    <div style={{ display: "flex", gap: "6px" }}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const today = todayYmd();
-                          const firstOfMonth = `${today.slice(0, 7)}-01`;
-                          setDraftFilters((prev) => ({ ...prev, fromDate: firstOfMonth, toDate: today }));
-                        }}
-                        style={{ flex: 1, padding: "4px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", background: "var(--color-bg, #ffffff)", fontSize: "0.75rem", cursor: "pointer" }}
-                      >
-                        This Month
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const today = todayYmd();
-                          const d = new Date();
-                          d.setDate(d.getDate() - 30);
-                          const thirtyDaysAgo = d.toISOString().slice(0, 10);
-                          setDraftFilters((prev) => ({ ...prev, fromDate: thirtyDaysAgo, toDate: today }));
-                        }}
-                        style={{ flex: 1, padding: "4px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", background: "var(--color-bg, #ffffff)", fontSize: "0.75rem", cursor: "pointer" }}
-                      >
-                        Last 30 Days
-                      </button>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPeriodPopoverOpen(false);
-                        const nextFilters = { ...draftFilters, page: 1 };
-                        setFilters(nextFilters);
-                        loadReport(nextFilters).catch((err) => setError(err instanceof Error ? err.message : String(err)));
-                      }}
-                      style={{
-                        background: "#0f766e",
-                        color: "#ffffff",
-                        border: "none",
-                        padding: "8px 14px",
-                        borderRadius: "8px",
-                        fontWeight: "600",
-                        fontSize: "0.85rem",
-                        cursor: "pointer",
-                        marginTop: "4px"
-                      }}
-                    >
-                      Apply Filter
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-
+            <div className="report-control-layout">
               {/* Sync CR Popover Button */}
               <div
                 className="sync-cr-popover-wrapper"
@@ -2167,6 +1879,313 @@ export function App() {
                     </button>
                   </div>
                 ) : null}
+              </div>
+              <div className="report-table-toolbar">
+                <div className="report-filter-group">
+              {/* Search Bar */}
+              <div className="report-search-field" style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+                <Search size={15} style={{ position: "absolute", left: "10px", color: "#64748b", pointerEvents: "none" }} />
+                <input
+                  aria-label="Search CR transports"
+                  type="text"
+                  value={draftFilters.q || ""}
+                  onChange={(e) => {
+                    const nextFilters = { ...draftFilters, q: e.target.value, page: 1 };
+                    setDraftFilters(nextFilters);
+                    setFilters(nextFilters);
+                    loadReport(nextFilters).catch((err) => setError(err instanceof Error ? err.message : String(err)));
+                  }}
+                  placeholder="Search CR, description..."
+                  style={{
+                    padding: "6px 12px 6px 32px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--color-border, #cbd5e1)",
+                    background: "var(--color-bg, #ffffff)",
+                    fontSize: "0.85rem",
+                    width: "200px",
+                    height: "36px",
+                    boxSizing: "border-box"
+                  }}
+                />
+              </div>
+
+
+
+              {/* Custom Modern Status Filter Dropdown */}
+              {(() => {
+                const statusOptions = [
+                  { value: "all", label: "All Status", color: "#64748b" },
+                  { value: "outstanding", label: "Outstanding", color: "#ea580c" },
+                  { value: "released", label: "Released", color: "#059669" },
+                  { value: "pending_qa", label: "Pending to QA", color: "#d97706" },
+                  { value: "in_qa", label: "In QA", color: "#2563eb" },
+                  { value: "pending_prd", label: "Pending to PRD", color: "#4f46e5" },
+                  { value: "in_prd", label: "In PRD", color: "#7c3aed" }
+                ];
+                const currentStatusVal = draftFilters.lifecycleStatus && draftFilters.lifecycleStatus !== "all"
+                  ? draftFilters.lifecycleStatus
+                  : draftFilters.status || "all";
+                const currentStatusObj = statusOptions.find(o => o.value === currentStatusVal) || statusOptions[0];
+
+                return (
+                  <div style={{ position: "relative", display: "inline-block" }}>
+                    <button
+                      type="button"
+                      onClick={() => setStatusPopoverOpen((prev) => !prev)}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        padding: "6px 12px",
+                        borderRadius: "8px",
+                        border: "1px solid var(--color-border, #cbd5e1)",
+                        background: "var(--color-bg, #ffffff)",
+                        color: "var(--color-text, #1e293b)",
+                        fontSize: "0.85rem",
+                        fontWeight: "500",
+                        height: "36px",
+                        cursor: "pointer"
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: "8px",
+                          height: "8px",
+                          borderRadius: "50%",
+                          backgroundColor: currentStatusObj.color,
+                          display: "inline-block"
+                        }}
+                      />
+                      <span>{currentStatusObj.label}</span>
+                      <ChevronDown size={14} style={{ opacity: 0.7, transform: statusPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                    </button>
+
+                    {statusPopoverOpen ? (
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: "calc(100% + 6px)",
+                          left: 0,
+                          zIndex: 1000,
+                          width: "190px",
+                          background: "var(--color-bg-elevated, #ffffff)",
+                          border: "1px solid var(--color-border, #cbd5e1)",
+                          borderRadius: "12px",
+                          boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.18)",
+                          padding: "6px",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "2px"
+                        }}
+                      >
+                        {statusOptions.map((opt) => {
+                          const isSelected = opt.value === currentStatusVal;
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => {
+                                setStatusPopoverOpen(false);
+                                const val = opt.value;
+                                const status = ["all", "outstanding", "released"].includes(val) ? val : "all";
+                                const lifecycleStatus = val.startsWith("pending_") || val.startsWith("in_") ? val : "all";
+                                const nextFilters = { ...draftFilters, status, lifecycleStatus, page: 1 };
+                                setDraftFilters(nextFilters);
+                                setFilters(nextFilters);
+                                loadReport(nextFilters).catch((err) => setError(err instanceof Error ? err.message : String(err)));
+                              }}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                padding: "8px 10px",
+                                borderRadius: "7px",
+                                border: "none",
+                                background: isSelected ? "var(--color-bg-subtle, #f1f5f9)" : "transparent",
+                                cursor: "pointer",
+                                fontSize: "0.825rem",
+                                fontWeight: isSelected ? "700" : "500",
+                                color: isSelected ? "var(--color-primary, #0f766e)" : "var(--color-text, #334155)",
+                                textAlign: "left",
+                                transition: "background 0.15s ease"
+                              }}
+                            >
+                              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                <span
+                                  style={{
+                                    width: "8px",
+                                    height: "8px",
+                                    borderRadius: "50%",
+                                    backgroundColor: opt.color,
+                                    display: "inline-block"
+                                  }}
+                                />
+                                <span>{opt.label}</span>
+                              </div>
+                              {isSelected && <CheckCircle2 size={14} color="#0f766e" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })()}
+
+              {/* 1 Single Period Picker Field Button + Popover */}
+              <div style={{ position: "relative", display: "inline-block" }}>
+                <button
+                  type="button"
+                  onClick={() => setPeriodPopoverOpen((prev) => !prev)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    padding: "6px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--color-border, #cbd5e1)",
+                    background: (draftFilters.fromDate || draftFilters.toDate) ? "#f0fdf4" : "var(--color-bg, #ffffff)",
+                    color: (draftFilters.fromDate || draftFilters.toDate) ? "#0f766e" : "var(--color-text, #334155)",
+                    fontSize: "0.85rem",
+                    fontWeight: "500",
+                    height: "36px",
+                    cursor: "pointer"
+                  }}
+                >
+                  <Calendar size={15} color={draftFilters.fromDate || draftFilters.toDate ? "#0f766e" : "#64748b"} />
+                  <span>
+                    {draftFilters.fromDate || draftFilters.toDate
+                      ? `${draftFilters.fromDate || "..."} - ${draftFilters.toDate || "..."}`
+                      : "Select Period"}
+                  </span>
+                  <ChevronDown size={14} style={{ opacity: 0.7, transform: periodPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                </button>
+
+                {periodPopoverOpen ? (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      zIndex: 1000,
+                      width: "290px",
+                      background: "var(--color-bg-elevated, #ffffff)",
+                      border: "1px solid var(--color-border, #cbd5e1)",
+                      borderRadius: "12px",
+                      boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.2)",
+                      padding: "16px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "12px",
+                      textAlign: "left"
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--color-border-soft, #e2e8f0)", paddingBottom: "8px" }}>
+                      <span style={{ fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)" }}>
+                        Filter by Period
+                      </span>
+                      {(draftFilters.fromDate || draftFilters.toDate) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextFilters = { ...draftFilters, fromDate: "", toDate: "", page: 1 };
+                            setDraftFilters(nextFilters);
+                            setFilters(nextFilters);
+                            setPeriodPopoverOpen(false);
+                            loadReport(nextFilters).catch((err) => setError(err instanceof Error ? err.message : String(err)));
+                          }}
+                          style={{ border: "none", background: "none", color: "#dc2626", fontSize: "0.75rem", fontWeight: "600", cursor: "pointer", padding: 0 }}
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>From Date</label>
+                        <input
+                          type="date"
+                          value={draftFilters.fromDate || ""}
+                          onChange={(e) => setDraftFilters((prev) => ({ ...prev, fromDate: e.target.value }))}
+                          style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.8rem", width: "100%", boxSizing: "border-box" }}
+                        />
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>To Date</label>
+                        <input
+                          type="date"
+                          value={draftFilters.toDate || ""}
+                          onChange={(e) => setDraftFilters((prev) => ({ ...prev, toDate: e.target.value }))}
+                          style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.8rem", width: "100%", boxSizing: "border-box" }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const today = todayYmd();
+                          const firstOfMonth = `${today.slice(0, 7)}-01`;
+                          setDraftFilters((prev) => ({ ...prev, fromDate: firstOfMonth, toDate: today }));
+                        }}
+                        style={{ flex: 1, padding: "4px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", background: "var(--color-bg, #ffffff)", fontSize: "0.75rem", cursor: "pointer" }}
+                      >
+                        This Month
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const today = todayYmd();
+                          const d = new Date();
+                          d.setDate(d.getDate() - 30);
+                          const thirtyDaysAgo = d.toISOString().slice(0, 10);
+                          setDraftFilters((prev) => ({ ...prev, fromDate: thirtyDaysAgo, toDate: today }));
+                        }}
+                        style={{ flex: 1, padding: "4px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", background: "var(--color-bg, #ffffff)", fontSize: "0.75rem", cursor: "pointer" }}
+                      >
+                        Last 30 Days
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPeriodPopoverOpen(false);
+                        const nextFilters = { ...draftFilters, page: 1 };
+                        setFilters(nextFilters);
+                        loadReport(nextFilters).catch((err) => setError(err instanceof Error ? err.message : String(err)));
+                      }}
+                      style={{
+                        background: "#0f766e",
+                        color: "#ffffff",
+                        border: "none",
+                        padding: "8px 14px",
+                        borderRadius: "8px",
+                        fontWeight: "600",
+                        fontSize: "0.85rem",
+                        cursor: "pointer",
+                        marginTop: "4px"
+                      }}
+                    >
+                      Apply Filter
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+
+
+                </div>
+                <div className="report-action-group">
+              <button type="button" className="secondary report-export-button" disabled={exportingReport} onClick={async () => {
+                setExportingReport(true);
+                try { await downloadReportExcel("cr", filters); }
+                catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+                finally { setExportingReport(false); }
+              }}><FileOutput size={15} /> {exportingReport ? "Exporting..." : "Export Excel"}</button>
+
+                </div>
               </div>
             </div>
           ) : view === "issue-create" ? (
@@ -2858,287 +2877,7 @@ export function App() {
               </div>
             </div>
           ) : view === "issue-display" ? (
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-              {/* Issue Custom Status Filter Dropdown */}
-              {(() => {
-                const issueStatusOptions = [
-                  { value: "all", label: "All Status", color: "#64748b" },
-                  { value: "open", label: "Open Issues", color: "#2563eb" },
-                  { value: "in_progress", label: "In Progress", color: "#d97706" },
-                  { value: "ok", label: "OK Issues", color: "#059669" },
-                  { value: "cancelled", label: "Cancelled", color: "#dc2626" }
-                ];
-                const currentStatusVal = draftIssueFilters.status || "all";
-                const currentStatusObj = issueStatusOptions.find(o => o.value === currentStatusVal) || issueStatusOptions[0];
-
-                return (
-                  <div style={{ position: "relative", display: "inline-block" }}>
-                    <button
-                      type="button"
-                      onClick={() => setIssueStatusPopoverOpen((prev) => !prev)}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        padding: "6px 12px",
-                        borderRadius: "8px",
-                        border: "1px solid var(--color-border, #cbd5e1)",
-                        background: "var(--color-bg, #ffffff)",
-                        color: "var(--color-text, #1e293b)",
-                        fontSize: "0.85rem",
-                        fontWeight: "500",
-                        height: "36px",
-                        cursor: "pointer"
-                      }}
-                    >
-                      <span
-                        style={{
-                          width: "8px",
-                          height: "8px",
-                          borderRadius: "50%",
-                          backgroundColor: currentStatusObj.color,
-                          display: "inline-block"
-                        }}
-                      />
-                      <span>{currentStatusObj.label}</span>
-                      <ChevronDown size={14} style={{ opacity: 0.7, transform: issueStatusPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
-                    </button>
-
-                    {issueStatusPopoverOpen ? (
-                      <div
-                        style={{
-                          position: "absolute",
-                          top: "calc(100% + 6px)",
-                          left: 0,
-                          zIndex: 1000,
-                          width: "180px",
-                          background: "var(--color-bg-elevated, #ffffff)",
-                          border: "1px solid var(--color-border, #cbd5e1)",
-                          borderRadius: "12px",
-                          boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.18)",
-                          padding: "6px",
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "2px"
-                        }}
-                      >
-                        {issueStatusOptions.map((opt) => {
-                          const isSelected = opt.value === currentStatusVal;
-                          return (
-                            <button
-                              key={opt.value}
-                              type="button"
-                              onClick={() => {
-                                setIssueStatusPopoverOpen(false);
-                                setDraftIssueFilters((prev) => ({ ...prev, status: opt.value, page: 1 }));
-                              }}
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                padding: "8px 10px",
-                                borderRadius: "7px",
-                                border: "none",
-                                background: isSelected ? "var(--color-bg-subtle, #f1f5f9)" : "transparent",
-                                cursor: "pointer",
-                                fontSize: "0.825rem",
-                                fontWeight: isSelected ? "700" : "500",
-                                color: isSelected ? "var(--color-primary, #0f766e)" : "var(--color-text, #334155)",
-                                textAlign: "left",
-                                transition: "background 0.15s ease"
-                              }}
-                            >
-                              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                <span
-                                  style={{
-                                    width: "8px",
-                                    height: "8px",
-                                    borderRadius: "50%",
-                                    backgroundColor: opt.color,
-                                    display: "inline-block"
-                                  }}
-                                />
-                                <span>{opt.label}</span>
-                              </div>
-                              {isSelected && <CheckCircle2 size={14} color="#0f766e" />}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })()}
-
-              {/* Search Bar */}
-              <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
-                <Search size={15} style={{ position: "absolute", left: "10px", color: "#64748b", pointerEvents: "none" }} />
-                <input
-                  type="text"
-                  value={draftIssueFilters.q || ""}
-                  onChange={(e) => setDraftIssueFilters((prev) => ({ ...prev, q: e.target.value, page: 1 }))}
-                  placeholder="Search issue, requester, CR..."
-                  style={{
-                    padding: "6px 12px 6px 32px",
-                    borderRadius: "8px",
-                    border: "1px solid var(--color-border, #cbd5e1)",
-                    background: "var(--color-bg, #ffffff)",
-                    fontSize: "0.85rem",
-                    width: "210px",
-                    height: "36px",
-                    boxSizing: "border-box"
-                  }}
-                />
-              </div>
-
-              {/* 1 Single Period Picker Field Button + Popover */}
-              <div style={{ position: "relative", display: "inline-block" }}>
-                <button
-                  type="button"
-                  onClick={() => setIssuePeriodPopoverOpen((prev) => !prev)}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    padding: "6px 12px",
-                    borderRadius: "8px",
-                    border: "1px solid var(--color-border, #cbd5e1)",
-                    background: (draftIssueFilters.fromDate || draftIssueFilters.toDate) ? "#f0fdf4" : "var(--color-bg, #ffffff)",
-                    color: (draftIssueFilters.fromDate || draftIssueFilters.toDate) ? "#0f766e" : "var(--color-text, #334155)",
-                    fontSize: "0.85rem",
-                    fontWeight: "500",
-                    height: "36px",
-                    cursor: "pointer"
-                  }}
-                >
-                  <Calendar size={15} color={draftIssueFilters.fromDate || draftIssueFilters.toDate ? "#0f766e" : "#64748b"} />
-                  <span>
-                    {draftIssueFilters.fromDate || draftIssueFilters.toDate
-                      ? `${draftIssueFilters.fromDate || "..."} - ${draftIssueFilters.toDate || "..."}`
-                      : "Select Period"}
-                  </span>
-                  <ChevronDown size={14} style={{ opacity: 0.7, transform: issuePeriodPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
-                </button>
-
-                {issuePeriodPopoverOpen ? (
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "calc(100% + 6px)",
-                      right: 0,
-                      zIndex: 1000,
-                      width: "290px",
-                      background: "var(--color-bg-elevated, #ffffff)",
-                      border: "1px solid var(--color-border, #cbd5e1)",
-                      borderRadius: "12px",
-                      boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.2)",
-                      padding: "16px",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "12px",
-                      textAlign: "left"
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--color-border-soft, #e2e8f0)", paddingBottom: "8px" }}>
-                      <span style={{ fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)" }}>
-                        Filter by Period
-                      </span>
-                      {(draftIssueFilters.fromDate || draftIssueFilters.toDate) && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDraftIssueFilters((prev) => ({ ...prev, fromDate: undefined, toDate: undefined, page: 1 }));
-                            setIssuePeriodPopoverOpen(false);
-                          }}
-                          style={{ border: "none", background: "none", color: "#dc2626", fontSize: "0.75rem", fontWeight: "600", cursor: "pointer", padding: 0 }}
-                        >
-                          Clear
-                        </button>
-                      )}
-                    </div>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                        <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>From Date</label>
-                        <input
-                          type="date"
-                          value={draftIssueFilters.fromDate || ""}
-                          onChange={(e) => setDraftIssueFilters((prev) => ({ ...prev, fromDate: e.target.value }))}
-                          style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.8rem", width: "100%", boxSizing: "border-box" }}
-                        />
-                      </div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                        <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>To Date</label>
-                        <input
-                          type="date"
-                          value={draftIssueFilters.toDate || ""}
-                          onChange={(e) => setDraftIssueFilters((prev) => ({ ...prev, toDate: e.target.value }))}
-                          style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.8rem", width: "100%", boxSizing: "border-box" }}
-                        />
-                      </div>
-                    </div>
-
-                    <div style={{ display: "flex", gap: "6px" }}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const today = todayYmd();
-                          const firstOfMonth = `${today.slice(0, 7)}-01`;
-                          setDraftIssueFilters((prev) => ({ ...prev, fromDate: firstOfMonth, toDate: today }));
-                        }}
-                        style={{ flex: 1, padding: "4px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", background: "var(--color-bg, #ffffff)", fontSize: "0.75rem", cursor: "pointer" }}
-                      >
-                        This Month
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const today = todayYmd();
-                          const d = new Date();
-                          d.setDate(d.getDate() - 30);
-                          const thirtyDaysAgo = d.toISOString().slice(0, 10);
-                          setDraftIssueFilters((prev) => ({ ...prev, fromDate: thirtyDaysAgo, toDate: today }));
-                        }}
-                        style={{ flex: 1, padding: "4px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", background: "var(--color-bg, #ffffff)", fontSize: "0.75rem", cursor: "pointer" }}
-                      >
-                        Last 30 Days
-                      </button>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIssuePeriodPopoverOpen(false);
-                        setDraftIssueFilters((prev) => ({ ...prev, page: 1 }));
-                      }}
-                      style={{
-                        background: "#0f766e",
-                        color: "#ffffff",
-                        border: "none",
-                        padding: "8px 14px",
-                        borderRadius: "8px",
-                        fontWeight: "600",
-                        fontSize: "0.85rem",
-                        cursor: "pointer",
-                        marginTop: "4px"
-                      }}
-                    >
-                      Apply Filter
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-
-              {/* Column Menu Button for Issue */}
-              {view === "issue-display" && (
-                <IssueColumnMenu
-                  open={columnMenuOpen}
-                  visibleColumns={visibleIssueColumns}
-                  onOpenChange={setColumnMenuOpen}
-                  onToggle={(col) => setVisibleIssueColumns((curr) => curr.includes(col) ? curr.filter(c => c !== col) : [...curr, col])}
-                />
-              )}
-
+            <div className="report-control-layout">
               {/* Sync CR Popover Button */}
               <div
                 className="sync-cr-popover-wrapper"
@@ -3332,6 +3071,303 @@ export function App() {
                     </button>
                   </div>
                 ) : null}
+              </div>
+              <div className="report-table-toolbar">
+                <div className="report-filter-group">
+              {/* Search Bar */}
+              <div className="report-search-field" style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+                <Search size={15} style={{ position: "absolute", left: "10px", color: "#64748b", pointerEvents: "none" }} />
+                <input
+                  aria-label="Search Issues"
+                  type="text"
+                  value={draftIssueFilters.q || ""}
+                  onChange={(e) => setDraftIssueFilters((prev) => ({ ...prev, q: e.target.value, page: 1 }))}
+                  placeholder="Search issue, requester, CR..."
+                  style={{
+                    padding: "6px 12px 6px 32px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--color-border, #cbd5e1)",
+                    background: "var(--color-bg, #ffffff)",
+                    fontSize: "0.85rem",
+                    width: "210px",
+                    height: "36px",
+                    boxSizing: "border-box"
+                  }}
+                />
+              </div>
+
+
+
+              {/* Issue Custom Status Filter Dropdown */}
+              {(() => {
+                const issueStatusOptions = [
+                  { value: "all", label: "All Status", color: "#64748b" },
+                  { value: "open", label: "Open Issues", color: "#2563eb" },
+                  { value: "in_progress", label: "In Progress", color: "#d97706" },
+                  { value: "ok", label: "OK Issues", color: "#059669" },
+                  { value: "cancelled", label: "Cancelled", color: "#dc2626" }
+                ];
+                const currentStatusVal = draftIssueFilters.status || "all";
+                const currentStatusObj = issueStatusOptions.find(o => o.value === currentStatusVal) || issueStatusOptions[0];
+
+                return (
+                  <div style={{ position: "relative", display: "inline-block" }}>
+                    <button
+                      type="button"
+                      onClick={() => setIssueStatusPopoverOpen((prev) => !prev)}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        padding: "6px 12px",
+                        borderRadius: "8px",
+                        border: "1px solid var(--color-border, #cbd5e1)",
+                        background: "var(--color-bg, #ffffff)",
+                        color: "var(--color-text, #1e293b)",
+                        fontSize: "0.85rem",
+                        fontWeight: "500",
+                        height: "36px",
+                        cursor: "pointer"
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: "8px",
+                          height: "8px",
+                          borderRadius: "50%",
+                          backgroundColor: currentStatusObj.color,
+                          display: "inline-block"
+                        }}
+                      />
+                      <span>{currentStatusObj.label}</span>
+                      <ChevronDown size={14} style={{ opacity: 0.7, transform: issueStatusPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                    </button>
+
+                    {issueStatusPopoverOpen ? (
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: "calc(100% + 6px)",
+                          left: 0,
+                          zIndex: 1000,
+                          width: "180px",
+                          background: "var(--color-bg-elevated, #ffffff)",
+                          border: "1px solid var(--color-border, #cbd5e1)",
+                          borderRadius: "12px",
+                          boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.18)",
+                          padding: "6px",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "2px"
+                        }}
+                      >
+                        {issueStatusOptions.map((opt) => {
+                          const isSelected = opt.value === currentStatusVal;
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => {
+                                setIssueStatusPopoverOpen(false);
+                                setDraftIssueFilters((prev) => ({ ...prev, status: opt.value, page: 1 }));
+                              }}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                padding: "8px 10px",
+                                borderRadius: "7px",
+                                border: "none",
+                                background: isSelected ? "var(--color-bg-subtle, #f1f5f9)" : "transparent",
+                                cursor: "pointer",
+                                fontSize: "0.825rem",
+                                fontWeight: isSelected ? "700" : "500",
+                                color: isSelected ? "var(--color-primary, #0f766e)" : "var(--color-text, #334155)",
+                                textAlign: "left",
+                                transition: "background 0.15s ease"
+                              }}
+                            >
+                              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                <span
+                                  style={{
+                                    width: "8px",
+                                    height: "8px",
+                                    borderRadius: "50%",
+                                    backgroundColor: opt.color,
+                                    display: "inline-block"
+                                  }}
+                                />
+                                <span>{opt.label}</span>
+                              </div>
+                              {isSelected && <CheckCircle2 size={14} color="#0f766e" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })()}
+
+              {/* 1 Single Period Picker Field Button + Popover */}
+              <div style={{ position: "relative", display: "inline-block" }}>
+                <button
+                  type="button"
+                  onClick={() => setIssuePeriodPopoverOpen((prev) => !prev)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    padding: "6px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--color-border, #cbd5e1)",
+                    background: (draftIssueFilters.fromDate || draftIssueFilters.toDate) ? "#f0fdf4" : "var(--color-bg, #ffffff)",
+                    color: (draftIssueFilters.fromDate || draftIssueFilters.toDate) ? "#0f766e" : "var(--color-text, #334155)",
+                    fontSize: "0.85rem",
+                    fontWeight: "500",
+                    height: "36px",
+                    cursor: "pointer"
+                  }}
+                >
+                  <Calendar size={15} color={draftIssueFilters.fromDate || draftIssueFilters.toDate ? "#0f766e" : "#64748b"} />
+                  <span>
+                    {draftIssueFilters.fromDate || draftIssueFilters.toDate
+                      ? `${draftIssueFilters.fromDate || "..."} - ${draftIssueFilters.toDate || "..."}`
+                      : "Select Period"}
+                  </span>
+                  <ChevronDown size={14} style={{ opacity: 0.7, transform: issuePeriodPopoverOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }} />
+                </button>
+
+                {issuePeriodPopoverOpen ? (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      zIndex: 1000,
+                      width: "290px",
+                      background: "var(--color-bg-elevated, #ffffff)",
+                      border: "1px solid var(--color-border, #cbd5e1)",
+                      borderRadius: "12px",
+                      boxShadow: "0 14px 35px -6px rgba(15, 23, 42, 0.2)",
+                      padding: "16px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "12px",
+                      textAlign: "left"
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--color-border-soft, #e2e8f0)", paddingBottom: "8px" }}>
+                      <span style={{ fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted, #64748b)" }}>
+                        Filter by Period
+                      </span>
+                      {(draftIssueFilters.fromDate || draftIssueFilters.toDate) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDraftIssueFilters((prev) => ({ ...prev, fromDate: undefined, toDate: undefined, page: 1 }));
+                            setIssuePeriodPopoverOpen(false);
+                          }}
+                          style={{ border: "none", background: "none", color: "#dc2626", fontSize: "0.75rem", fontWeight: "600", cursor: "pointer", padding: 0 }}
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>From Date</label>
+                        <input
+                          type="date"
+                          value={draftIssueFilters.fromDate || ""}
+                          onChange={(e) => setDraftIssueFilters((prev) => ({ ...prev, fromDate: e.target.value }))}
+                          style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.8rem", width: "100%", boxSizing: "border-box" }}
+                        />
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>To Date</label>
+                        <input
+                          type="date"
+                          value={draftIssueFilters.toDate || ""}
+                          onChange={(e) => setDraftIssueFilters((prev) => ({ ...prev, toDate: e.target.value }))}
+                          style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", fontSize: "0.8rem", width: "100%", boxSizing: "border-box" }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const today = todayYmd();
+                          const firstOfMonth = `${today.slice(0, 7)}-01`;
+                          setDraftIssueFilters((prev) => ({ ...prev, fromDate: firstOfMonth, toDate: today }));
+                        }}
+                        style={{ flex: 1, padding: "4px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", background: "var(--color-bg, #ffffff)", fontSize: "0.75rem", cursor: "pointer" }}
+                      >
+                        This Month
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const today = todayYmd();
+                          const d = new Date();
+                          d.setDate(d.getDate() - 30);
+                          const thirtyDaysAgo = d.toISOString().slice(0, 10);
+                          setDraftIssueFilters((prev) => ({ ...prev, fromDate: thirtyDaysAgo, toDate: today }));
+                        }}
+                        style={{ flex: 1, padding: "4px 8px", borderRadius: "6px", border: "1px solid var(--color-border, #cbd5e1)", background: "var(--color-bg, #ffffff)", fontSize: "0.75rem", cursor: "pointer" }}
+                      >
+                        Last 30 Days
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIssuePeriodPopoverOpen(false);
+                        setDraftIssueFilters((prev) => ({ ...prev, page: 1 }));
+                      }}
+                      style={{
+                        background: "#0f766e",
+                        color: "#ffffff",
+                        border: "none",
+                        padding: "8px 14px",
+                        borderRadius: "8px",
+                        fontWeight: "600",
+                        fontSize: "0.85rem",
+                        cursor: "pointer",
+                        marginTop: "4px"
+                      }}
+                    >
+                      Apply Filter
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+
+
+                </div>
+                <div className="report-action-group">
+              <button type="button" className="secondary report-export-button" disabled={exportingReport} onClick={async () => {
+                setExportingReport(true);
+                try { await downloadReportExcel("issue", issueFilters); }
+                catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+                finally { setExportingReport(false); }
+              }}><FileOutput size={15} /> {exportingReport ? "Exporting..." : "Export Excel"}</button>
+              {/* Column Menu Button for Issue */}
+              {view === "issue-display" && (
+                <IssueColumnMenu
+                  open={columnMenuOpen}
+                  visibleColumns={visibleIssueColumns}
+                  onOpenChange={setColumnMenuOpen}
+                  onToggle={(col) => setVisibleIssueColumns((curr) => curr.includes(col) ? curr.filter(c => c !== col) : [...curr, col])}
+                />
+              )}
+
+
+                </div>
               </div>
             </div>
           ) : view.startsWith("project-") ? (
@@ -3734,6 +3770,7 @@ export function App() {
           <CrTransportCreate
             targetSystem={crTargetSystem}
             onIncompleteChange={setCrTransportCreateIncomplete}
+            onExistingRequestSelected={(requestNo) => openReportFromCrLink({ sap_system_code: "DEV", trkorr: requestNo })}
             onTargetSystemChange={(val) => {
               setCrTargetSystem(val);
               try { localStorage.setItem("cr_transport_target_system", val); } catch {}
@@ -6243,6 +6280,8 @@ function IssueEditor({
   const [releaseCrModalOpen, setReleaseCrModalOpen] = useState(false);
   const [releaseCrBusy, setReleaseCrBusy] = useState(false);
   const [releaseCrCandidates, setReleaseCrCandidates] = useState<ReturnType<typeof getChangeIssueReleaseCandidates>>([]);
+  const [releasedIssueCrRequests, setReleasedIssueCrRequests] = useState<Set<string>>(() => new Set());
+  const releaseIssueIdRef = useRef<number | null>(detail?.issue?.id ?? null);
   const [aiOverwriteSelections, setAiOverwriteSelections] = useState<Record<string, boolean>>({});
   const [internalLayoutStyle, setInternalLayoutStyle] = useState<"tabs" | "quick_toggle" | "classic">(() => {
     try {
@@ -6839,7 +6878,15 @@ function IssueEditor({
     status: normalizeIssueReleaseLifecycle(link.lifecycle_status || link.status_group),
     system: link.sap_system_code
   }]));
-  const eligibleIssueReleaseCandidates = getChangeIssueReleaseCandidates(mode, detail?.crLinks || []);
+  const eligibleIssueReleaseCandidates = getChangeIssueReleaseCandidates(mode, detail?.crLinks || [])
+    .filter((candidate) => !releasedIssueCrRequests.has(candidate.trkorr));
+
+  useEffect(() => {
+    const issueId = detail?.issue?.id ?? null;
+    if (releaseIssueIdRef.current === issueId) return;
+    releaseIssueIdRef.current = issueId;
+    setReleasedIssueCrRequests(new Set());
+  }, [detail?.issue?.id]);
 
   function openIssueReleaseModal() {
     setReleaseCrCandidates(eligibleIssueReleaseCandidates);
@@ -8056,6 +8103,11 @@ function IssueEditor({
           onTargetSystemChange={setCrTargetSystem}
           availableSystems={sapSystems}
           isModal={true}
+          onExistingRequestSelected={(requestNo) => {
+            setForm((current) => ({ ...current, crLinks: appendExistingCrLink(current.crLinks || "", requestNo) }));
+            setCreateCrModalOpen(false);
+            onNotify?.("success", `Existing CR ${requestNo} was added to this Issue. Save the Issue to keep the link.`);
+          }}
           onRequestCreated={(requestNo, _taskNo, response) => {
             update("crLinks", requestNo);
             const preview = getCreatedCrPreview(response);
@@ -8127,6 +8179,7 @@ function IssueEditor({
           )}
           onBusyChange={setReleaseCrBusy}
           onReleased={async (requests) => {
+            setReleasedIssueCrRequests((current) => new Set([...current, ...requests]));
             onNotify?.("success", `${requests.length === 1 ? requests[0] : `${requests.length} CR transports`} released successfully.`);
             await onCrReleased?.();
           }}

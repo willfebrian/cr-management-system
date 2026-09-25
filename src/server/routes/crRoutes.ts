@@ -13,9 +13,41 @@ import { normalizeLookbackDays, normalizeSyncMode, normalizeSystemCodes, runCrSy
 import { buildCrTransportBatchArchive, buildCrTransportDocument, buildUserCrDocument } from "../templates/crTransportTemplateService.js";
 import { buildIssueTemplatePreview, type IssueTemplateKind } from "../templates/issueTemplateService.js";
 import { resolveGlpiPrefillActors } from "../services/glpiPrefillActorService.js";
+import { exportCrReport, exportIssueReport } from "../services/reportExportService.js";
 import { draftIssueReminderWithAi, previewIssueReminder, sendIssueReminder } from "../services/issueReminderService.js";
 
 export const crRoutes = Router();
+
+crRoutes.get("/cr/export", async (req, res, next) => {
+  try {
+    await assertDatabaseConfigured();
+    const data = await exportCrReport({
+      status: stringQuery(req.query.status), lifecycleStatus: stringQuery(req.query.lifecycleStatus),
+      agingDays: numberQuery(req.query.agingDays, 0), sapSystemCode: stringQuery(req.query.sapSystemCode),
+      owner: stringQuery(req.query.owner), q: stringQuery(req.query.q),
+      fromDate: stringQuery(req.query.fromDate), toDate: stringQuery(req.query.toDate)
+    });
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", 'attachment; filename="cr-transport-report.xlsx"');
+    res.send(data);
+  } catch (error) { next(error); }
+});
+
+crRoutes.get("/issues/export", async (req, res, next) => {
+  try {
+    await assertDatabaseConfigured();
+    const data = await exportIssueReport({
+      status: stringQuery(req.query.status), lifecycleStatus: stringQuery(req.query.lifecycleStatus),
+      completionStatus: stringQuery(req.query.completionStatus), q: stringQuery(req.query.q),
+      requester: stringQuery(req.query.requester), abaper: stringQuery(req.query.abaper),
+      crHelpdesk: stringQuery(req.query.crHelpdesk), cr: stringQuery(req.query.cr), glpi: stringQuery(req.query.glpi),
+      fromDate: stringQuery(req.query.fromDate), toDate: stringQuery(req.query.toDate)
+    });
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", 'attachment; filename="issue-report.xlsx"');
+    res.send(data);
+  } catch (error) { next(error); }
+});
 
 crRoutes.get("/health", (_req, res) => {
   res.json({ ok: true, app: "CR Management System" });

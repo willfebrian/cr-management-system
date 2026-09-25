@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { fetchAdminPeople, fetchAdminSettings, updateAdminPerson, updateAdminSettings, createAdminPerson, deleteAdminPerson, fetchGroupEmails, createGroupEmail, updateGroupEmail, deleteGroupEmail, fetchSapSystems, createSapSystem, updateSapSystem, deleteSapSystem, testSapSystemConnection, testAiConnection, testMcpEmailConnection, fetchDocxTemplatesInfo, uploadDocxTemplate, resetDocxTemplate, downloadDocxTemplateUrl, type AdminPersonRow, type GroupEmailRow, type SapSystemRow, type DocxTemplatesInfo } from "../api";
 import { Check, Loader2, Save, X, Trash2, CheckCircle2, XCircle, AlertTriangle, Mail, Palette, Type, Sliders, User, Database, LayoutGrid, Server, Eye, EyeOff, Plus, Edit2, Activity, ShieldCheck, Radio, FileCode2, FileText, Upload, Download, RotateCcw, FileCheck, Zap, Globe } from "lucide-react";
-import { STATUS_COLOR_CONFIGS, applyCustomStatusColors } from "../utils/tagColors";
+import { STATUS_COLOR_CONFIGS, STATUS_COLOR_GROUP_ORDER, applyCustomStatusColors } from "../utils/tagColors";
 import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
 import { TableDataLoader } from "../components/InteractiveLoaders";
 import { DocxTemplateEditor, type DocxTemplateType } from "../components/DocxTemplateEditor";
@@ -2529,7 +2529,10 @@ Regards,
             </div>
 
             <div style={{ display: "grid", gap: "1.25rem" }}>
-              {STATUS_COLOR_CONFIGS.map((cfg) => {
+              {STATUS_COLOR_CONFIGS
+                .slice()
+                .sort((a, b) => STATUS_COLOR_GROUP_ORDER.indexOf(a.group) - STATUS_COLOR_GROUP_ORDER.indexOf(b.group))
+                .map((cfg, index, configs) => {
                 const bgKey = `status_color_${cfg.key}_bg`;
                 const txtKey = `status_color_${cfg.key}_text`;
                 const bdrKey = `status_color_${cfg.key}_border`;
@@ -2550,8 +2553,11 @@ Regards,
                 ];
 
                 return (
+                  <div key={cfg.key} style={{ display: "contents" }}>
+                  {index === 0 || configs[index - 1].group !== cfg.group ? (
+                    <h4 style={{ margin: index === 0 ? "0 0 -0.5rem" : "1rem 0 -0.5rem", color: "var(--color-text-muted, #64748b)" }}>{cfg.group}</h4>
+                  ) : null}
                   <div
-                    key={cfg.key}
                     className="settings-card-row"
                     style={{
                       display: "flex",
@@ -2564,7 +2570,7 @@ Regards,
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
                       <div>
                         <strong style={{ display: "block", fontSize: "0.925rem" }}>{cfg.label}</strong>
-                        <small style={{ fontSize: "0.75rem", opacity: 0.7 }}>Category: <code>{cfg.key}</code></small>
+                        <small style={{ fontSize: "0.75rem", opacity: 0.7 }}>Status key: <code>{cfg.key}</code></small>
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                         <span style={{ fontSize: "0.75rem", fontWeight: "600", color: "#64748b" }}>Live Preview:</span>
@@ -2583,7 +2589,7 @@ Regards,
                             boxShadow: "0 1px 3px rgba(0,0,0,0.04)"
                           }}
                         >
-                          {cfg.key.replace(/_/g, " ")}
+                          {cfg.label}
                         </span>
                       </div>
                     </div>
@@ -2714,6 +2720,7 @@ Regards,
                         </div>
                       </div>
                     </div>
+                  </div>
                   </div>
                 );
               })}

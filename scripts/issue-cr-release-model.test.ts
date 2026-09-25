@@ -4,6 +4,7 @@ import {
   buildIssueReleaseCandidates,
   didIssueReleaseSelectionChange,
   getChangeIssueReleaseCandidates,
+  hasPendingIssueReleases,
   isIssueReleaseReady,
   normalizeIssueReleaseLifecycle
 } from "../src/client/components/crTransport/issueReleaseModel.js";
@@ -52,6 +53,17 @@ test("Release is available only after every selected CR passes its current Test 
   assert.equal(isIssueReleaseReady(["TRDK924682", "TRDK924730"], {
     TRDK924682: { ok: true, hasErrors: false }
   }), false);
+});
+
+test("hides the Release action only after every selected CR is confirmed released", () => {
+  assert.equal(hasPendingIssueReleases(["TRDK924682"], {}), true);
+  assert.equal(hasPendingIssueReleases(["TRDK924682"], {
+    TRDK924682: { ok: true }
+  }), false);
+  assert.equal(hasPendingIssueReleases(["TRDK924682", "TRDK924730"], {
+    TRDK924682: { ok: true },
+    TRDK924730: { ok: false }
+  }), true);
 });
 
 test("the Release CR entry is available only in Change Issue with a Created linked CR", () => {

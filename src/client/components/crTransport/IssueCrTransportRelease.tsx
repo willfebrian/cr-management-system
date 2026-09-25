@@ -11,7 +11,7 @@ import {
 } from "../../api/transportReleaseApi";
 import { UIModal } from "../common/UIModal";
 import { ReleaseOperationStatus, ReleaseResultsPanel } from "./CrTransportRelease";
-import { didIssueReleaseSelectionChange, isIssueReleaseReady } from "./issueReleaseModel";
+import { didIssueReleaseSelectionChange, hasPendingIssueReleases, isIssueReleaseReady } from "./issueReleaseModel";
 
 const RELEASE_POLL_MS = 2000;
 
@@ -59,6 +59,7 @@ export function IssueCrTransportRelease({ candidates, targetLabel, targetLabels,
   useEffect(() => onBusyChange?.(Boolean(busy)), [busy, onBusyChange]);
 
   const releaseReady = isIssueReleaseReady(selected, testResults);
+  const hasPendingReleases = hasPendingIssueReleases(selected, releaseResults);
   const hasTestResults = Object.keys(testResults).length > 0;
   const activeOperation = activeRequest ? operations[activeRequest] || null : null;
   const activeReleaseResult = activeRequest ? releaseResults[activeRequest] || null : null;
@@ -264,12 +265,12 @@ export function IssueCrTransportRelease({ candidates, targetLabel, targetLabels,
               <strong>{selected.join(", ")}</strong>
               <span>{selected.length} validated CR{selected.length === 1 ? "" : "s"} ready for release.</span>
             </div>
-            <div className="cr-release-buttons">
+            {hasPendingReleases ? <div className="cr-release-buttons">
               <button className="primary" onClick={() => setConfirmOpen(true)} disabled={Boolean(busy) || selected.every((request) => releaseResults[request]?.ok)}>
                 {busy === "release" ? <Loader2 className="spin" size={15} /> : <Unlock size={15} />}
                 {busy === "release" ? "Release in progress" : selected.length === 1 ? "Release CR" : "Release Selected"}
               </button>
-            </div>
+            </div> : null}
           </div>
           <ReleaseOperationStatus
             isReleasing={busy === "release"}
