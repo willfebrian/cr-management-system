@@ -69,8 +69,10 @@ cat > "$STATE_DIR/nginx.conf.tmp" <<EOF
 server {
   listen 80;
   server_name _;
+  resolver 127.0.0.11 valid=5s ipv6=off;
   location / {
-    proxy_pass http://cr-management-${next}:3001;
+    set \$upstream http://cr-management-${next}:3001;
+    proxy_pass \$upstream;
     proxy_http_version 1.1;
     proxy_set_header Host \$host;
     proxy_set_header X-Real-IP \$remote_addr;
