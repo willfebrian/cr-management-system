@@ -411,7 +411,7 @@ crRoutes.post("/issues", requirePermission("issue.create"), async (req, res, nex
   try {
     await assertDatabaseConfigured();
     const isNew = !req.body?.id;
-    const result = await saveIssue(req.body || {});
+    const result = await saveIssue(req.body || {}, req.authUser!);
     const issueKey = result.issue ? `${result.issue.issue_no}-${result.issue.sub_issue_no}` : (req.body?.issueName || "");
     const user = await resolveAuthUser(req);
     const username = user?.username || "system";
@@ -433,7 +433,7 @@ crRoutes.put("/issues/:id", requirePermission("issue.edit"), async (req, res, ne
   try {
     await assertDatabaseConfigured();
     const id = numberQuery(req.params.id, 0);
-    const result = await saveIssue({ ...(req.body || {}), id });
+    const result = await saveIssue({ ...(req.body || {}), id }, req.authUser!);
     const issueKey = result.issue ? `${result.issue.issue_no}-${result.issue.sub_issue_no}` : `ID ${id}`;
     const user = await resolveAuthUser(req);
     const username = user?.username || "system";

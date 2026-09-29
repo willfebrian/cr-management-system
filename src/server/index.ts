@@ -12,6 +12,7 @@ import { adminRoutes } from "./routes/adminRoutes.js";
 import { outlookRoutes } from "./routes/outlookRoutes.js";
 import { aiRoutes } from "./routes/aiRoutes.js";
 import { auditRoutes } from "./routes/auditRoutes.js";
+import { PermissionDeniedError } from "./issues/issueReferenceAuthorization.js";
 import { ProjectRepositoryError } from "./db/projectRepository.js";
 import { transportRequestRoutes } from "./routes/transportRequestRoutes.js";
 import { transportReleaseRoutes } from "./routes/transportReleaseRoutes.js";
@@ -57,6 +58,7 @@ app.get("*", (_req, res, next) => {
 
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const message = error instanceof Error ? error.message : String(error);
+  if (error instanceof PermissionDeniedError) return res.status(error.status).json({ ok: false, code: error.code, message });
   if (error instanceof ProjectRepositoryError) {
     return res.status(error.status).json({ ok: false, message, code: error.code });
   }

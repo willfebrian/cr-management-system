@@ -1,4 +1,6 @@
 import { pool } from "./pool.js";
+import type { AuthUser } from "../auth/authService.js";
+import { assertIssueReferenceChangesAllowed, type IssueReferenceSets } from "../issues/issueReferenceAuthorization.js";
 import { findActiveProjectForIssue, ProjectRepositoryError } from "./projectRepository.js";
 
 export type IssueFilters = {
@@ -1081,7 +1083,7 @@ export async function registerIssuePeople(people: IssuePersonRegistration[]) {
   return rows;
 }
 
-export async function saveIssue(payload: IssueSavePayload) {
+export async function saveIssue(payload: IssueSavePayload, actor: AuthUser) {
   const issueName = textOrNull(payload.issueName);
   if (!issueName) throw new Error("Issue name is required.");
   const peopleValidation = await validateIssuePeople(peopleChecksFromPayload(payload));
@@ -1092,6 +1094,23 @@ export async function saveIssue(payload: IssueSavePayload) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+
+    let storedReferences: IssueReferenceSets = { crLinks: [], glpiTickets: [], crHelpdeskNumbers: [] };
+    if (payload.id) {
+      const locked = await client.query("SELECT id FROM issue_headers WHERE id = $1 FOR UPDATE", [payload.id]);
+      if (!locked.rows[0]) throw new Error("Issue not found.");
+      const [cr, glpi, helpdesk] = await Promise.all([
+        client.query("SELECT trkorr FROM issue_cr_links WHERE issue_id = $1 ORDER BY trkorr", [payload.id]),
+        client.query("SELECT ticket_number FROM issue_glpi_tickets WHERE issue_id = $1 ORDER BY ticket_number", [payload.id]),
+        client.query("SELECT cr_helpdesk_no FROM issue_cr_helpdesk_numbers WHERE issue_id = $1 ORDER BY cr_helpdesk_no", [payload.id])
+      ]);
+      storedReferences = {
+        crLinks: cr.rows.map((row) => String(row.trkorr)),
+        glpiTickets: glpi.rows.map((row) => String(row.ticket_number)),
+        crHelpdeskNumbers: helpdesk.rows.map((row) => String(row.cr_helpdesk_no))
+      };
+    }
+    assertIssueReferenceChangesAllowed(payload, storedReferences, actor);
 
     const requestedIssueNo = Number(payload.issueNo);
     const issueNo = payload.id
@@ -1162,9 +1181,9 @@ export async function saveIssue(payload: IssueSavePayload) {
       issueId = Number(insert.rows[0].id);
     }
 
-    await replaceGlpiTickets(client, issueId, payload.glpiTickets);
-    await replaceCrHelpdeskNumbers(client, issueId, payload.crHelpdeskNumbers);
-    await replaceCrLinks(client, issueId, payload.crLinks);
+    if (payload.glpiTickets !== undefined) await replaceGlpiTickets(client, issueId, payload.glpiTickets);
+    if (payload.crHelpdeskNumbers !== undefined) await replaceCrHelpdeskNumbers(client, issueId, payload.crHelpdeskNumbers);
+    if (payload.crLinks !== undefined) await replaceCrLinks(client, issueId, payload.crLinks);
     await replaceParticipants(client, issueId, requesterNames, abaperNames, payload.participants || {});
     await upsertTimelines(client, issueId, payload.timeline || {}, payload.participants || {});
 
