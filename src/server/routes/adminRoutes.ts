@@ -1,7 +1,8 @@
 import { Router } from "express";
 import net from "net";
 import { pool } from "../db/pool.js";
-import { requireAdmin, resolveAuthUser } from "../auth/middleware.js";
+import { requireAdmin, requirePermission, resolveAuthUser } from "../auth/middleware.js";
+import { visibleSettings, writableSettings } from "../admin/settingsPermissionPolicy.js";
 import { recordActivityLog } from "../db/auditRepository.js";
 import { deleteAdminPerson, PeopleAdminError } from "../admin/peopleAdminService.js";
 import {
@@ -12,7 +13,7 @@ import {
 
 export const adminRoutes = Router();
 
-adminRoutes.get("/people", async (_req, res, next) => {
+adminRoutes.get("/people", requirePermission("master_data.view"), async (_req, res, next) => {
   try {
     const { rows } = await pool.query(`
       SELECT id, full_name, nickname, email, department, is_active, is_approver, is_abaper, is_requester, is_tester, is_evaluator, is_transporter, is_reminder
@@ -25,7 +26,7 @@ adminRoutes.get("/people", async (_req, res, next) => {
   }
 });
 
-adminRoutes.post("/people", async (req, res, next) => {
+adminRoutes.post("/people", requirePermission("master_data.people"), async (req, res, next) => {
   try {
     const { full_name, nickname, email } = req.body;
     const { rows } = await pool.query(`
@@ -48,7 +49,7 @@ adminRoutes.post("/people", async (req, res, next) => {
   }
 });
 
-adminRoutes.put("/people/:id", async (req, res, next) => {
+adminRoutes.put("/people/:id", requirePermission("master_data.people"), async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const { is_active, is_approver, is_abaper, is_requester, is_tester, is_evaluator, is_transporter, is_reminder, full_name, nickname, email } = req.body;
@@ -99,7 +100,7 @@ adminRoutes.put("/people/:id", async (req, res, next) => {
   }
 });
 
-adminRoutes.delete("/people/:id", requireAdmin, async (req, res, next) => {
+adminRoutes.delete("/people/:id", requirePermission("master_data.people"), requireAdmin, async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     await deleteAdminPerson(id);
@@ -126,7 +127,7 @@ adminRoutes.delete("/people/:id", requireAdmin, async (req, res, next) => {
   }
 });
 
-adminRoutes.get("/group-emails", async (_req, res, next) => {
+adminRoutes.get("/group-emails", requirePermission("master_data.view"), async (_req, res, next) => {
   try {
     const { rows } = await pool.query(`
       SELECT id, email_address, name, is_active, created_at
@@ -139,7 +140,7 @@ adminRoutes.get("/group-emails", async (_req, res, next) => {
   }
 });
 
-adminRoutes.post("/group-emails", async (req, res, next) => {
+adminRoutes.post("/group-emails", requirePermission("master_data.group_emails"), async (req, res, next) => {
   try {
     const { email_address, name } = req.body;
     const { rows } = await pool.query(`
@@ -162,7 +163,7 @@ adminRoutes.post("/group-emails", async (req, res, next) => {
   }
 });
 
-adminRoutes.put("/group-emails/:id", async (req, res, next) => {
+adminRoutes.put("/group-emails/:id", requirePermission("master_data.group_emails"), async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const { email_address, name, is_active } = req.body;
@@ -189,7 +190,7 @@ adminRoutes.put("/group-emails/:id", async (req, res, next) => {
   }
 });
 
-adminRoutes.delete("/group-emails/:id", async (req, res, next) => {
+adminRoutes.delete("/group-emails/:id", requirePermission("master_data.group_emails"), async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     await pool.query(`DELETE FROM issue_group_emails WHERE id = $1`, [id]);
@@ -208,14 +209,20 @@ adminRoutes.delete("/group-emails/:id", async (req, res, next) => {
   }
 });
 
-adminRoutes.get("/settings", async (_req, res, next) => {
+adminRoutes.get("/settings", async (req, res, next) => {
   try {
     const { rows } = await pool.query(`SELECT setting_key, setting_value FROM app_settings`);
     const settings = rows.reduce((acc, row) => {
       acc[row.setting_key] = row.setting_value;
       return acc;
     }, {} as Record<string, string>);
-    res.json(sanitizeAdminSettings(settings));
+    const permissions = req.authUser?.permissions || [];
+    const scoped = visibleSettings(settings, permissions);
+    if (Object.keys(scoped).length === 0 && !permissions.some((key) => key.startsWith("settings."))) {
+      res.status(403).json({ code: "PERMISSION_DENIED", message: "You do not have permission to view settings." });
+      return;
+    }
+    res.json(sanitizeAdminSettings(scoped));
   } catch (error) {
     next(error);
   }
@@ -224,6 +231,11 @@ adminRoutes.get("/settings", async (_req, res, next) => {
 adminRoutes.put("/settings", async (req, res, next) => {
   try {
     const requestedSettings = req.body as Record<string, string>;
+    if (!requestedSettings || typeof requestedSettings !== "object" || Array.isArray(requestedSettings) ||
+        !writableSettings(requestedSettings, req.authUser?.permissions || [])) {
+      res.status(403).json({ code: "PERMISSION_DENIED", message: "You do not have permission to change these settings." });
+      return;
+    }
     let storedMcpConfig: string | undefined;
     if (Object.prototype.hasOwnProperty.call(requestedSettings, OUTLOOK_MCP_CONFIG_KEY)) {
       const stored = await pool.query<{ setting_value: string }>(
@@ -288,7 +300,7 @@ function getDocxPaths(type: string) {
   return { isSingle, isUser, defaultPath, customPath, filename };
 }
 
-adminRoutes.get("/docx-templates/info", async (_req, res, next) => {
+adminRoutes.get("/docx-templates/info", requirePermission("settings.templates"), async (_req, res, next) => {
   try {
     const single = getDocxPaths("single");
     const project = getDocxPaths("project");
@@ -319,7 +331,7 @@ adminRoutes.get("/docx-templates/info", async (_req, res, next) => {
   }
 });
 
-adminRoutes.get("/docx-templates/:type/download", async (req, res, next) => {
+adminRoutes.get("/docx-templates/:type/download", requirePermission("settings.templates"), async (req, res, next) => {
   try {
     const type = String(req.params.type || "single");
     const paths = getDocxPaths(type);
@@ -334,7 +346,7 @@ adminRoutes.get("/docx-templates/:type/download", async (req, res, next) => {
   }
 });
 
-adminRoutes.post("/docx-templates/:type/upload", requireAdmin, async (req, res, next) => {
+adminRoutes.post("/docx-templates/:type/upload", requirePermission("settings.templates"), requireAdmin, async (req, res, next) => {
   try {
     const type = String(req.params.type || "single");
     const { contentBase64 } = req.body;
@@ -367,7 +379,7 @@ adminRoutes.post("/docx-templates/:type/upload", requireAdmin, async (req, res, 
   }
 });
 
-adminRoutes.post("/docx-templates/:type/reset", requireAdmin, async (req, res, next) => {
+adminRoutes.post("/docx-templates/:type/reset", requirePermission("settings.templates"), requireAdmin, async (req, res, next) => {
   try {
     const type = String(req.params.type || "single");
     const paths = getDocxPaths(type);
@@ -435,7 +447,7 @@ async function ensureSapSystemsTable() {
   }
 }
 
-adminRoutes.get("/systems", async (_req, res, next) => {
+adminRoutes.get("/systems", requirePermission("settings.target_systems"), async (_req, res, next) => {
   try {
     await ensureSapSystemsTable();
     const { rows } = await pool.query(`
@@ -449,7 +461,7 @@ adminRoutes.get("/systems", async (_req, res, next) => {
   }
 });
 
-adminRoutes.post("/systems", async (req, res, next) => {
+adminRoutes.post("/systems", requirePermission("settings.target_systems"), async (req, res, next) => {
   try {
     await ensureSapSystemsTable();
     const { code, description, environment, allow_multiple_logon, host, system_number, client, rfc_user, rfc_password, is_active } = req.body;
@@ -488,7 +500,7 @@ adminRoutes.post("/systems", async (req, res, next) => {
   }
 });
 
-adminRoutes.put("/systems/:id", async (req, res, next) => {
+adminRoutes.put("/systems/:id", requirePermission("settings.target_systems"), async (req, res, next) => {
   try {
     await ensureSapSystemsTable();
     const id = Number(req.params.id);
@@ -535,7 +547,7 @@ adminRoutes.put("/systems/:id", async (req, res, next) => {
   }
 });
 
-adminRoutes.delete("/systems/:id", async (req, res, next) => {
+adminRoutes.delete("/systems/:id", requirePermission("settings.target_systems"), async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     await pool.query(`DELETE FROM sap_systems WHERE id = $1`, [id]);
@@ -554,7 +566,7 @@ adminRoutes.delete("/systems/:id", async (req, res, next) => {
   }
 });
 
-adminRoutes.post("/systems/test-connection", async (req, res, next) => {
+adminRoutes.post("/systems/test-connection", requirePermission("settings.target_systems"), async (req, res, next) => {
   try {
     let { id, code, host, system_number, client, rfc_user, rfc_password } = req.body;
     const targetHost = String(host || "").trim();
