@@ -1,5 +1,6 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
-import { requireAdmin } from "../auth/middleware";
+import { PERMISSION_CATALOG, type PermissionKey } from "../../shared/permissions";
+import { requireAdmin, requirePermission } from "../auth/middleware";
 import type {
   ManagedUserListFilters,
   ManagementActor,
@@ -17,7 +18,8 @@ import {
   revokeManagedUserSessions,
   setManagedUserStatus,
   unassignManagedUserPerson,
-  updateManagedUserProfile
+  updateManagedUserProfile,
+  updateManagedUserPermissions
 } from "../users/userManagementService";
 import { UserManagementError } from "../users/userManagementDomain";
 import { recordActivityLog } from "../db/auditRepository.js";
@@ -35,6 +37,7 @@ type UserManagementService = {
   revokeManagedUserSessions: typeof revokeManagedUserSessions;
   archiveManagedUser: typeof archiveManagedUser;
   restoreManagedUser: typeof restoreManagedUser;
+  updateManagedUserPermissions: typeof updateManagedUserPermissions;
 };
 
 const defaultService: UserManagementService = {
@@ -49,12 +52,13 @@ const defaultService: UserManagementService = {
   resetManagedUserPassword,
   revokeManagedUserSessions,
   archiveManagedUser,
-  restoreManagedUser
+  restoreManagedUser,
+  updateManagedUserPermissions
 };
 
 function actorFrom(req: Request): ManagementActor {
   const user = req.authUser!;
-  return { id: user.id, username: user.username, role: user.role };
+  return { id: user.id, username: user.username, role: user.role, permissions: user.permissions };
 }
 
 function parseUserId(req: Request): number {
@@ -87,7 +91,12 @@ function parseFilters(req: Request): ManagedUserListFilters {
   if (scope != null && scope !== "current" && scope !== "archived") {
     throw new UserManagementError("Scope filter tidak valid");
   }
+  const permission = req.query.permission == null ? undefined : String(req.query.permission);
+  if (permission && !PERMISSION_CATALOG.some((entry) => entry.key === permission)) {
+    throw new UserManagementError("Permission filter is invalid");
+  }
   return {
+    permission: permission as PermissionKey | undefined,
     q: req.query.q == null ? undefined : String(req.query.q),
     role: role as UserRole | undefined,
     status: status as "active" | "inactive" | undefined,
@@ -124,6 +133,7 @@ function route(handler: AsyncHandler) {
 export function createUserRoutes(service: UserManagementService = defaultService): Router {
   const router = Router();
   router.use(requireAdmin);
+  router.use((req, res, next) => requirePermission(req.method === "GET" ? "users.view" : "users.manage")(req, res, next));
 
   router.get("/", route(async (req, res) => {
     res.json(await service.listManagedUsers(parseFilters(req), actorFrom(req)));
@@ -176,6 +186,23 @@ export function createUserRoutes(service: UserManagementService = defaultService
     res.json({ audit });
   }));
 
+  router.put("/:id/permissions", route(async (req, res) => {
+    if (!Array.isArray(req.body?.permissions)) throw new UserManagementError("Permissions must be an array");
+    const user = await service.updateManagedUserPermissions(
+      parseUserId(req), req.body.permissions, actorFrom(req)
+    );
+    const actor = actorFrom(req);
+    await recordActivityLog({
+      activityType: "admin",
+      action: "update_user_permissions",
+      username: actor.username,
+      userId: actor.id,
+      description: `Updated permissions for user "${user.username}"`,
+      ipAddress: req.ip
+    });
+    res.json({ user });
+  }));
+
   router.post("/", route(async (req, res) => {
     const role = req.body?.role;
     const isActive = req.body?.isActive;
@@ -190,7 +217,8 @@ export function createUserRoutes(service: UserManagementService = defaultService
         username: String(req.body?.username ?? ""),
         password: String(req.body?.password ?? ""),
         role,
-        isActive
+        isActive,
+        permissions: req.body?.permissions
       },
       actorFrom(req)
     );
@@ -215,7 +243,8 @@ export function createUserRoutes(service: UserManagementService = defaultService
       parseUserId(req),
       {
         username: req.body?.username == null ? undefined : String(req.body.username),
-        role
+        role,
+        permissions: req.body?.permissions
       },
       actorFrom(req)
     );
@@ -316,7 +345,8 @@ export function createUserRoutes(service: UserManagementService = defaultService
       {
         password: String(req.body?.password ?? ""),
         role,
-        isActive: req.body.isActive
+        isActive: req.body.isActive,
+        permissions: req.body?.permissions
       },
       actorFrom(req)
     );

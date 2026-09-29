@@ -1,3 +1,5 @@
+import type { PermissionKey } from "./permissions";
+
 export type UserRole = "ADMIN" | "USER";
 export type ManagedUserStatus = "active" | "inactive";
 export type ManagedUserScope = "current" | "archived";
@@ -6,6 +8,7 @@ export type ManagementActor = {
   id: number;
   username: string;
   role: UserRole;
+  permissions?: PermissionKey[];
 };
 
 export type ManagedUserPerson = {
@@ -28,6 +31,7 @@ export type ManagedUser = {
   id: number;
   username: string;
   role: UserRole;
+  permissions: PermissionKey[];
   isActive: boolean;
   mustChangePassword: boolean;
   lastLoginAt: string | null;
@@ -44,6 +48,7 @@ export type ManagedUserListFilters = {
   role?: UserRole;
   status?: ManagedUserStatus;
   scope?: ManagedUserScope;
+  permission?: PermissionKey;
   page?: number;
   pageSize?: number;
 };
@@ -59,6 +64,7 @@ export type UserAuditAction =
   | "USER_CREATED"
   | "USERNAME_CHANGED"
   | "ROLE_CHANGED"
+  | "PERMISSIONS_CHANGED"
   | "USER_ACTIVATED"
   | "USER_DEACTIVATED"
   | "PASSWORD_RESET"
@@ -83,17 +89,20 @@ export type CreateManagedUserPayload = {
   username: string;
   password: string;
   role: UserRole;
+  permissions?: PermissionKey[];
   isActive?: boolean;
 };
 
 export type UpdateManagedUserProfilePayload = {
   username?: string;
   role?: UserRole;
+  permissions?: PermissionKey[];
 };
 
 export type RestoreManagedUserPayload = {
   password: string;
   role: UserRole;
+  permissions?: PermissionKey[];
   isActive: boolean;
 };
 

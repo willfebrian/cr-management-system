@@ -147,6 +147,8 @@ test("creates a user and permanent current reservation in one transaction", asyn
     {}, // advisory lock
     { rows: [] }, // reservation lookup
     { rows: [dbUser] }, // user insert
+    {}, // permissions delete
+    {}, // permissions insert
     {}, // reservation insert
     {}, // audit insert
     {} // commit
@@ -162,10 +164,10 @@ test("creates a user and permanent current reservation in one transaction", asyn
   assert.equal(created.username, "ALICE");
   assert.equal(db.calls[0]!.text, "BEGIN");
   assert.match(db.calls[1]!.text, /pg_advisory_xact_lock/i);
-  assert.match(db.calls[4]!.text, /INSERT INTO app_user_usernames/i);
-  assert.deepEqual(db.calls[4]!.values.slice(0, 3), ["ALICE", "ALICE", 2]);
-  assert.match(db.calls[5]!.text, /USER_CREATED/);
-  assert.doesNotMatch(JSON.stringify(db.calls[5]!.values), /initial1|HASH:/);
+  assert.match(db.calls[6]!.text, /INSERT INTO app_user_usernames/i);
+  assert.deepEqual(db.calls[6]!.values.slice(0, 3), ["ALICE", "ALICE", 2]);
+  assert.match(db.calls[7]!.text, /USER_CREATED/);
+  assert.doesNotMatch(JSON.stringify(db.calls[7]!.values), /initial1|HASH:/);
   assert.equal(db.calls.at(-1)?.text, "COMMIT");
 });
 

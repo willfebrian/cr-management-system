@@ -19,7 +19,7 @@ export class UserManagementError extends Error {
 type ProtectedTarget = Pick<
   ManagedUser,
   "id" | "username" | "role" | "isActive" | "deletedAt"
->;
+> & { permissions?: ManagedUser["permissions"] };
 
 export function normalizeManagedUsername(value: string): string {
   const normalized = String(value ?? "").trim().toUpperCase();
@@ -64,6 +64,7 @@ export function assertRoleChangeAllowed(
   if (
     target.role === "ADMIN" &&
     target.isActive &&
+    (target.permissions == null || target.permissions.includes("users.manage")) &&
     nextRole !== "ADMIN" &&
     activeAdminCount <= 1
   ) {
@@ -86,6 +87,7 @@ export function assertStatusChangeAllowed(
   if (
     target.role === "ADMIN" &&
     target.isActive &&
+    (target.permissions == null || target.permissions.includes("users.manage")) &&
     !isActive &&
     activeAdminCount <= 1
   ) {
@@ -104,7 +106,7 @@ export function assertArchiveAllowed(
   if (target.id === actor.id) {
     throw new UserManagementError("Administrator tidak dapat mengarsipkan akun sendiri", 403);
   }
-  if (target.role === "ADMIN" && target.isActive && activeAdminCount <= 1) {
+  if (target.role === "ADMIN" && target.isActive && (target.permissions == null || target.permissions.includes("users.manage")) && activeAdminCount <= 1) {
     throw new UserManagementError("Administrator aktif terakhir harus dipertahankan", 403);
   }
 }

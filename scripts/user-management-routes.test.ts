@@ -51,6 +51,7 @@ async function withServer(
         id: Number(req.get("x-user-id") ?? 1),
         username: "ROOT",
         role,
+        permissions: role === "ADMIN" ? ["users.view", "users.manage"] : [],
         mustChangePassword: false
       };
     }
@@ -109,6 +110,7 @@ test("parses current/archived list filters and returns safe managed users", asyn
       role: "USER",
       status: "inactive",
       scope: "archived",
+      permission: undefined,
       page: 2,
       pageSize: 10
     });

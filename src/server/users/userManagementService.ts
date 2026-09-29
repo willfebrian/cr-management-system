@@ -1,5 +1,7 @@
 import { hashPassword } from "../auth/authService";
 import { pool } from "../db/pool";
+import { ADMIN_PRESET, PERMISSION_CATALOG, REGULAR_USER_PRESET, normalizePermissions, type PermissionKey } from "../../shared/permissions";
+import { replaceUserPermissions } from "../auth/permissionRepository";
 import type {
   CreateManagedUserPayload,
   ManagedUser,
@@ -34,8 +36,16 @@ type Database = Queryable & {
 type PasswordHasher = (password: string) => Promise<string>;
 
 function assertAdmin(actor: ManagementActor): void {
-  if (actor.role !== "ADMIN") {
+  if (actor.role !== "ADMIN" || (actor.permissions && !actor.permissions.includes("users.manage"))) {
     throw new UserManagementError("Administrator access required", 403);
+  }
+}
+
+function validatedPermissions(role: UserRole, requested?: readonly string[]): PermissionKey[] {
+  try {
+    return normalizePermissions(requested ?? (role === "ADMIN" ? ADMIN_PRESET : REGULAR_USER_PRESET), role);
+  } catch (error) {
+    throw new UserManagementError(error instanceof Error ? error.message : "Invalid permissions");
   }
 }
 
@@ -63,6 +73,7 @@ function toManagedUser(row: any): ManagedUser {
     id: Number(row.id),
     username: String(row.username),
     role: row.role,
+    permissions: Array.isArray(row.permissions) ? row.permissions : [],
     isActive: Boolean(row.is_active),
     mustChangePassword: Boolean(row.must_change_password),
     lastLoginAt: nullableIso(row.last_login_at),
@@ -119,6 +130,7 @@ async function getTargetForUpdate(
     `SELECT u.id, u.username, u.role, u.is_active, u.must_change_password,
             u.last_login_at, u.created_at, u.updated_at, u.deleted_at,
             u.deleted_by_snapshot, u.delete_reason, u.person_id,
+            ARRAY(SELECT permission_key FROM app_user_permissions WHERE user_id = u.id ORDER BY permission_key) AS permissions,
             (SELECT p.full_name FROM issue_people p WHERE p.id = u.person_id) AS person_full_name,
             (SELECT p.nickname FROM issue_people p WHERE p.id = u.person_id) AS person_nickname,
             (SELECT p.email FROM issue_people p WHERE p.id = u.person_id) AS person_email,
@@ -143,6 +155,7 @@ async function getManagedUserById(
     `SELECT u.id, u.username, u.role, u.is_active, u.must_change_password,
             u.last_login_at, u.created_at, u.updated_at, u.deleted_at,
             u.deleted_by_snapshot, u.delete_reason, u.person_id,
+            ARRAY(SELECT permission_key FROM app_user_permissions WHERE user_id = u.id ORDER BY permission_key) AS permissions,
             p.full_name AS person_full_name,
             p.nickname AS person_nickname,
             p.email AS person_email,
@@ -209,7 +222,8 @@ async function getActiveAdminCount(client: Queryable): Promise<number> {
        FROM app_users
       WHERE role = 'ADMIN'
         AND is_active = TRUE
-        AND deleted_at IS NULL`
+        AND deleted_at IS NULL
+        AND EXISTS (SELECT 1 FROM app_user_permissions perm WHERE perm.user_id = app_users.id AND perm.permission_key = 'users.manage')`
   );
   return Number(result.rows[0]?.active_admin_count ?? 0);
 }
@@ -255,6 +269,10 @@ export function createUserManagementService(
       values.push(filters.status === "active");
       clauses.push(`u.is_active = $${values.length}`);
     }
+    if (filters.permission) {
+      values.push(filters.permission);
+      clauses.push(`EXISTS (SELECT 1 FROM app_user_permissions grant_filter WHERE grant_filter.user_id = u.id AND grant_filter.permission_key = $${values.length})`);
+    }
     const where = clauses.join(" AND ");
     const countResult = await database.query(
       `SELECT count(*)::text AS total
@@ -268,6 +286,7 @@ export function createUserManagementService(
       `SELECT u.id, u.username, u.role, u.is_active, u.must_change_password,
               u.last_login_at, u.created_at, u.updated_at, u.deleted_at,
               u.deleted_by_snapshot, u.delete_reason, u.person_id,
+            ARRAY(SELECT permission_key FROM app_user_permissions WHERE user_id = u.id ORDER BY permission_key) AS permissions,
               p.full_name AS person_full_name,
               p.nickname AS person_nickname,
               p.email AS person_email,
@@ -458,6 +477,30 @@ export function createUserManagementService(
     });
   }
 
+  async function updateManagedUserPermissions(
+    targetUserId: number,
+    keys: readonly string[],
+    actor: ManagementActor
+  ): Promise<ManagedUser> {
+    assertAdmin(actor);
+    if (!Array.isArray(keys)) throw new UserManagementError("Permissions must be an array");
+    return inTransaction(database, async (client) => {
+      await lockManagementGuards(client);
+      const row = await getTargetForUpdate(client, targetUserId);
+      const target = toManagedUser(row);
+      if (target.deletedAt) throw new UserManagementError("Archived user must be restored before editing permissions", 404);
+      const next = validatedPermissions(target.role, keys);
+      const before = target.permissions;
+      if (target.role === "ADMIN" && target.isActive && before.includes("users.manage") && !next.includes("users.manage")) {
+        const managerCount = await getActiveAdminCount(client);
+        if (managerCount <= 1) throw new UserManagementError("At least one active permission manager is required", 403);
+      }
+      await replaceUserPermissions(client as any, targetUserId, next);
+      await insertUserAudit(client, actor, targetUserId, "PERMISSIONS_CHANGED", { before, after: next });
+      return getManagedUserById(client, targetUserId);
+    });
+  }
+
   async function createManagedUser(
     payload: CreateManagedUserPayload,
     actor: ManagementActor
@@ -468,6 +511,7 @@ export function createUserManagementService(
     if (payload.role !== "ADMIN" && payload.role !== "USER") {
       throw new UserManagementError("Role tidak valid");
     }
+    const selectedPermissions = validatedPermissions(payload.role, payload.permissions);
     return inTransaction(database, async (client) => {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
         `app-user-username:${username}`
@@ -505,6 +549,8 @@ export function createUserManagementService(
         [username, passwordHash, payload.role, payload.isActive ?? true]
       );
       const user = toManagedUser(inserted.rows[0]);
+      await replaceUserPermissions(client as any, user.id, selectedPermissions);
+      user.permissions = selectedPermissions;
       await client.query(
         `INSERT INTO app_user_usernames (
            normalized_username, display_username, user_id, is_current,
@@ -537,7 +583,7 @@ export function createUserManagementService(
     actor: ManagementActor
   ): Promise<ManagedUser> {
     assertAdmin(actor);
-    if (payload.username == null && payload.role == null) {
+    if (payload.username == null && payload.role == null && payload.permissions == null) {
       throw new UserManagementError("Tidak ada perubahan profil");
     }
     if (payload.role != null && payload.role !== "ADMIN" && payload.role !== "USER") {
@@ -617,6 +663,18 @@ export function createUserManagementService(
                     deleted_by_snapshot, delete_reason`,
         [nextUsername, nextRole, userId]
       );
+      if (roleChanged || payload.permissions != null) {
+        const ordinaryKeys = target.permissions.filter((key) => {
+          const definition = PERMISSION_CATALOG.find((item) => item.key === key);
+          return nextRole === "ADMIN" || (definition && !("adminOnly" in definition && definition.adminOnly));
+        });
+        const nextPermissions = validatedPermissions(nextRole, payload.permissions ?? ordinaryKeys);
+        if (target.role === "ADMIN" && target.isActive && target.permissions.includes("users.manage") && !nextPermissions.includes("users.manage") && activeAdminCount <= 1) {
+          throw new UserManagementError("At least one active permission manager is required", 403);
+        }
+        await replaceUserPermissions(client as any, userId, nextPermissions);
+        await insertUserAudit(client, actor, userId, "PERMISSIONS_CHANGED", { before: target.permissions, after: nextPermissions });
+      }
       if (usernameChanged) {
         await client.query(
           `INSERT INTO app_user_audit_logs (
@@ -837,6 +895,7 @@ export function createUserManagementService(
     if (typeof payload.isActive !== "boolean") {
       throw new UserManagementError("Status restore tidak valid");
     }
+    const selectedPermissions = validatedPermissions(payload.role, payload.permissions);
     return inTransaction(database, async (client) => {
       await lockManagementGuards(client);
       const row = await getTargetForUpdate(client, userId);
@@ -863,6 +922,7 @@ export function createUserManagementService(
                     deleted_by_snapshot, delete_reason`,
         [passwordHash, payload.role, payload.isActive, userId]
       );
+      await replaceUserPermissions(client as any, userId, selectedPermissions);
       await revokeSessions(client, userId);
       await client.query(
         `INSERT INTO app_user_audit_logs (
@@ -895,7 +955,8 @@ export function createUserManagementService(
     resetManagedUserPassword,
     revokeManagedUserSessions,
     archiveManagedUser,
-    restoreManagedUser
+    restoreManagedUser,
+    updateManagedUserPermissions
   };
 }
 
@@ -913,3 +974,5 @@ export const resetManagedUserPassword = defaultService.resetManagedUserPassword;
 export const revokeManagedUserSessions = defaultService.revokeManagedUserSessions;
 export const archiveManagedUser = defaultService.archiveManagedUser;
 export const restoreManagedUser = defaultService.restoreManagedUser;
+
+export const updateManagedUserPermissions = defaultService.updateManagedUserPermissions;
