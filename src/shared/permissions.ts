@@ -85,4 +85,3 @@ export const ADMIN_PRESET: PermissionKey[] = normalizePermissions(
   PERMISSION_CATALOG.filter((definition) => definition.key !== "transport.create" && definition.key !== "transport.release").map((definition) => definition.key),
   "ADMIN"
 );
-

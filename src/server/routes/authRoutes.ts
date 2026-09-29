@@ -5,13 +5,14 @@ import { sessionCookieMaxAgeSeconds } from "../auth/sessionPolicy";
 import { requireAuth } from "../auth/middleware";
 import { pool } from "../db/pool";
 export const authRoutes = Router();
-const publicUser = (user: any) => ({
+export const publicUser = (user: any) => ({
   id: user.id,
   username: user.username,
   role: user.role,
   mustChangePassword: user.must_change_password ?? user.mustChangePassword,
   lastLoginAt: user.last_login_at ?? user.lastLoginAt ?? null,
-  isReminder: Boolean(user.isReminder ?? user.is_reminder)
+  isReminder: Boolean(user.isReminder ?? user.is_reminder),
+  permissions: user.permissions ?? []
 });
 import { recordActivityLog } from "../db/auditRepository.js";
 
