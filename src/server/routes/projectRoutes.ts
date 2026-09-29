@@ -1,5 +1,5 @@
 import { Router, type NextFunction, type Request, type RequestHandler, type Response } from "express";
-import { requireAdmin, requireAuth } from "../auth/middleware.js";
+import { requireAdmin, requireAuth, requirePermission } from "../auth/middleware.js";
 import * as projectRepository from "../db/projectRepository.js";
 import { ProjectRepositoryError } from "../db/projectRepository.js";
 import type { ProjectFilters, ProjectStatus } from "../../shared/projectTypes.js";
@@ -40,7 +40,7 @@ export function createProjectRoutes(dependencies: ProjectRouteDependencies) {
   };
   routes.use(dependencies.requireAuth);
 
-  routes.get("/", handle(async (req, res) => {
+  routes.get("/", requirePermission("project.view"), handle(async (req, res) => {
     const filters: ProjectFilters = {
       q: text(req.query.q),
       status: text(req.query.status) as ProjectStatus | "all" | undefined,
@@ -50,7 +50,7 @@ export function createProjectRoutes(dependencies: ProjectRouteDependencies) {
     res.json(await repository.listProjects(filters));
   }));
 
-  routes.get("/issue-options", handle(async (req, res) => {
+  routes.get("/issue-options", requirePermission("project.view"), handle(async (req, res) => {
     res.json({
       rows: await repository.searchProjectIssueOptions(
         text(req.query.q) || "",
@@ -59,26 +59,26 @@ export function createProjectRoutes(dependencies: ProjectRouteDependencies) {
     });
   }));
 
-  routes.get("/owner-options", handle(async (req, res) => {
+  routes.get("/owner-options", requirePermission("project.view"), handle(async (req, res) => {
     res.json({ rows: await repository.searchProjectOwners(text(req.query.q) || "") });
   }));
 
-  routes.get("/:id/cr-transport-readiness", handle(async (req, res) => {
+  routes.get("/:id/cr-transport-readiness", requirePermission("project.documents"), handle(async (req, res) => {
     res.json(await documentService.getReadiness(Number(req.params.id)));
   }));
 
-  routes.get("/:id/cr-transport-document", handle(async (req, res) => {
+  routes.get("/:id/cr-transport-document", requirePermission("project.documents"), handle(async (req, res) => {
     const document = await documentService.buildDocument(Number(req.params.id));
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
     res.setHeader("Content-Disposition", `attachment; filename="${document.filename.replace(/[\r\n\"]/g, "-")}"`);
     res.send(document.buffer);
   }));
 
-  routes.get("/:id", handle(async (req, res) => {
+  routes.get("/:id", requirePermission("project.view"), handle(async (req, res) => {
     res.json(await repository.getProjectDetail(Number(req.params.id)));
   }));
 
-  routes.post("/", handle(async (req, res) => {
+  routes.post("/", (req, res, next) => requirePermission(req.body?.id ? "project.edit" : "project.create")(req, res, next), handle(async (req, res) => {
     const isNew = !req.body?.id;
     const result = await repository.saveProject(req.body, req.authUser!);
     const username = req.authUser?.username || "system";
@@ -93,7 +93,7 @@ export function createProjectRoutes(dependencies: ProjectRouteDependencies) {
     res.status(201).json(result);
   }));
 
-  routes.put("/:id", handle(async (req, res) => {
+  routes.put("/:id", requirePermission("project.edit"), handle(async (req, res) => {
     const result = await repository.saveProject({ ...req.body, id: Number(req.params.id) }, req.authUser!);
     const username = req.authUser?.username || "system";
     await recordActivityLog({
@@ -107,7 +107,7 @@ export function createProjectRoutes(dependencies: ProjectRouteDependencies) {
     res.json(result);
   }));
 
-  routes.post("/:id/cancel", handle(async (req, res) => {
+  routes.post("/:id/cancel", requirePermission("project.cancel_delete"), handle(async (req, res) => {
     const reason = String(req.body?.reason || "");
     const result = await repository.cancelProject(
       Number(req.params.id),
@@ -126,7 +126,7 @@ export function createProjectRoutes(dependencies: ProjectRouteDependencies) {
     res.json(result);
   }));
 
-  routes.delete("/:id", dependencies.requireAdmin, handle(async (req, res) => {
+  routes.delete("/:id", requirePermission("project.cancel_delete"), dependencies.requireAdmin, handle(async (req, res) => {
     const result = await repository.deleteProject(Number(req.params.id), req.authUser!);
     const username = req.authUser?.username || "system";
     await recordActivityLog({

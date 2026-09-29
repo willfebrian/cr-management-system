@@ -46,7 +46,7 @@ test("requires authentication and sources save actors from req.authUser", async 
     });
     assert.equal(response.status, 201);
     assert.deepEqual(savedActor, {
-      id: 11, username: "SESSION_USER", role: "USER", mustChangePassword: false
+      id: 11, username: "SESSION_USER", role: "USER", permissions: ["project.view", "project.create", "project.edit", "project.cancel_delete", "project.documents"], mustChangePassword: false
     });
   });
 });
@@ -152,6 +152,7 @@ function testAuth(req: Request, res: Response, next: NextFunction) {
     id: 11,
     username: "SESSION_USER",
     role: role === "ADMIN" ? "ADMIN" : "USER",
+    permissions: ["project.view", "project.create", "project.edit", "project.cancel_delete", "project.documents"],
     mustChangePassword: false
   };
   next();

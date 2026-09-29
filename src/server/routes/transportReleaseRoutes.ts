@@ -1,5 +1,5 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
-import { requireAdmin } from "../auth/middleware.js";
+import { requirePermission } from "../auth/middleware.js";
 import { testRunRelease, executeRelease } from "../sap/transportReleaseService.js";
 import { normalizeTargetSystem } from "../sap/transportRequestService.js";
 import { recordActivityLog } from "../db/auditRepository.js";
@@ -10,7 +10,7 @@ import { shouldQueueTransportCreateSync, transportCreateSyncOptions } from "../s
 import { getReleaseOperation, startReleaseOperation } from "../sap/transportReleaseOperationService.js";
 
 export const transportReleaseRoutes = Router();
-transportReleaseRoutes.use(requireAdmin);
+transportReleaseRoutes.use(requirePermission("transport.release"));
 
 /**
  * GET /api/cr-transports/release/candidates

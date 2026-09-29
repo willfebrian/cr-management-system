@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { requirePermission } from "../auth/middleware.js";
+import type { PermissionKey } from "../../shared/permissions.js";
 import { pool, assertDatabaseConfigured } from "../db/pool.js";
 import {
   getCrDetailForSystem,
@@ -18,7 +20,7 @@ import { draftIssueReminderWithAi, previewIssueReminder, sendIssueReminder } fro
 
 export const crRoutes = Router();
 
-crRoutes.get("/cr/export", async (req, res, next) => {
+crRoutes.get("/cr/export", requirePermission("transport.export"), async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     const data = await exportCrReport({
@@ -33,7 +35,7 @@ crRoutes.get("/cr/export", async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-crRoutes.get("/issues/export", async (req, res, next) => {
+crRoutes.get("/issues/export", requirePermission("issue.export"), async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     const data = await exportIssueReport({
@@ -53,11 +55,11 @@ crRoutes.get("/health", (_req, res) => {
   res.json({ ok: true, app: "CR Management System" });
 });
 
-crRoutes.get("/systems", (_req, res) => {
+crRoutes.get("/systems", requirePermission("transport.view"), (_req, res) => {
   res.json({ rows: listSapCrSystems() });
 });
 
-crRoutes.get("/dashboard", async (_req, res, next) => {
+crRoutes.get("/dashboard", requirePermission("dashboard.view"), async (_req, res, next) => {
   try {
     await assertDatabaseConfigured();
     const [dashboard, issueInsights, leaderInsights] = await Promise.all([
@@ -71,7 +73,7 @@ crRoutes.get("/dashboard", async (_req, res, next) => {
   }
 });
 
-crRoutes.get("/dashboard/status-trend", async (req, res, next) => {
+crRoutes.get("/dashboard/status-trend", requirePermission("dashboard.view"), async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     res.json(await getDashboardStatusTrend({
@@ -83,7 +85,7 @@ crRoutes.get("/dashboard/status-trend", async (req, res, next) => {
   }
 });
 
-crRoutes.get("/cr", async (_req, res, next) => {
+crRoutes.get("/cr", requirePermission("transport.view"), async (_req, res, next) => {
   try {
     await assertDatabaseConfigured();
     res.json({
@@ -105,17 +107,17 @@ crRoutes.get("/cr", async (_req, res, next) => {
   }
 });
 
-crRoutes.get("/cr/:trkorr", async (req, res, next) => {
+crRoutes.get("/cr/:trkorr", requirePermission("transport.view"), async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     const system = getSapCrSystem(stringQuery(req.query.sapSystemCode));
-    res.json(await getCrDetailForSystem(req.params.trkorr.toUpperCase(), system.code));
+    res.json(await getCrDetailForSystem(String(req.params.trkorr).toUpperCase(), system.code));
   } catch (error) {
     next(error);
   }
 });
 
-crRoutes.get("/issues", async (req, res, next) => {
+crRoutes.get("/issues", requirePermission("issue.view"), async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     res.json(await listIssues({
@@ -138,7 +140,7 @@ crRoutes.get("/issues", async (req, res, next) => {
   }
 });
 
-crRoutes.get("/issues/status-options", async (_req, res, next) => {
+crRoutes.get("/issues/status-options", requirePermission("issue.view"), async (_req, res, next) => {
   try {
     await assertDatabaseConfigured();
     res.json({ rows: await getIssueStatusOptions() });
@@ -147,7 +149,7 @@ crRoutes.get("/issues/status-options", async (_req, res, next) => {
   }
 });
 
-crRoutes.get("/issues/next-number", async (_req, res, next) => {
+crRoutes.get("/issues/next-number", requirePermission("issue.create"), async (_req, res, next) => {
   try {
     await assertDatabaseConfigured();
     res.json(await getNextIssueNumber());
@@ -156,7 +158,7 @@ crRoutes.get("/issues/next-number", async (_req, res, next) => {
   }
 });
 
-crRoutes.get("/issues/next-sub-issue", async (req, res, next) => {
+crRoutes.get("/issues/next-sub-issue", requirePermission("issue.create"), async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     res.json(await getNextSubIssueNumber(numberQuery(req.query.issueNo, 0)));
@@ -165,7 +167,7 @@ crRoutes.get("/issues/next-sub-issue", async (req, res, next) => {
   }
 });
 
-crRoutes.get("/value-help/people", async (req, res, next) => {
+crRoutes.get("/value-help/people", requirePermission("issue.view"), async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     res.json({ rows: await searchIssuePeople(stringQuery(req.query.q) || "", stringQuery(req.query.role)) });
@@ -175,7 +177,7 @@ crRoutes.get("/value-help/people", async (req, res, next) => {
 });
 
 
-crRoutes.post("/value-help/people/validate", async (req, res, next) => {
+crRoutes.post("/value-help/people/validate", requirePermission("issue.view"), async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     res.json(await validateIssuePeople(req.body?.people || []));
@@ -184,7 +186,7 @@ crRoutes.post("/value-help/people/validate", async (req, res, next) => {
   }
 });
 
-crRoutes.post("/value-help/people", async (req, res, next) => {
+crRoutes.post("/value-help/people", requirePermission("master_data.people"), async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     res.json({ rows: await registerIssuePeople(req.body?.people || []) });
@@ -193,7 +195,7 @@ crRoutes.post("/value-help/people", async (req, res, next) => {
   }
 });
 
-crRoutes.get("/value-help/glpi", async (req, res, next) => {
+crRoutes.get("/value-help/glpi", requirePermission("issue.view"), async (req, res, next) => {
   try {
     const q = stringQuery(req.query.q) || "";
     res.json({ rows: await searchGlpiTicketsFromMaria(q) });
@@ -202,7 +204,7 @@ crRoutes.get("/value-help/glpi", async (req, res, next) => {
   }
 });
 
-crRoutes.get("/value-help/glpi/:id", async (req, res, next) => {
+crRoutes.get("/value-help/glpi/:id", requirePermission("issue.view"), async (req, res, next) => {
   try {
     const id = numberQuery(req.params.id, 0);
     const detail = await getGlpiTicketDetailFromMaria(id);
@@ -216,7 +218,7 @@ crRoutes.get("/value-help/glpi/:id", async (req, res, next) => {
   }
 });
 
-crRoutes.get("/value-help/cr-helpdesk", async (req, res, next) => {
+crRoutes.get("/value-help/cr-helpdesk", requirePermission("issue.view"), async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     res.json({ rows: await searchIssueCrHelpdesk(stringQuery(req.query.q) || "") });
@@ -225,7 +227,7 @@ crRoutes.get("/value-help/cr-helpdesk", async (req, res, next) => {
   }
 });
 
-crRoutes.get("/value-help/cr", async (req, res, next) => {
+crRoutes.get("/value-help/cr", requirePermission("issue.view"), async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     res.json({ rows: await searchIssueCrLinks(stringQuery(req.query.q) || "") });
@@ -234,7 +236,7 @@ crRoutes.get("/value-help/cr", async (req, res, next) => {
   }
 });
 
-crRoutes.get("/issues/:id", async (req, res, next) => {
+crRoutes.get("/issues/:id", requirePermission("issue.view"), async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     res.json(await getIssueDetail(numberQuery(req.params.id, 0)));
@@ -243,7 +245,7 @@ crRoutes.get("/issues/:id", async (req, res, next) => {
   }
 });
 
-crRoutes.get("/issues/:id/reminder-preview", async (req, res, next) => {
+crRoutes.get("/issues/:id/reminder-preview", requirePermission("issue.reminder"), async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     const actions = typeof req.query.actions === "string" ? req.query.actions.split(",") : undefined;
@@ -253,7 +255,7 @@ crRoutes.get("/issues/:id/reminder-preview", async (req, res, next) => {
     }));
   } catch (error) { next(error); }
 });
-crRoutes.post("/issues/:id/reminder", async (req, res, next) => {
+crRoutes.post("/issues/:id/reminder", requirePermission("issue.reminder"), async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     res.json(await sendIssueReminder(numberQuery(req.params.id, 0), {
@@ -262,7 +264,7 @@ crRoutes.post("/issues/:id/reminder", async (req, res, next) => {
     }, req.authUser!));
   } catch (error) { next(error); }
 });
-crRoutes.post("/issues/:id/reminder-ai-draft", async (req, res, next) => {
+crRoutes.post("/issues/:id/reminder-ai-draft", requirePermission("issue.reminder"), async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     res.json(await draftIssueReminderWithAi(numberQuery(req.params.id, 0), {
@@ -272,7 +274,7 @@ crRoutes.post("/issues/:id/reminder-ai-draft", async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-crRoutes.get("/issues/:id/glpi-prefill-actors", async (req, res, next) => {
+crRoutes.get("/issues/:id/glpi-prefill-actors", requirePermission("issue.create_glpi_ticket"), async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     const issueId = numberQuery(req.params.id, 0);
@@ -282,7 +284,7 @@ crRoutes.get("/issues/:id/glpi-prefill-actors", async (req, res, next) => {
   }
 });
 
-crRoutes.get("/issues/:id/templates/cr-transport", async (req, res, next) => {
+crRoutes.get("/issues/:id/templates/cr-transport", requirePermission("issue.generate_cr_transport_form"), async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     const document = await buildCrTransportDocument(numberQuery(req.params.id, 0));
@@ -297,7 +299,7 @@ crRoutes.get("/issues/:id/templates/cr-transport", async (req, res, next) => {
   }
 });
 
-crRoutes.post("/issues/templates/cr-transport/batch", async (req, res, next) => {
+crRoutes.post("/issues/templates/cr-transport/batch", requirePermission("issue.generate_cr_transport_form"), async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     const issueIds = normalizeBatchIssueIds(req.body?.issueIds);
@@ -332,7 +334,7 @@ crRoutes.post("/issues/templates/cr-transport/batch", async (req, res, next) => 
   }
 });
 
-crRoutes.get("/issues/:id/templates/cr-user", async (req, res, next) => {
+crRoutes.get("/issues/:id/templates/cr-user", requirePermission("issue.generate_cr_user_form"), async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     const document = await buildUserCrDocument(numberQuery(req.params.id, 0));
@@ -347,7 +349,7 @@ crRoutes.get("/issues/:id/templates/cr-user", async (req, res, next) => {
   }
 });
 
-crRoutes.get("/issues/:id/templates/:kind", async (req, res, next) => {
+crRoutes.get("/issues/:id/templates/:kind", (req, res, next) => { const kind = req.params.kind; const key: PermissionKey = kind === "email" ? "issue.generate_email" : kind === "ticket" ? "issue.generate_glpi_template" : "issue.reminder"; return requirePermission(key)(req, res, next); }, async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     const kind = stringQuery(req.params.kind);
@@ -405,7 +407,7 @@ export function normalizeBatchIssueIds(value: unknown): number[] {
   return [...new Set(ids)];
 }
 
-crRoutes.post("/issues", async (req, res, next) => {
+crRoutes.post("/issues", requirePermission("issue.create"), async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     const isNew = !req.body?.id;
@@ -427,7 +429,7 @@ crRoutes.post("/issues", async (req, res, next) => {
   }
 });
 
-crRoutes.put("/issues/:id", async (req, res, next) => {
+crRoutes.put("/issues/:id", requirePermission("issue.edit"), async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     const id = numberQuery(req.params.id, 0);
@@ -449,7 +451,7 @@ crRoutes.put("/issues/:id", async (req, res, next) => {
   }
 });
 
-crRoutes.post("/issues/:id/cancel", async (req, res, next) => {
+crRoutes.post("/issues/:id/cancel", requirePermission("issue.cancel_delete"), async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     const id = numberQuery(req.params.id, 0);
@@ -471,7 +473,7 @@ crRoutes.post("/issues/:id/cancel", async (req, res, next) => {
   }
 });
 
-crRoutes.delete("/issues/:id", async (req, res, next) => {
+crRoutes.delete("/issues/:id", requirePermission("issue.cancel_delete"), async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     const id = numberQuery(req.params.id, 0);
@@ -492,7 +494,7 @@ crRoutes.delete("/issues/:id", async (req, res, next) => {
   }
 });
 
-crRoutes.post("/sync/cr", async (req, res, next) => {
+crRoutes.post("/sync/cr", requirePermission("transport.sync"), async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     const systemCodes = normalizeSystemCodes(req.body?.systemCodes || req.body?.systemCode);

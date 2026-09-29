@@ -1,5 +1,5 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
-import { requireAdmin } from "../auth/middleware.js";
+import { requirePermission } from "../auth/middleware.js";
 import {
   createTransportRequest,
   preflightTransportRequest,
@@ -11,7 +11,7 @@ import { syncCreatedTransportRequest } from "../sync/crSyncRunner.js";
 import { createdTransportSyncPlan } from "../sync/transportRequestSync.js";
 
 export const transportRequestRoutes = Router();
-transportRequestRoutes.use(requireAdmin);
+transportRequestRoutes.use(requirePermission("transport.create"));
 
 transportRequestRoutes.post("/resolve-object", asyncHandler(async (req, res) => {
   const query = String(req.body?.query || "").trim();

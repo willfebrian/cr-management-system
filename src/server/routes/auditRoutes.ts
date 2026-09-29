@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { requirePermission } from "../auth/middleware.js";
 import { listActivityLogs } from "../db/auditRepository.js";
 import { assertDatabaseConfigured } from "../db/pool.js";
 
@@ -15,7 +16,7 @@ function numberQuery(value: unknown, defaultValue: number): number {
   return Number.isFinite(num) && num > 0 ? num : defaultValue;
 }
 
-auditRoutes.get("/audit-logs", async (req, res, next) => {
+auditRoutes.get("/audit-logs", requirePermission("audit.view"), async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     const result = await listActivityLogs({

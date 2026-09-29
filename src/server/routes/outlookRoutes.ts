@@ -1,12 +1,12 @@
 import { Router } from "express";
-import { requireAdmin } from "../auth/middleware.js";
+import { requirePermission } from "../auth/middleware.js";
 import { pool } from "../db/pool.js";
 import { mergeMaskedMcpEmailConfig } from "../services/mcpEmailConfig.js";
 import { searchOutlookEmails, testConfiguredMcpEmail } from "../services/outlookService.js";
 
 export const outlookRoutes = Router();
 
-outlookRoutes.get("/search-email", async (req, res, next) => {
+outlookRoutes.get("/search-email", requirePermission("issue.view"), async (req, res, next) => {
   try {
     const q = String(req.query.q || "");
     const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : undefined;
@@ -18,7 +18,7 @@ outlookRoutes.get("/search-email", async (req, res, next) => {
   }
 });
 
-outlookRoutes.post("/test-mcp-connection", requireAdmin, async (req, res, next) => {
+outlookRoutes.post("/test-mcp-connection", requirePermission("settings.general"), async (req, res, next) => {
   try {
     const configJson = String(req.body?.configJson || "");
     const stored = await pool.query<{ setting_value: string }>(
