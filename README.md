@@ -104,6 +104,18 @@ Status definitions:
 
 ADMIN can open User Management, select a current account, and use **Assign Person**, **Change Assignment**, or **Unassign**. Accounts may remain unassigned. Only active people can be selected, and one person can belong to only one account. Archived accounts keep their link but must be restored before it can change.
 
+## Role and feature permissions
+
+Accounts keep the `ADMIN` and `USER` role labels, while feature access is granted separately to each account. Administrators with **Manage Users & Permissions** can open **User Management**, select or create an account, and maintain its feature checkboxes. Role presets fill the initial selection only; later changes are stored as explicit grants.
+
+The **Create Transport** and **Release Transport** permissions are separate, unchecked by default, and never implied by the `ADMIN` role or a preset. Grant them individually only to accounts that should perform those SAP actions. The user list can be filtered by these grants.
+
+Issue reference grants are also separate. CR SAP and GLPI references require both the `ADMIN` role and the corresponding grant; CR Helpdesk numbers can be edited by either role when granted, and the standard presets include that access. Other Issue actions, including creating and editing Issues, generating emails and ticket forms, opening a prefilled GLPI ticket, and sending reminders, can be managed independently.
+
+The schema backfills existing non-archived accounts with their prior intended feature access, excluding Transport Create and Release. Apply `npm run db:schema` during deployment to create and backfill the permission table. On a fresh database, run `npm run auth:seed` after applying the schema; newly seeded accounts receive their role preset, and the Admin preset includes **Manage Users & Permissions** but not either Transport mutation grant. Set `INITIAL_USER_PASSWORD` before seeding. A one-time marker prevents later schema runs from restoring grants that an administrator has removed. Keep at least one active, non-archived `ADMIN` account with **Manage Users & Permissions** enabled.
+
+After migration, sign in as an administrator, open **User Management**, filter users by **Create Transport** or **Release Transport**, and grant each permission independently to the approved accounts. Confirm that an active permission manager remains before removing or changing an administrator's grants.
+
 ## Automatic Incremental Sync
 
 Auto sync is available but disabled by default.

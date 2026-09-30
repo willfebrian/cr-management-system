@@ -1,6 +1,6 @@
 # User Permissions Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Give every account checkbox-managed feature permissions, with administrator-only maintenance and explicit per-account SAP transport Create and Release grants.
 
@@ -49,11 +49,11 @@
 
 **Interfaces:** Produce `PermissionKey`, `PERMISSION_CATALOG`, `REGULAR_USER_PRESET`, `ADMIN_PRESET`, `normalizePermissions(keys: readonly string[], role: UserRole): PermissionKey[]`, and `hasPermission(keys: readonly PermissionKey[], key: PermissionKey): boolean`. `normalizePermissions` rejects unknown keys and admin-only grants for `USER`, adds required view parents for selected actions, and returns unique catalog-order keys. `issue.create_glpi_ticket` requires `issue.generate_glpi_template`. Both presets omit transport Create and Release. Both presets include `issue.helpdesk_references`; only the Admin preset includes `issue.cr_references` and `issue.glpi_references`. The Issue output actions and `issue.reminder` have independent keys.
 
-- [ ] Write `scripts/permissions-catalog.test.ts` with tests named `presetsOmitTransportMutations`, `referencePresetsMatchRole`, `issueOutputGrantsAreIndependent`, `dependentIssueActionAddsView`, `transportActionsAreIndependent`, `userCannotHoldManagementGrant`, and `unknownPermissionIsRejected`; assert the exact spec keys.
-- [ ] Run `npx tsx --test scripts/permissions-catalog.test.ts`; expect failures because the catalog does not exist.
-- [ ] Implement the interfaces in `src/shared/permissions.ts`, with the full catalog and dependency rules from the spec.
-- [ ] Run `npx tsx --test scripts/permissions-catalog.test.ts`; expect all tests to pass.
-- [ ] Commit the catalog and test with `git commit -m "feat: define feature permission catalog"`.
+- [x] Write `scripts/permissions-catalog.test.ts` with tests named `presetsOmitTransportMutations`, `referencePresetsMatchRole`, `issueOutputGrantsAreIndependent`, `dependentIssueActionAddsView`, `transportActionsAreIndependent`, `userCannotHoldManagementGrant`, and `unknownPermissionIsRejected`; assert the exact spec keys.
+- [x] Run `npx tsx --test scripts/permissions-catalog.test.ts`; expect failures because the catalog does not exist.
+- [x] Implement the interfaces in `src/shared/permissions.ts`, with the full catalog and dependency rules from the spec.
+- [x] Run `npx tsx --test scripts/permissions-catalog.test.ts`; expect all tests to pass.
+- [x] Commit the catalog and test with `git commit -m "feat: define feature permission catalog"`.
 
 ### Task 2: Durable grants and safe migration
 
@@ -61,11 +61,11 @@
 
 **Interfaces:** Produce `listUserPermissions(userId: number): Promise<PermissionKey[]>` and `replaceUserPermissions(client: PoolClient, userId: number, keys: readonly PermissionKey[]): Promise<void>`. Table `app_user_permissions(user_id BIGINT REFERENCES app_users(id) ON DELETE CASCADE, permission_key TEXT, granted_at TIMESTAMPTZ, granted_by_user_id BIGINT NULL REFERENCES app_users(id), PRIMARY KEY(user_id, permission_key))`. The backfill uses separate role-specific non-transport key sets, only for non-archived accounts, and `ON CONFLICT DO NOTHING`; any existing administrator receives `users.manage`, `issue.cr_references`, and `issue.glpi_references`, while both roles receive `issue.helpdesk_references` and their current Issue output actions. The schema and migration must yield the same table definition and backfill behavior.
 
-- [ ] Write migration contract assertions for table shape, idempotent backfill, role-specific reference grants, independent Issue output grants, no transport Create/Release backfill, and no archived-account backfill; write repository tests for empty grants, ordered reads, and atomic replacement.
-- [ ] Run `node scripts/permissions-migration-contract.test.mjs` and `npx tsx --test scripts/permission-repository.test.ts`; expect failures.
-- [ ] Add the schema/migration SQL and repository functions; keep SQL parameterized and use the caller's transaction for replacement.
-- [ ] Run both focused commands; expect passes.
-- [ ] Commit with `git commit -m "feat: persist and backfill user permissions"`.
+- [x] Write migration contract assertions for table shape, idempotent backfill, role-specific reference grants, independent Issue output grants, no transport Create/Release backfill, and no archived-account backfill; write repository tests for empty grants, ordered reads, and atomic replacement.
+- [x] Run `node scripts/permissions-migration-contract.test.mjs` and `npx tsx --test scripts/permission-repository.test.ts`; expect failures.
+- [x] Add the schema/migration SQL and repository functions; keep SQL parameterized and use the caller's transaction for replacement.
+- [x] Run both focused commands; expect passes.
+- [x] Commit with `git commit -m "feat: persist and backfill user permissions"`.
 
 ### Task 3: Effective session grants and server guard
 
@@ -73,11 +73,11 @@
 
 **Interfaces:** Extend both server and client `AuthUser` with `permissions: PermissionKey[]`. Produce `requirePermission(key: PermissionKey): RequestHandler`; it returns 403 `{ code: "PERMISSION_DENIED", message: "You do not have permission to perform this action." }`. `userFromToken` loads current grants per request; login and `/api/auth/me` return them. Preserve password-change and logout authentication without feature grants.
 
-- [ ] Write tests for login and `/me` permission payloads, unauthenticated 401, missing-grant 403, allowed-grant success, and a revoked grant failing on the next request of the same active session.
-- [ ] Run `npx tsx --test scripts/permission-auth.test.ts`; expect failures.
-- [ ] Implement the auth shape and middleware; avoid retaining a permission snapshot in the session row or long-lived server cache.
-- [ ] Run the focused test and existing `npx tsx --test scripts/auth-persistent-session.test.ts scripts/auth-user-id-normalization.test.ts`; expect passes.
-- [ ] Commit with `git commit -m "feat: enforce current account permissions in auth"`.
+- [x] Write tests for login and `/me` permission payloads, unauthenticated 401, missing-grant 403, allowed-grant success, and a revoked grant failing on the next request of the same active session.
+- [x] Run `npx tsx --test scripts/permission-auth.test.ts`; expect failures.
+- [x] Implement the auth shape and middleware; avoid retaining a permission snapshot in the session row or long-lived server cache.
+- [x] Run the focused test and existing `npx tsx --test scripts/auth-persistent-session.test.ts scripts/auth-user-id-normalization.test.ts`; expect passes.
+- [x] Commit with `git commit -m "feat: enforce current account permissions in auth"`.
 
 ### Task 4: Permission maintenance and last-manager protection
 
@@ -85,11 +85,11 @@
 
 **Interfaces:** Extend `ManagedUser` with `permissions: PermissionKey[]`; creation and restoration payloads carry explicit `permissions`; profile update may carry `permissions`. Add `updateManagedUserPermissions(targetUserId: number, keys: readonly string[], actor: ManagementActor): Promise<ManagedUser>`. The service validates through `normalizePermissions`, updates in one transaction, writes before/after audit, and checks the last-manager invariant under row locks. Existing create, demote, deactivate, archive, and restore flows must use the same invariant and grant transaction. Protect user routes with role `ADMIN` plus `users.view` or `users.manage` as appropriate. Add permission filter support to the list route.
 
-- [ ] Write service and route tests for allowed save, non-admin 403, admin lacking `users.manage` 403, unknown key 400, `USER` rejection for CR SAP and GLPI reference grants, role demotion clearing admin-only grants, and last-manager protection on permission removal, demotion, deactivation, and archive.
-- [ ] Run `npx tsx --test scripts/user-permissions-service.test.ts scripts/user-permissions-routes.test.ts`; expect failures.
-- [ ] Implement payloads, filtering, transaction and lock order, audit entry, route guards, and last-manager checks. Preserve existing account lifecycle rules.
-- [ ] Run focused tests plus `npm run test:users`; expect passes.
-- [ ] Commit with `git commit -m "feat: manage user grants with administrator safeguards"`.
+- [x] Write service and route tests for allowed save, non-admin 403, admin lacking `users.manage` 403, unknown key 400, `USER` rejection for CR SAP and GLPI reference grants, role demotion clearing admin-only grants, and last-manager protection on permission removal, demotion, deactivation, and archive.
+- [x] Run `npx tsx --test scripts/user-permissions-service.test.ts scripts/user-permissions-routes.test.ts`; expect failures.
+- [x] Implement payloads, filtering, transaction and lock order, audit entry, route guards, and last-manager checks. Preserve existing account lifecycle rules.
+- [x] Run focused tests plus `npm run test:users`; expect passes.
+- [x] Commit with `git commit -m "feat: manage user grants with administrator safeguards"`.
 
 ### Task 5: SAP transport and application workflow guards
 
@@ -97,11 +97,11 @@
 
 **Interfaces:** Apply `requirePermission` to each endpoint before side effects. Create resolve/preflight/create use `transport.create`; Release candidates/test-run/operation polling/start/execute use `transport.release`; report/read/export/sync use their catalog keys. Issue and Project routes map to their distinct catalog actions. In `crRoutes.ts`, map template kind `email` to `issue.generate_email`, `ticket` to `issue.generate_glpi_template`, CR Transport form to `issue.generate_cr_transport_form`, CR User form to `issue.generate_cr_user_form`, and reminder preview/draft/send to `issue.reminder`; batch CR Transport form uses the same form grant. The GLPI prefill opening is client-side, so `issue.create_glpi_ticket` guards that button and requires `issue.generate_glpi_template`; it cannot authorize the final submission within GLPI. AI and Outlook operations inherit the Issue workflow that calls them; any shared route must validate its exact action server-side. Keep existing Project delete restrictions only where they are stricter than the catalog.
 
-- [ ] Build a route inventory in the test file listing every endpoint in these route modules and its permission; test direct unauthorized Create, Release, sync, Issue mutation, Project mutation, export, and each Issue output action returning 403 before service calls, including an `ADMIN` lacking each transport grant.
-- [ ] Run `npx tsx --test scripts/permissions-workflow-routes.test.ts`; expect failures.
-- [ ] Add the guards and resolve shared auxiliary route ownership without weakening checks.
-- [ ] Run the focused test plus `npm run test:baseline` and `npm run test:project`; expect passes.
-- [ ] Commit with `git commit -m "feat: guard transport and workflow operations"`.
+- [x] Build a route inventory in the test file listing every endpoint in these route modules and its permission; test direct unauthorized Create, Release, sync, Issue mutation, Project mutation, export, and each Issue output action returning 403 before service calls, including an `ADMIN` lacking each transport grant.
+- [x] Run `npx tsx --test scripts/permissions-workflow-routes.test.ts`; expect failures.
+- [x] Add the guards and resolve shared auxiliary route ownership without weakening checks.
+- [x] Run the focused test plus `npm run test:baseline` and `npm run test:project`; expect passes.
+- [x] Commit with `git commit -m "feat: guard transport and workflow operations"`.
 
 ### Task 6: Transactional Issue reference authorization
 
@@ -109,11 +109,11 @@
 
 **Interfaces:** Produce `assertIssueReferenceChangesAllowed(payload: IssueSavePayload, stored: IssueReferenceSets, actor: AuthUser): void`, where `IssueReferenceSets` contains normalized `crLinks`, `glpiTickets`, and `crHelpdeskNumbers` arrays. An omitted payload property preserves the stored set; an explicitly empty property requests removal. For an edit, `saveIssue` locks the current Issue row and reads reference sets inside its existing transaction before any mutation, calls the assertion, and performs replacements only for provided categories. For create, the stored sets are empty. A difference without the respective grant throws a typed 403 `PERMISSION_DENIED`; CR SAP and GLPI additionally require `ADMIN`. The `POST /issues` and `PUT /issues/:id` routes pass the authenticated actor into save. The Issue Create-and-link button checks both grants before opening the SAP flow; the SAP Create endpoint enforces `transport.create`, and the later Issue save enforces `issue.cr_references` when the CR number is linked. This reflects the existing two-step SAP/create-and-save flow; an intervening revocation can leave a created SAP request unlinked but cannot create an unauthorized Issue link.
 
-- [ ] Write tests for create and edit first entry, replacement, removal, unchanged values, omitted fields, and independent grants for all three reference types; assert that a denied reference change leaves the Issue header and all links unchanged.
-- [ ] Run `npx tsx --test scripts/issue-reference-permissions.test.ts`; expect failures.
-- [ ] Add the pure comparison helper and integrate it with the locked Issue save transaction and route actor; keep existing Issue validation and project-link rules.
-- [ ] Run the focused test plus `npx tsx --test scripts/issue-ai-form-policy.test.ts scripts/issue-cr-release-model.test.ts`; expect passes.
-- [ ] Commit with `git commit -m "feat: enforce issue reference field permissions"`.
+- [x] Write tests for create and edit first entry, replacement, removal, unchanged values, omitted fields, and independent grants for all three reference types; assert that a denied reference change leaves the Issue header and all links unchanged.
+- [x] Run `npx tsx --test scripts/issue-reference-permissions.test.ts`; expect failures.
+- [x] Add the pure comparison helper and integrate it with the locked Issue save transaction and route actor; keep existing Issue validation and project-link rules.
+- [x] Run the focused test plus `npx tsx --test scripts/issue-ai-form-policy.test.ts scripts/issue-cr-release-model.test.ts`; expect passes.
+- [x] Commit with `git commit -m "feat: enforce issue reference field permissions"`.
 
 ### Task 7: Master Data, Settings, and Audit guards
 
@@ -121,11 +121,11 @@
 
 **Interfaces:** Split reads and writes by catalog keys. `master_data.view` permits the Master Data landing; People writes require `master_data.people`, Group Email writes require `master_data.group_emails`. Target System operations and connection tests require `settings.target_systems`; General, AI, and Template operations require their respective keys; Audit reads require `audit.view`. Personal appearance must use local storage or a non-sensitive, explicitly scoped settings response; no administrative settings, RFC credentials, or integration secrets may be returned to an appearance-only account. Shared settings writes are restricted to allowlisted keys for the matching permission.
 
-- [ ] Write tests for each settings section's allowed and denied read/write, appearance-only access without secret fields, direct People/Group Email mutation denial, target-system connection test denial, and audit 403.
-- [ ] Run `npx tsx --test scripts/permissions-admin-routes.test.ts`; expect failures.
-- [ ] Add route guards, split or scope settings payloads by permission, and update the settings client to request only authorized sections.
-- [ ] Run the focused test plus `npx tsx --test scripts/mcp-email-admin-settings.test.ts scripts/mcp-email-settings-ui.test.tsx`; expect passes.
-- [ ] Commit with `git commit -m "feat: guard administrative settings and audit data"`.
+- [x] Write tests for each settings section's allowed and denied read/write, appearance-only access without secret fields, direct People/Group Email mutation denial, target-system connection test denial, and audit 403.
+- [x] Run `npx tsx --test scripts/permissions-admin-routes.test.ts`; expect failures.
+- [x] Add route guards, split or scope settings payloads by permission, and update the settings client to request only authorized sections.
+- [x] Run the focused test plus `npx tsx --test scripts/mcp-email-admin-settings.test.ts scripts/mcp-email-settings-ui.test.tsx`; expect passes.
+- [x] Commit with `git commit -m "feat: guard administrative settings and audit data"`.
 
 ### Task 8: Permission-driven navigation and checkbox editor
 
@@ -133,11 +133,11 @@
 
 **Interfaces:** `can(user: AuthUser, key: PermissionKey): boolean` reads the auth grant list. User Management shows grouped checkboxes, presets on create/restore, transport, reference, and management-change confirmation, filtering by grants, Save/Cancel, and dependency explanations. Navigation and in-page actions use the same catalog. Issue CR SAP, GLPI, and CR Helpdesk inputs are independently read-only without their grants, including in Create mode. The Issue Generate menu shows each output action only with its grant; Create Ticket in GLPI additionally needs its own grant and the GLPI template grant. The Issue Create-and-link button needs `transport.create` plus `issue.cr_references`; standalone Create needs only `transport.create`. An account with no page-view grants sees an access-limited landing with password change and logout. Refresh effective grants after save or 403; redirect away from an unauthorized active view.
 
-- [ ] Write UI tests for a regular user's menu, independent Issue output checkbox states, the Issue Create-and-link versus standalone button, reference inputs read-only per grant on Create and Change, dependency selection/clearing, Admin-only checkbox behavior, saving changes, 403 refresh, and the no-view landing with password change and logout.
-- [ ] Run `npx tsx --test scripts/permissions-ui.test.tsx`; expect failures.
-- [ ] Implement the shared client helper and focused component; replace existing role-only navigation checks and protect all direct `setView` paths.
-- [ ] Run the focused test plus `npx tsx --test scripts/user-management-workspace.test.tsx scripts/navigation-visual-state.test.ts`; expect passes.
-- [ ] Commit with `git commit -m "feat: expose per-user permissions in navigation and user management"`.
+- [x] Write UI tests for a regular user's menu, independent Issue output checkbox states, the Issue Create-and-link versus standalone button, reference inputs read-only per grant on Create and Change, dependency selection/clearing, Admin-only checkbox behavior, saving changes, 403 refresh, and the no-view landing with password change and logout.
+- [x] Run `npx tsx --test scripts/permissions-ui.test.tsx`; expect failures.
+- [x] Implement the shared client helper and focused component; replace existing role-only navigation checks and protect all direct `setView` paths.
+- [x] Run the focused test plus `npx tsx --test scripts/user-management-workspace.test.tsx scripts/navigation-visual-state.test.ts`; expect passes.
+- [x] Commit with `git commit -m "feat: expose per-user permissions in navigation and user management"`.
 
 ### Task 9: Integration and release verification
 
@@ -145,7 +145,7 @@
 
 **Interfaces:** No new public interface. This task verifies complete route coverage and documents administrator operations.
 
-- [ ] Add an integration assertion that every mounted feature API route has an auth plus permission decision, and document how administrators grant transport access after migration.
-- [ ] Run `npm run test`, `npm run build`, and `git diff --check`; expect all to pass and no whitespace errors.
-- [ ] Review the migration against a fresh database and an existing-account database, confirming at least one active manager and no transport mutation grants; record any environment-specific validation limit in the final report.
-- [ ] Commit with `git commit -m "test: verify permission coverage and document rollout"`.
+- [x] Add an integration assertion that every mounted feature API route has an auth plus permission decision, and document how administrators grant transport access after migration.
+- [x] Run `npm run test`, `npm run build`, and `git diff --check`; expect all to pass and no whitespace errors.
+- [x] Review the migration against a fresh database and an existing-account database, confirming at least one active manager and no transport mutation grants; record any environment-specific validation limit in the final report.
+- [x] Commit with `git commit -m "test: verify permission coverage and document rollout"`.
