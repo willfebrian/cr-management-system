@@ -69,8 +69,10 @@ cat > "$STATE_DIR/nginx.conf.tmp" <<EOF
 server {
   listen 80;
   server_name _;
+  resolver 127.0.0.11 valid=5s ipv6=off;
   location / {
-    proxy_pass http://cr-management-${next}:3001;
+    set \$upstream http://cr-management-${next}:3001;
+    proxy_pass \$upstream;
     proxy_http_version 1.1;
     proxy_set_header Host \$host;
     proxy_set_header X-Real-IP \$remote_addr;
@@ -108,8 +110,9 @@ curl -fsS http://127.0.0.1:3001/api/health/database >/dev/null || die "Productio
 
 printf '%s\n' "$next" > "$STATE_DIR/active-slot"
 if [[ -n "$active" && "$active" != "$next" ]]; then
-  log "Stopping old slot $active"
+  log "Stopping and removing old slot $active"
   "${COMPOSE[@]}" --profile "$active" stop "$active" || true
+  "${COMPOSE[@]}" --profile "$active" rm -f "$active" || true
 fi
 
 docker image prune -f --filter 'label=org.opencontainers.image.revision' >/dev/null || true
