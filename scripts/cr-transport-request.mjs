@@ -9,9 +9,9 @@ if (!["resolve", "preflight", "create"].includes(action)) {
 let input = "";
 for await (const chunk of process.stdin) input += chunk;
 const payload = input.trim() ? JSON.parse(input) : {};
-const service = new TransportRequestService({ targetSystem: payload.targetSystem });
 
 try {
+  const service = new TransportRequestService({ targetSystem: payload.targetSystem });
   const result = action === "resolve"
     ? await service.resolve(payload.query)
     : action === "preflight"

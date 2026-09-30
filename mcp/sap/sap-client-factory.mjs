@@ -35,15 +35,21 @@ export function buildSapConnectionFromEnv(prefix, env = process.env) {
     return loadBalanced;
   }
 
-  throw new Error(`Incomplete SAP connection environment for prefix ${prefix}`);
+  throw connectionConfigurationError(prefix);
 }
 
 export function buildSapConnectionFromPrefixes(prefixes, env = process.env) {
   const prefix = chooseConnectionPrefix(prefixes, env);
   if (!prefix) {
-    throw new Error(`Incomplete SAP connection environment for prefixes ${prefixes.join(", ")}`);
+    throw connectionConfigurationError(prefixes.join(", "));
   }
   return { prefix, connection: buildSapConnectionFromEnv(prefix, env) };
+}
+
+function connectionConfigurationError(target) {
+  const error = new Error(`SAP connection for ${target} is incomplete. Configure the selected target system's connection credentials before creating or releasing a transport.`);
+  error.code = "SAP_CONNECTION_NOT_CONFIGURED";
+  return error;
 }
 
 export class SapRfcClient {

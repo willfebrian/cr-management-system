@@ -9,9 +9,9 @@ if (!["test-run", "release"].includes(action)) {
 let input = "";
 for await (const chunk of process.stdin) input += chunk;
 const payload = input.trim() ? JSON.parse(input) : {};
-const service = new TransportReleaseService({ targetSystem: payload.targetSystem });
 
 try {
+  const service = new TransportReleaseService({ targetSystem: payload.targetSystem });
   const result = action === "test-run"
     ? await service.testRun(payload.trkorr)
     : await service.release(payload.trkorr);
