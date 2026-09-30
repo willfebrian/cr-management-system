@@ -110,7 +110,7 @@ test("detail panel disables protected self actions but keeps self rename availab
     onArchive={noop}
     onRestore={noop}
   />);
-  assert.match(html, /Edit username/);
+  assert.match(html, /Edit User/);
   assert.match(html, /Reset Password[^<]*<\/button>/);
   assert.match(html, /Reset Password[\s\S]*disabled/);
   assert.match(html, /Cannot deactivate own account/);

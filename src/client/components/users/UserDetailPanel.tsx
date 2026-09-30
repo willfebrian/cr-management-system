@@ -1,3 +1,4 @@
+import { PERMISSION_CATALOG } from "../../../shared/permissions";
 import type { ManagedUser, UserAuditEntry } from "../../../shared/userManagementTypes";
 
 type Props = {
@@ -83,7 +84,7 @@ function getActionBadgeStyle(action: string) {
   };
 }
 
-function renderAuditMetadata(metadata: Record<string, unknown>) {
+function renderAuditMetadata(metadata: Record<string, unknown>, action: string) {
   if (!metadata || typeof metadata !== "object") return null;
 
   // Exclude actorUsername
@@ -101,29 +102,36 @@ function renderAuditMetadata(metadata: Record<string, unknown>) {
   const hasAfter = "after" in metadata;
 
   if (hasBefore && hasAfter) {
-    const beforeVal = auditValue(metadata.before);
-    const afterVal = auditValue(metadata.after);
-    const otherEntries = entries.filter(([key]) => key !== "before" && key !== "after");
-
-    return (
-      <div style={{ marginTop: "8px", display: "flex", flexDirection: "column", gap: "6px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.8rem", flexWrap: "wrap" }}>
-          <span style={{ color: "var(--color-text-muted, #64748b)", fontWeight: "600" }}>State Change:</span>
-          <span style={{ padding: "3px 8px", borderRadius: "4px", background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca", fontSize: "0.75rem", fontWeight: "600" }}>
-            BEFORE: {beforeVal}
-          </span>
-          <span style={{ color: "var(--color-text-muted, #94a3b8)", fontWeight: "700" }}>→</span>
-          <span style={{ padding: "3px 8px", borderRadius: "4px", background: "#ecfdf5", color: "#065f46", border: "1px solid #a7f3d0", fontSize: "0.75rem", fontWeight: "600" }}>
-            AFTER: {afterVal}
-          </span>
-        </div>
-        {otherEntries.map(([key, value]) => (
-          <div key={key} style={{ fontSize: "0.8rem", color: "var(--color-text-muted, #64748b)" }}>
-            <strong>{formatAuditKey(key)}:</strong> {auditValue(value)}
-          </div>
-        ))}
-      </div>
-    );
+    if (action === "PERMISSIONS_CHANGED" && Array.isArray(metadata.before) && Array.isArray(metadata.after)) {
+      const before = new Set(metadata.before.filter((key): key is string => typeof key === "string"));
+      const after = new Set(metadata.after.filter((key): key is string => typeof key === "string"));
+      const added = [...after].filter((key) => !before.has(key));
+      const removed = [...before].filter((key) => !after.has(key));
+      const permissionLabel = (key: string) => {
+        const definition = PERMISSION_CATALOG.find((item) => item.key === key);
+        return definition ? `${definition.group} — ${definition.label}` : key;
+      };
+      return <div className="user-audit__changes">
+        {added.length > 0 && <div className="user-audit__change user-audit__change--added">
+          <strong>Access added</strong>
+          <ul>{added.map((key) => <li key={key}>{permissionLabel(key)}</li>)}</ul>
+        </div>}
+        {removed.length > 0 && <div className="user-audit__change user-audit__change--removed">
+          <strong>Access removed</strong>
+          <ul>{removed.map((key) => <li key={key}>{permissionLabel(key)}</li>)}</ul>
+        </div>}
+        {!added.length && !removed.length && <p>No access changes.</p>}
+      </div>;
+    }
+    const isStatus = typeof metadata.before === "boolean" && typeof metadata.after === "boolean";
+    const label = isStatus ? "Account status" : action === "ROLE_CHANGED" ? "Role" : action === "USERNAME_CHANGED" ? "Username" : "Updated";
+    const formatValue = (value: unknown) => isStatus ? (value ? "Active" : "Inactive") : auditValue(value);
+    return <div className="user-audit__changes">
+      <p className="user-audit__transition"><strong>{label}:</strong> {formatValue(metadata.before)} → {formatValue(metadata.after)}</p>
+      {entries.filter(([key]) => key !== "before" && key !== "after").map(([key, value]) =>
+        <p key={key}><strong>{formatAuditKey(key)}:</strong> {auditValue(value)}</p>
+      )}
+    </div>;
   }
 
   return (
@@ -178,7 +186,6 @@ export function UserDetailPanel({
     <section className="user-detail" aria-label="User account details">
       <div className="user-detail__header">
         <div>
-          <p className="user-detail__kicker">USER ACCOUNT</p>
           <h2>{user.username}</h2>
         </div>
         <span className={`user-badge user-badge--${user.deletedAt ? "archived" : user.isActive ? "active" : "inactive"}`}>
@@ -186,14 +193,14 @@ export function UserDetailPanel({
         </span>
       </div>
 
-      <div className="user-detail__summary">
+      <dl className="user-detail__summary">
         <div>
           <dt>Role</dt>
           <dd>{user.role}</dd>
         </div>
         <div>
-          <dt>User ID</dt>
-          <dd>{user.id}</dd>
+          <dt>Permissions</dt>
+          <dd>{user.permissions?.length || 0} assigned</dd>
         </div>
         <div>
           <dt>Password</dt>
@@ -201,11 +208,9 @@ export function UserDetailPanel({
         </div>
         <div>
           <dt>Last Login</dt>
-          <dd>{user.lastLoginAt ? new Date(user.lastLoginAt).toISOString() : "Never"}</dd>
+          <dd>{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "Never"}</dd>
         </div>
-      </div>
-
-      <p className="user-detail__grant-count">{user.permissions?.length || 0} feature permissions assigned. Use Edit User to change access.</p>
+      </dl>
 
       <div className="user-detail__person">
         <h3>Linked Person</h3>
@@ -270,7 +275,7 @@ export function UserDetailPanel({
       ) : (
         <div className="user-detail__actions">
           <button type="button" className="button" onClick={onEdit}>
-            Edit username / role
+            Edit User
           </button>
           <button
             type="button"
@@ -300,9 +305,6 @@ export function UserDetailPanel({
           >
             Archive
           </button>
-          {statusReason && <p className="user-detail__protection-note">{statusReason}</p>}
-          {archiveReason && archiveReason !== statusReason &&
-            <p className="user-detail__protection-note">{archiveReason}</p>}
         </div>
       ))}
 
@@ -352,7 +354,7 @@ export function UserDetailPanel({
                       <span>Actor:</span> <strong>{actorName}</strong>
                     </div>
 
-                    {renderAuditMetadata(entry.metadata)}
+                    {renderAuditMetadata(entry.metadata, entry.action)}
                   </div>
                 </div>
               );

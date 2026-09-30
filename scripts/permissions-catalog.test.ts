@@ -52,3 +52,10 @@ test("userCannotHoldManagementGrant", () => {
 test("unknownPermissionIsRejected", () => {
   assert.throws(() => normalizePermissions(["issue.unknown"], "ADMIN"));
 });
+
+test("regular baseline omits email and ticket actions", () => {
+  assert.equal(REGULAR_USER_PRESET.length, 16);
+  for (const key of ["issue.generate_email", "issue.generate_glpi_template", "issue.create_glpi_ticket", "issue.reminder"] as const) {
+    assert.equal(REGULAR_USER_PRESET.includes(key), false);
+  }
+});

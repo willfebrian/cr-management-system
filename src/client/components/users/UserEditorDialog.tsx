@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { ADMIN_PRESET, REGULAR_USER_PRESET, PERMISSION_CATALOG, normalizePermissions, type PermissionKey } from "../../../shared/permissions";
+import { ADMIN_PRESET, REGULAR_USER_PRESET, PERMISSION_CATALOG, USER_ROLE_LOCKED_PERMISSIONS, normalizePermissions, type PermissionKey } from "../../../shared/permissions";
 import { UserPermissionsPanel } from "./UserPermissionsPanel";
 import type {
   CreateManagedUserPayload,
@@ -69,9 +69,11 @@ export function UserEditorDialog({
   }
 
   return <div className="dialog-backdrop" role="presentation">
-    <section className="user-dialog" role="dialog" aria-modal="true" aria-labelledby="user-editor-title">
+    <section className="user-dialog user-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="user-editor-title">
       <header><h2 id="user-editor-title">{title}</h2></header>
       <form onSubmit={submit}>
+        <div className="user-editor__body">
+        <div className="user-editor__fields">
         {mode !== "restore" && <label>
           Username
           <input value={username} onChange={(event) => setUsername(event.target.value)} required autoFocus />
@@ -92,7 +94,13 @@ export function UserEditorDialog({
           <select
             value={role}
             disabled={roleLocked}
-            onChange={(event) => { const nextRole = event.target.value as UserRole; setRole(nextRole); setPermissions(normalizePermissions(permissions.filter((key) => nextRole === "ADMIN" || !PERMISSION_CATALOG.find((item) => item.key === key && "adminOnly" in item && item.adminOnly)), nextRole)); }}
+            onChange={(event) => {
+              const nextRole = event.target.value as UserRole;
+              setRole(nextRole);
+              const retained = permissions.filter((key) => nextRole === "ADMIN"
+                || (!USER_ROLE_LOCKED_PERMISSIONS.includes(key) && !PERMISSION_CATALOG.find((item) => item.key === key && "adminOnly" in item && item.adminOnly)));
+              setPermissions(normalizePermissions(retained, nextRole));
+            }}
           >
             <option value="USER">USER</option>
             <option value="ADMIN">ADMIN</option>
@@ -106,16 +114,22 @@ export function UserEditorDialog({
           />
           Active after {mode === "restore" ? "restore" : "creation"}
         </label>}
-        <div className="user-permissions__presets">
-          <button type="button" className="button" onClick={() => setPermissions(role === "ADMIN" ? ADMIN_PRESET : REGULAR_USER_PRESET)}>Use role preset</button>
-          <button type="button" className="button" onClick={() => setPermissions([])}>Clear all</button>
         </div>
-        <UserPermissionsPanel role={role} value={permissions} onChange={setPermissions} disabled={busy} />
+        <div className="user-editor__permissions-heading">
+          <h3>Permissions <span>{permissions.length} selected</span></h3>
+          <div className="user-permissions__presets">
+          <button type="button" className="button" disabled={busy} onClick={() => setPermissions(role === "ADMIN" ? ADMIN_PRESET : REGULAR_USER_PRESET)}>Use role preset</button>
+          <button type="button" className="button" disabled={busy} onClick={() => setPermissions([])}>Clear all</button>
+          </div>
+        </div>
+        <UserPermissionsPanel role={role} value={permissions} onChange={setPermissions}
+          disabled={busy} disabledPermissions={role === "USER" ? USER_ROLE_LOCKED_PERMISSIONS : []} />
         {error && <p role="alert" className="user-dialog__error">{error}</p>}
+        </div>
         <footer>
           <button type="button" className="button" onClick={onClose} disabled={busy}>Cancel</button>
           <button type="submit" className="button button--primary" disabled={busy}>
-            {busy ? "Saving…" : title}
+            {busy ? "Saving…" : mode === "edit" ? "Save Changes" : title}
           </button>
         </footer>
       </form>

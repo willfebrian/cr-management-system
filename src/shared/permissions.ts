@@ -69,17 +69,20 @@ export function hasPermission(keys: readonly PermissionKey[], key: PermissionKey
   return keys.includes(key);
 }
 
-const REGULAR_EXCLUDED = new Set<PermissionKey>([
-  "transport.create", "transport.release", "transport.sync",
-  "issue.cancel_delete", "project.cancel_delete", "master_data.view",
-  "master_data.people", "master_data.group_emails", "settings.target_systems",
-  "settings.general", "settings.ai", "settings.templates", "users.view", "users.manage"
-]);
+// Explicit baseline approved for regular users; new features require a deliberate grant.
+export const REGULAR_USER_PRESET: PermissionKey[] = normalizePermissions([
+  "dashboard.view", "transport.view", "transport.export",
+  "issue.view", "issue.export", "issue.create", "issue.edit",
+  "issue.helpdesk_references", "issue.generate_cr_transport_form", "issue.generate_cr_user_form",
+  "project.view", "project.create", "project.edit", "project.documents",
+  "settings.appearance", "audit.view"
+], "USER");
 
-export const REGULAR_USER_PRESET: PermissionKey[] = normalizePermissions(
-  PERMISSION_CATALOG.filter((definition) => !(definition as PermissionDefinition).adminOnly && !REGULAR_EXCLUDED.has(definition.key)).map((definition) => definition.key),
-  "USER"
-);
+export const USER_ROLE_LOCKED_PERMISSIONS: readonly PermissionKey[] = [
+  "transport.create", "transport.release", "transport.sync",
+  "master_data.people", "master_data.group_emails",
+  "settings.target_systems", "settings.templates"
+];
 
 export const ADMIN_PRESET: PermissionKey[] = normalizePermissions(
   PERMISSION_CATALOG.filter((definition) => definition.key !== "transport.create" && definition.key !== "transport.release").map((definition) => definition.key),
