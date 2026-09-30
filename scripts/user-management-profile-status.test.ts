@@ -157,7 +157,7 @@ test("rejects self-deactivation and a concurrent last-active-admin demotion", as
   );
 
   const lastAdminDb = new BehaviorDatabase();
-  lastAdminDb.currentTarget = { ...target, role: "ADMIN" };
+  lastAdminDb.currentTarget = { ...target, role: "ADMIN", permissions: ["users.manage"] };
   lastAdminDb.activeAdminCount = 1;
   const lastAdminService = createUserManagementService(lastAdminDb as any, async () => "unused");
   await assert.rejects(

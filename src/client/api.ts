@@ -595,7 +595,7 @@ export async function syncCr(options: SyncCrOptions): Promise<SyncCrResult> {
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...init, credentials: "include" });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.message || `Request failed: ${response.status}`);
+  if (!response.ok) { if (response.status === 403 && typeof window !== "undefined") window.dispatchEvent(new Event("permissions-changed")); throw new Error(body.message || `Request failed: ${response.status}`); }
   return body;
 }
 

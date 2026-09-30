@@ -13,7 +13,8 @@ import {
   revokeManagedUserSessions,
   setManagedUserStatus,
   unassignManagedUserPerson,
-  updateManagedUserProfile
+  updateManagedUserProfile,
+  updateManagedUserPermissions
 } from "../src/client/api/userManagementApi";
 
 type FetchCall = { url: string; init: RequestInit };
@@ -138,6 +139,20 @@ test("sends person assignment operations to explicit endpoints", async () => {
       ]
     );
     assert.deepEqual(JSON.parse(String(capture.calls[1]?.init.body)), { personId: 12 });
+  } finally {
+    capture.restore();
+  }
+});
+
+test("saves a user's explicit feature grants", async () => {
+  const capture = captureFetch({ user: { id: 5, permissions: ["issue.view", "issue.generate_email"] } });
+  try {
+    const user = await updateManagedUserPermissions(5, ["issue.generate_email"]);
+    assert.deepEqual(user.permissions, ["issue.view", "issue.generate_email"]);
+    assert.equal(capture.calls[0]?.url, "/api/users/5/permissions");
+    assert.equal(capture.calls[0]?.init.method, "PUT");
+    assert.deepEqual(JSON.parse(String(capture.calls[0]?.init.body)), { permissions: ["issue.generate_email"] });
+    assert.equal(capture.calls[0]?.init.credentials, "include");
   } finally {
     capture.restore();
   }

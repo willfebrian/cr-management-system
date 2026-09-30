@@ -5,6 +5,7 @@ type Props = {
   audit: UserAuditEntry[];
   currentUserId: number;
   activeAdminCount: number;
+  canManage?: boolean;
   onEdit(): void;
   onStatusChange(): void;
   onResetPassword(): void;
@@ -146,6 +147,7 @@ export function UserDetailPanel({
   audit,
   currentUserId,
   activeAdminCount,
+  canManage = true,
   onEdit,
   onStatusChange,
   onResetPassword,
@@ -203,6 +205,8 @@ export function UserDetailPanel({
         </div>
       </div>
 
+      <p className="user-detail__grant-count">{user.permissions?.length || 0} feature permissions assigned. Use Edit User to change access.</p>
+
       <div className="user-detail__person">
         <h3>Linked Person</h3>
         {user.person ? (
@@ -226,12 +230,12 @@ export function UserDetailPanel({
               </div>
             </dl>
             <div className="user-detail__person-actions">
-              {onChangePerson && (
+              {canManage && onChangePerson && (
                 <button type="button" className="button" onClick={onChangePerson}>
                   Change Assignment
                 </button>
               )}
-              {onUnassignPerson && (
+              {canManage && onUnassignPerson && (
                 <button
                   type="button"
                   className="button button--danger"
@@ -245,7 +249,7 @@ export function UserDetailPanel({
         ) : (
           <>
             <p className="user-management__empty">No person assigned to this account.</p>
-            {onAssignPerson && (
+            {canManage && onAssignPerson && (
               <button type="button" className="button button--primary" onClick={onAssignPerson}>
                 Assign Person
               </button>
@@ -254,7 +258,7 @@ export function UserDetailPanel({
         )}
       </div>
 
-      {user.deletedAt ? (
+      {canManage && (user.deletedAt ? (
         <div className="user-detail__actions">
           <button type="button" className="button button--primary" onClick={onRestore}>
             Restore Account
@@ -300,7 +304,7 @@ export function UserDetailPanel({
           {archiveReason && archiveReason !== statusReason &&
             <p className="user-detail__protection-note">{archiveReason}</p>}
         </div>
-      )}
+      ))}
 
       <section className="user-audit" aria-labelledby="user-audit-title">
         <div className="user-audit__header-bar">

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Ban, ChevronRight, FileOutput, MoreVertical, PencilLine, Trash2, X } from "lucide-react";
+import type { PermissionKey } from "../../../shared/permissions.js";
 import type { ProjectCrReadiness, ProjectCrReadinessItem, ProjectDetail, ProjectRow } from "../../../shared/projectTypes.js";
 import type { IncompleteItem, IssueSection } from "../../issueIncomplete.js";
 import { cancelProject, deleteProject, downloadProjectCrTransport, fetchProjectCrTransportReadiness } from "../../api/projectApi.js";
@@ -7,12 +8,13 @@ import { cancelProject, deleteProject, downloadProjectCrTransport, fetchProjectC
 type ProjectActionsProps = {
   project: ProjectRow;
   userRole: "ADMIN" | "USER";
+  permissions?: PermissionKey[];
   onChange?: () => void;
   onChanged: (detail?: ProjectDetail) => void;
   onOpenIncompleteItem?: (issueId: number, item: IncompleteItem) => void;
 };
 
-export function ProjectActions({ project, userRole, onChange, onChanged, onOpenIncompleteItem }: ProjectActionsProps) {
+export function ProjectActions({ project, userRole, permissions, onChange, onChanged, onOpenIncompleteItem }: ProjectActionsProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [dialog, setDialog] = useState<"cancel" | "delete" | null>(null);
   const [reason, setReason] = useState("");
@@ -21,7 +23,8 @@ export function ProjectActions({ project, userRole, onChange, onChanged, onOpenI
   const [busy, setBusy] = useState(false);
   const [readiness, setReadiness] = useState<ProjectCrReadiness | null>(null);
   const isCancelled = project.projectStatus === "cancelled";
-  const canDelete = userRole === "ADMIN" && project.canDelete;
+  const allowed = (key: PermissionKey) => !permissions || permissions.includes(key);
+  const canDelete = userRole === "ADMIN" && project.canDelete && allowed("project.cancel_delete");
 
   async function generateProjectDocument() {
     setBusy(true);
@@ -88,13 +91,13 @@ export function ProjectActions({ project, userRole, onChange, onChanged, onOpenI
         <MoreVertical size={18} aria-hidden="true" />
       </button>
       {menuOpen && <div className="detail-action-menu-list" role="menu">
-        {!isCancelled && onChange && <button role="menuitem" type="button" onClick={() => { setMenuOpen(false); onChange(); }}>
+        {!isCancelled && onChange && allowed("project.edit") && <button role="menuitem" type="button" onClick={() => { setMenuOpen(false); onChange(); }}>
           <PencilLine size={15} aria-hidden="true" /> Change Project
         </button>}
-        <button role="menuitem" type="button" disabled={busy} onClick={() => { setMenuOpen(false); void generateProjectDocument(); }}>
+        {allowed("project.documents") && <button role="menuitem" type="button" disabled={busy} onClick={() => { setMenuOpen(false); void generateProjectDocument(); }}>
           <FileOutput size={15} aria-hidden="true" /> {busy ? "Checking data" : "Generate CR Transport"}
-        </button>
-        {!isCancelled && <button role="menuitem" type="button" onClick={() => { setMenuOpen(false); setDialog("cancel"); setError(""); }}>
+        </button>}
+        {!isCancelled && allowed("project.cancel_delete") && <button role="menuitem" type="button" onClick={() => { setMenuOpen(false); setDialog("cancel"); setError(""); }}>
           <Ban size={15} aria-hidden="true" /> Cancel Project
         </button>}
         {canDelete && <button className="danger-menu-item" role="menuitem" type="button" onClick={() => { setMenuOpen(false); setDialog("delete"); setError(""); }}>

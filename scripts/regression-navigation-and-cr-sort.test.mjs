@@ -52,7 +52,7 @@ assert.match(
 
 assert.match(
   app,
-  /if \(view !== "dashboard"\) return;\s*if \(dashboardViewEffectMountedRef\.current\)[\s\S]*?loadDashboardData\(\)\.catch[\s\S]*?const interval = window\.setInterval/,
+  /if \(view !== "dashboard"(?: \|\| !can\(authUser, "dashboard.view"\))?\) return;\s*if \(dashboardViewEffectMountedRef\.current\)[\s\S]*?loadDashboardData\(\)\.catch[\s\S]*?const interval = window\.setInterval/,
   "Dashboard must refresh immediately when re-entered without duplicating its initial load",
 );
 

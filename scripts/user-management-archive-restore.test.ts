@@ -99,7 +99,7 @@ test("blocks self archive and the final active administrator archive", async () 
   );
 
   const lastDb = new LifecycleDatabase();
-  lastDb.currentTarget = { ...baseTarget, role: "ADMIN" };
+  lastDb.currentTarget = { ...baseTarget, role: "ADMIN", permissions: ["users.manage"] };
   lastDb.activeAdminCount = 1;
   const lastService = createUserManagementService(lastDb as any, async () => "unused");
   await assert.rejects(

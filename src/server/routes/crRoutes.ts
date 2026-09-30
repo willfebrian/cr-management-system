@@ -55,7 +55,10 @@ crRoutes.get("/health", (_req, res) => {
   res.json({ ok: true, app: "CR Management System" });
 });
 
-crRoutes.get("/systems", requirePermission("transport.view"), (_req, res) => {
+crRoutes.get("/systems", (req, res, next) => {
+  if (req.authUser?.permissions.some((key) => key === "dashboard.view" || key === "transport.view")) return next();
+  return requirePermission("transport.view")(req, res, next);
+}, (_req, res) => {
   res.json({ rows: listSapCrSystems() });
 });
 

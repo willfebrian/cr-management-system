@@ -4,7 +4,7 @@ import test from "node:test";
 import express from "express";
 import { adminRoutes } from "../src/server/routes/adminRoutes";
 import { auditRoutes } from "../src/server/routes/auditRoutes";
-import { visibleSettings, writableSettings } from "../src/server/admin/settingsPermissionPolicy";
+import { transportSystemOptions, visibleSettings, writableSettings } from "../src/server/admin/settingsPermissionPolicy";
 
 async function serve(permissions: string[], work: (url: string) => Promise<void>) {
   const app = express(); app.use(express.json());
@@ -39,4 +39,9 @@ test("Master Data writes, connection tests, template changes and Audit reject di
     const denied = await fetch(url + "/api/admin/settings", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ exchange_pass: "secret" }) });
     assert.equal(denied.status, 403);
   });
+});
+
+test("transport-only target list excludes connection credentials", () => {
+  const [option] = transportSystemOptions([{ id: 1, code: "DEV", description: "Development", environment: "DEV", is_active: true, created_at: "now", host: "host", rfc_user: "secret", rfc_password: "secret", client: "100" }]);
+  assert.deepEqual(option, { id: 1, code: "DEV", description: "Development", environment: "DEV", is_active: true, created_at: "now" });
 });

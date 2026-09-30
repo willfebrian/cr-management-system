@@ -1,4 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { ADMIN_PRESET, REGULAR_USER_PRESET, PERMISSION_CATALOG, normalizePermissions, type PermissionKey } from "../../../shared/permissions";
+import { UserPermissionsPanel } from "./UserPermissionsPanel";
 import type {
   CreateManagedUserPayload,
   ManagedUser,
@@ -38,6 +40,7 @@ export function UserEditorDialog({
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<UserRole>("USER");
   const [isActive, setIsActive] = useState(true);
+  const [permissions, setPermissions] = useState<PermissionKey[]>(REGULAR_USER_PRESET);
 
   useEffect(() => {
     if (!open) return;
@@ -45,6 +48,7 @@ export function UserEditorDialog({
     setPassword("");
     setRole(user?.role ?? "USER");
     setIsActive(user?.isActive ?? true);
+    setPermissions(mode === "create" ? REGULAR_USER_PRESET : mode === "restore" ? (user?.role === "ADMIN" ? ADMIN_PRESET : REGULAR_USER_PRESET) : (user?.permissions || []));
   }, [open, user, mode]);
 
   if (!open) return null;
@@ -52,12 +56,15 @@ export function UserEditorDialog({
 
   function submit(event: FormEvent) {
     event.preventDefault();
+    const changedSensitive = ["transport.create", "transport.release", "users.manage", "issue.cr_references", "issue.glpi_references"]
+      .some((key) => Boolean(user?.permissions.includes(key as PermissionKey)) !== permissions.includes(key as PermissionKey));
+    if (changedSensitive && !window.confirm("Confirm the requested sensitive permission changes?")) return;
     if (mode === "edit") {
-      void onSubmit({ username, role });
+      void onSubmit({ username, role, permissions });
     } else if (mode === "restore") {
-      void onSubmit({ password, role, isActive });
+      void onSubmit({ password, role, isActive, permissions });
     } else {
-      void onSubmit({ username, password, role, isActive });
+      void onSubmit({ username, password, role, isActive, permissions });
     }
   }
 
@@ -85,7 +92,7 @@ export function UserEditorDialog({
           <select
             value={role}
             disabled={roleLocked}
-            onChange={(event) => setRole(event.target.value as UserRole)}
+            onChange={(event) => { const nextRole = event.target.value as UserRole; setRole(nextRole); setPermissions(normalizePermissions(permissions.filter((key) => nextRole === "ADMIN" || !PERMISSION_CATALOG.find((item) => item.key === key && "adminOnly" in item && item.adminOnly)), nextRole)); }}
           >
             <option value="USER">USER</option>
             <option value="ADMIN">ADMIN</option>
@@ -99,6 +106,11 @@ export function UserEditorDialog({
           />
           Active after {mode === "restore" ? "restore" : "creation"}
         </label>}
+        <div className="user-permissions__presets">
+          <button type="button" className="button" onClick={() => setPermissions(role === "ADMIN" ? ADMIN_PRESET : REGULAR_USER_PRESET)}>Use role preset</button>
+          <button type="button" className="button" onClick={() => setPermissions([])}>Clear all</button>
+        </div>
+        <UserPermissionsPanel role={role} value={permissions} onChange={setPermissions} disabled={busy} />
         {error && <p role="alert" className="user-dialog__error">{error}</p>}
         <footer>
           <button type="button" className="button" onClick={onClose} disabled={busy}>Cancel</button>

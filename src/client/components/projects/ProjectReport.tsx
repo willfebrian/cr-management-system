@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { PermissionKey } from "../../../shared/permissions.js";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import type { ProjectDetail as ProjectDetailModel, ProjectListResult, ProjectStatus } from "../../../shared/projectTypes.js";
 import { fetchProjectDetail, fetchProjects } from "../../api/projectApi.js";
@@ -27,6 +28,7 @@ type ProjectReportProps = {
   onOpenIssue?: (issueId: number) => void;
   onOpenIncompleteItem?: (issueId: number, item: IncompleteItem) => void;
   userRole?: "ADMIN" | "USER";
+  permissions?: PermissionKey[];
   onDeleted?: () => void;
 };
 
@@ -89,6 +91,7 @@ export function ProjectReport(props: ProjectReportProps) {
       onOpenIssue={props.onOpenIssue}
       onOpenIncompleteItem={props.onOpenIncompleteItem}
       userRole={props.userRole}
+      permissions={props.permissions}
       onDeleted={() => {
         setRefreshToken((value) => value + 1);
         props.onDeleted?.();
@@ -106,12 +109,13 @@ type ProjectReportViewProps = {
   onOpenIssue?: (issueId: number) => void;
   onOpenIncompleteItem?: (issueId: number, item: IncompleteItem) => void;
   userRole?: "ADMIN" | "USER";
+  permissions?: PermissionKey[];
   onDeleted?: () => void;
   onPrevious?: () => void;
   onNext?: () => void;
 };
 
-export function ProjectReportView({ state, onSelect, onChange, onOpenIssue, onOpenIncompleteItem, userRole, onDeleted, onPrevious, onNext }: ProjectReportViewProps) {
+export function ProjectReportView({ state, onSelect, onChange, onOpenIssue, onOpenIncompleteItem, userRole, permissions, onDeleted, onPrevious, onNext }: ProjectReportViewProps) {
   if (state.kind === "loading") return <TableDataLoader text="Loading Projects..." />;
   if (state.kind === "empty") return <p className="project-state">No Projects found.</p>;
   if (state.kind === "error") return <p className="project-error" role="alert">{state.message}</p>;
@@ -147,6 +151,7 @@ export function ProjectReportView({ state, onSelect, onChange, onOpenIssue, onOp
           actions={userRole ? <ProjectActions
             project={state.detail.project}
             userRole={userRole}
+            permissions={permissions}
             onChange={state.detail.project.projectStatus !== "cancelled" && onChange
               ? () => onChange(state.detail!.project.id)
               : undefined}

@@ -25,6 +25,7 @@ async function requestJson<T>(url: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(url, { ...init, credentials: "include" });
   const body = await response.json().catch(() => ({})) as Record<string, unknown>;
   if (!response.ok) {
+    if (response.status === 403 && typeof window !== "undefined") window.dispatchEvent(new Event("permissions-changed"));
     throw new ManagedUserApiError(
       typeof body.message === "string"
         ? body.message
@@ -53,6 +54,7 @@ export async function fetchManagedUsers(
   if (filters.role) params.set("role", filters.role);
   if (filters.status) params.set("status", filters.status);
   if (filters.scope) params.set("scope", filters.scope);
+  if (filters.permission) params.set("permission", filters.permission);
   if (filters.page) params.set("page", String(filters.page));
   if (filters.pageSize) params.set("pageSize", String(filters.pageSize));
   const suffix = params.size ? `?${params}` : "";
@@ -164,5 +166,10 @@ export async function restoreManagedUser(
     `/api/users/${userId}/restore`,
     jsonInit("POST", payload)
   );
+  return body.user;
+}
+
+export async function updateManagedUserPermissions(userId: number, permissions: string[]): Promise<ManagedUser> {
+  const body = await requestJson<{ user: ManagedUser }>(`/api/users/${userId}/permissions`, jsonInit("PUT", { permissions }));
   return body.user;
 }

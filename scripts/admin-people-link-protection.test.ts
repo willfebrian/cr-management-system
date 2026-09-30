@@ -28,6 +28,7 @@ test("rejects person deletion by a non-admin account", async () => {
       id: 7,
       username: "REGULAR_USER",
       role: "USER",
+      permissions: [],
       mustChangePassword: false
     };
     next();

@@ -25,3 +25,9 @@ export function writableSettings(settings: Record<string, string>, permissions: 
     return required && permissions.includes(required === "settings.appearance" ? "settings.general" : required);
   });
 }
+
+export function transportSystemOptions(rows: Array<Record<string, unknown>>) {
+  return rows.map(({ id, code, description, environment, is_active, created_at }) => ({
+    id, code, description, environment, is_active, created_at
+  }));
+}

@@ -13,6 +13,7 @@ import type {
   UserAuditEntry
 } from "../../../shared/userManagementTypes";
 import * as defaultApi from "../../api/userManagementApi";
+import { PERMISSION_CATALOG, type PermissionKey } from "../../../shared/permissions";
 import { ManagedUserApiError } from "../../api/userManagementApi";
 import { TableDataLoader } from "../InteractiveLoaders";
 import { UserDetailPanel } from "./UserDetailPanel";
@@ -27,7 +28,7 @@ import {
   UserPersonAssignmentDialog
 } from "./UserPersonAssignmentDialog";
 
-type FilterState = { q: string; role: string; status: string };
+type FilterState = { q: string; role: string; status: string; permission?: PermissionKey | "" };
 
 type ViewProps = {
   currentUserId: number;
@@ -73,6 +74,11 @@ export function UserManagementWorkspaceView({
         <option value="">All roles</option>
         <option value="ADMIN">ADMIN</option>
         <option value="USER">USER</option>
+      </select>
+      <select aria-label="Filter permission" value={filters.permission || ""}
+        onChange={(event) => onFiltersChange({ ...filters, permission: event.target.value as PermissionKey | "" })}>
+        <option value="">All permissions</option>
+        {PERMISSION_CATALOG.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
       </select>
       <select
         aria-label="Filter status"
@@ -155,7 +161,7 @@ type PersonDialogState = {
 };
 
 type Props = {
-  currentUser: { id: number; username: string; role: "ADMIN" | "USER" };
+  currentUser: { id: number; username: string; role: "ADMIN" | "USER"; permissions?: PermissionKey[] };
   onSessionInvalidated?(): void;
   api?: Api;
 };
@@ -165,6 +171,7 @@ export function UserManagementWorkspace({
   onSessionInvalidated,
   api = defaultApi
 }: Props) {
+  const canManage = currentUser.role === "ADMIN" && Boolean(currentUser.permissions?.includes("users.manage"));
   const [scope, setScope] = useState<ManagedUserScope>("current");
   const [filters, setFilters] = useState<FilterState>({ q: "", role: "", status: "" });
   const [users, setUsers] = useState<ManagedUser[]>([]);
@@ -189,6 +196,7 @@ export function UserManagementWorkspace({
         role: (filters.role || undefined) as ManagedUserListFilters["role"],
         status: (filters.status || undefined) as ManagedUserListFilters["status"],
         scope,
+        permission: filters.permission || undefined,
         pageSize: 100
       });
       setUsers(result.users);
@@ -211,7 +219,7 @@ export function UserManagementWorkspace({
 
   const selectedUser = users.find((user) => user.id === selectedUserId) ?? null;
   const activeAdminCount = useMemo(
-    () => users.filter((user) => user.role === "ADMIN" && user.isActive && !user.deletedAt).length,
+    () => users.filter((user) => user.role === "ADMIN" && user.isActive && !user.deletedAt && user.permissions?.includes("users.manage")).length,
     [users]
   );
 
@@ -333,6 +341,7 @@ export function UserManagementWorkspace({
       }
       closeDialogs();
       await loadUsers();
+      window.dispatchEvent(new Event("permissions-changed"));
     } catch (nextError) {
       const archivedId = conflictRestoreTarget(nextError);
       if (archivedId) {
@@ -416,13 +425,14 @@ export function UserManagementWorkspace({
       }}
       onFiltersChange={setFilters}
       onSelect={setSelectedUserId}
-      onCreate={() => setEditor({ mode: "create" })}
+      onCreate={() => { if (canManage) setEditor({ mode: "create" }); }}
     >
       {selectedUser ? <UserDetailPanel
         user={selectedUser}
         audit={audit}
         currentUserId={currentUser.id}
         activeAdminCount={activeAdminCount}
+        canManage={canManage}
         onEdit={() => setEditor({ mode: "edit", user: selectedUser })}
         onStatusChange={() => setAction({ kind: "status", user: selectedUser })}
         onResetPassword={() => setAction({ kind: "reset", user: selectedUser })}
@@ -435,7 +445,7 @@ export function UserManagementWorkspace({
       /> : !loading && <p className="user-management__empty">Select a user to view details.</p>}
     </UserManagementWorkspaceView>
     <UserEditorDialog
-      open={Boolean(editor)}
+      open={canManage && Boolean(editor)}
       mode={editor?.mode ?? "create"}
       user={editor?.user}
       roleLocked={editor?.mode === "edit" && editor.user?.id === currentUser.id}

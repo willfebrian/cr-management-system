@@ -1,3 +1,5 @@
+import { can, canOpenView, firstAccessibleView } from "../permissions";
+import type { PermissionKey } from "../../shared/permissions";
 import { applyCustomStatusColors } from "../utils/tagColors";
 import { applyCustomFontSize, getActiveAppearanceKey } from "../utils/fontSize";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
@@ -254,10 +256,31 @@ function ChangePasswordScreen({ onDone }: { onDone: () => void }) {
   return <div className="auth-screen"><form className="auth-panel" onSubmit={submit}><div className="brand"><Database size={22} /><span>CR Management System</span></div><h1>Change password</h1><p>For security, change the initial password before continuing.</p><label>Current password<input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label><label>New password<input autoFocus type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={8} /></label>{error ? <div className="auth-error">{error}</div> : null}<button className="primary-button" disabled={busy}><KeyRound size={17} /> {busy ? "Saving..." : "Save password"}</button></form></div>;
 }
 
+function LimitedPasswordForm() {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [message, setMessage] = useState("");
+  return <form onSubmit={(event) => {
+    event.preventDefault();
+    void changePassword(current, next).then(() => setMessage("Password changed.")).catch((error) => setMessage(error instanceof Error ? error.message : "Password change failed."));
+  }}>
+    <label>Current password<input type="password" value={current} onChange={(event) => setCurrent(event.target.value)} required /></label>
+    <label>New password<input type="password" value={next} onChange={(event) => setNext(event.target.value)} minLength={8} required /></label>
+    <button type="submit">Save password</button>
+    {message ? <p role="status">{message}</p> : null}
+  </form>;
+}
+
 export function App() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [showLimitedPassword, setShowLimitedPassword] = useState(false);
   useEffect(() => { fetchCurrentUser().then((result) => setAuthUser(result.user)).catch(() => setAuthUser(null)).finally(() => setAuthLoading(false)); }, []);
+  useEffect(() => {
+    const refresh = () => { void fetchCurrentUser().then((result) => setAuthUser(result.user)).catch(() => setAuthUser(null)); };
+    window.addEventListener("permissions-changed", refresh);
+    return () => window.removeEventListener("permissions-changed", refresh);
+  }, []);
 
   // Automatically load and apply appearance settings (font size & tag colors) on startup, login, and page refresh.
   // Wait for auth to settle first — otherwise this fires once with username=undefined (before
@@ -272,7 +295,7 @@ export function App() {
     applyCustomFontSize({}, username);
     applyCustomStatusColors({}, username);
 
-    fetchAdminSettings()
+    if (authUser && canOpenView(authUser, "settings")) fetchAdminSettings()
       .then((dbSettings) => {
         // Cache the system settings in local storage so index.html can read them synchronously on next refresh
         // This completely eliminates the layout shift (flicker) on all future page loads!
@@ -303,6 +326,12 @@ export function App() {
   };
 
   const [view, setView] = useState<View>("dashboard");
+  useEffect(() => {
+    if (authUser && !canOpenView(authUser, view)) {
+      const next = firstAccessibleView(authUser);
+      if (next) setView(next as View);
+    }
+  }, [authUser, view]);
   const workspaceRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     workspaceRef.current?.scrollTo({ top: 0, left: 0 });
@@ -516,6 +545,7 @@ export function App() {
   const [releaseRefreshToken, setReleaseRefreshToken] = useState(0);
 
   useEffect(() => {
+    if (!authUser || !["settings.target_systems", "transport.create", "transport.release"].some((key) => can(authUser, key as PermissionKey))) return;
     fetchSapSystems()
       .then((res) => {
         if (res.rows && res.rows.length > 0) {
@@ -536,7 +566,7 @@ export function App() {
         }
       })
       .catch(() => {});
-  }, []);
+  }, [authUser?.id, authUser?.permissions.join(",")]);
 
   useEffect(() => {
     const handleTabChange = (e: Event) => {
@@ -566,7 +596,10 @@ export function App() {
   async function load(nextFilters = filters) {
     setError("");
     try {
-      await Promise.all([loadDashboardData(), loadReport(nextFilters)]);
+      await Promise.all([
+        can(authUser, "dashboard.view") ? loadDashboardData() : Promise.resolve(),
+        can(authUser, "transport.view") ? loadReport(nextFilters) : Promise.resolve()
+      ]);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -762,13 +795,14 @@ export function App() {
       const project = await fetchProjectDetail(projectId);
       setProjectEditorDetail(project);
       setProjectFormDirty(false);
-      setView("project-change");
+      if (canOpenView(authUser, "project-change")) setView("project-change");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
   }
 
   function navigateTo(nextView: View) {
+    if (!canOpenView(authUser, nextView)) return false;
     if (nextView === view && nextView !== "issue-create" && nextView !== "issue-change") return true;
     const commitViewNavigation = () => {
       setIssuePageRefreshToken((current) => nextIssuePageRefreshToken(current, nextView));
@@ -843,12 +877,10 @@ export function App() {
     window.setTimeout(() => setToast(null), 4500);
   }
 
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { if (authUser) void load(); }, [authUser?.id]);
 
   useEffect(() => {
-    if (view !== "dashboard") return;
+    if (view !== "dashboard" || !can(authUser, "dashboard.view")) return;
     if (dashboardViewEffectMountedRef.current) {
       loadDashboardData().catch((err) => setError(err instanceof Error ? err.message : String(err)));
     } else {
@@ -858,10 +890,10 @@ export function App() {
       loadDashboardData().catch((err) => setError(err instanceof Error ? err.message : String(err)));
     }, DASHBOARD_DB_REFRESH_MS);
     return () => window.clearInterval(interval);
-  }, [view, trendFilters.fromPeriod, trendFilters.toPeriod]);
+  }, [view, trendFilters.fromPeriod, trendFilters.toPeriod, authUser?.permissions.join(",")]);
 
   useEffect(() => {
-    if (view !== "report") return;
+    if (view !== "report" || !can(authUser, "transport.view")) return;
     return startReportDbRefresh(() => {
       loadReport(filters).catch((err) => setError(err instanceof Error ? err.message : String(err)));
       if (selected) {
@@ -869,7 +901,7 @@ export function App() {
         fetchCrDetail(key.trkorr, key.sapSystemCode).then(setDetail).catch((err) => setError(err.message));
       }
     }, REPORT_DB_REFRESH_MS);
-  }, [view, filters, selected]);
+  }, [view, filters, selected, authUser?.permissions.join(",")]);
 
   useEffect(() => {
     if (view !== "issue-display") return;
@@ -1023,6 +1055,9 @@ export function App() {
   if (authLoading) return <AppLoadingScreen />;
   if (!authUser) return <LoginScreen onLogin={(user) => { setAuthUser(user); window.location.reload(); }} />;
   if (authUser.mustChangePassword) return <ChangePasswordScreen onDone={() => window.location.reload()} />;
+  if (!firstAccessibleView(authUser)) return <div className="auth-screen"><div className="auth-panel"><h1>Access limited</h1><p>No features are assigned to your account. Contact an administrator for access.</p><button onClick={() => { void logout().finally(() => window.location.reload()); }}>Logout</button><button onClick={() => setShowLimitedPassword(true)}>Change password</button>{showLimitedPassword ? <LimitedPasswordForm /> : null}</div></div>;
+
+  if (!canOpenView(authUser, view)) return <AppLoadingScreen />;
 
   return (
     <main className="app-shell">
@@ -1032,10 +1067,10 @@ export function App() {
           <span>CR Management System</span>
         </div>
         <div className="sidebar-nav">
-        <button className={view === "dashboard" ? "active" : ""} onClick={() => { setExpandedSidebarGroup(null); navigateTo("dashboard"); }}>
+        {can(authUser, "dashboard.view") ? <button className={view === "dashboard" ? "active" : ""} onClick={() => { setExpandedSidebarGroup(null); navigateTo("dashboard"); }}>
           <BarChart3 size={18} /> Dashboard
-        </button>
-        <div className={`sidebar-group ${view === "report" || view === "cr-transport-create" || view === "cr-transport-release" ? "active" : ""}`}>
+        </button> : null}
+        {(can(authUser, "transport.view") || can(authUser, "transport.create") || can(authUser, "transport.release")) ? <div className={`sidebar-group ${view === "report" || view === "cr-transport-create" || view === "cr-transport-release" ? "active" : ""}`}>
           <button
             className={view === "report" || view === "cr-transport-create" || view === "cr-transport-release" ? "active" : ""}
             onClick={() => {
@@ -1046,12 +1081,12 @@ export function App() {
             <FileSearch size={18} /> CR Transport
           </button>
           {expandedSidebarGroup === "cr-transport" ? <div className="sidebar-submenu">
-            <button className={view === "report" ? "active" : ""} onClick={() => navigateTo("report")}><FileSearch size={15} /> Report</button>
-            {authUser.role === "ADMIN" ? <button className={view === "cr-transport-create" ? "active" : ""} onClick={() => navigateTo("cr-transport-create")}><Plus size={15} /> Create</button> : null}
-            {authUser.role === "ADMIN" ? <button className={view === "cr-transport-release" ? "active" : ""} onClick={() => navigateTo("cr-transport-release")}><Unlock size={15} /> Release</button> : null}
+            {can(authUser, "transport.view") ? <button className={view === "report" ? "active" : ""} onClick={() => navigateTo("report")}><FileSearch size={15} /> Report</button> : null}
+            {can(authUser, "transport.create") ? <button className={view === "cr-transport-create" ? "active" : ""} onClick={() => navigateTo("cr-transport-create")}><Plus size={15} /> Create</button> : null}
+            {can(authUser, "transport.release") ? <button className={view === "cr-transport-release" ? "active" : ""} onClick={() => navigateTo("cr-transport-release")}><Unlock size={15} /> Release</button> : null}
           </div> : null}
-        </div>
-        <div className={`sidebar-group ${view.startsWith("issue-") ? "active" : ""}`}>
+        </div> : null}
+        {(can(authUser, "issue.view") || can(authUser, "issue.create")) ? <div className={`sidebar-group ${view.startsWith("issue-") ? "active" : ""}`}>
           <button className={view.startsWith("issue-") ? "active" : ""} onClick={() => {
             setExpandedSidebarGroup(prev => nextExpandedSidebarGroup(prev, "issue"));
             setChangeIssueInitialId(null);
@@ -1074,12 +1109,12 @@ export function App() {
               }}>
                 <FileSearch size={15} /> Report
               </button>
-              <button className={view === "issue-create" ? "active" : ""} onClick={() => {
+              {can(authUser, "issue.create") ? <button className={view === "issue-create" ? "active" : ""} onClick={() => {
                 setChangeIssueInitialId(null);
                 setChangeIssueInitialAction("");
                 setChangeIssueInitialItem(null);
                 navigateTo("issue-create");
-              }}><Plus size={15} /> Create</button>
+              }}><Plus size={15} /> Create</button> : null}
               {view === "issue-change" ? (
                 <button className="active" onClick={() => {}}>
                   <PencilLine size={15} /> Change
@@ -1087,8 +1122,8 @@ export function App() {
               ) : null}
             </div>
           ) : null}
-        </div>
-        {PROJECTS_ENABLED ? <div className={`sidebar-group ${view.startsWith("project-") ? "active" : ""}`}>
+        </div> : null}
+        {PROJECTS_ENABLED && can(authUser, "project.view") ? <div className={`sidebar-group ${view.startsWith("project-") ? "active" : ""}`}>
           <button className={view.startsWith("project-") ? "active" : ""} onClick={() => {
             setExpandedSidebarGroup(prev => nextExpandedSidebarGroup(prev, "project"));
             setProjectEditorDetail(null);
@@ -1099,10 +1134,10 @@ export function App() {
           {expandedSidebarGroup === "project" ? (
             <div className="sidebar-submenu">
               <button className={view === "project-report" ? "active" : ""} onClick={() => navigateTo("project-report")}><FileSearch size={15} /> Report</button>
-              <button className={view === "project-create" ? "active" : ""} onClick={() => {
+              {can(authUser, "project.create") ? <button className={view === "project-create" ? "active" : ""} onClick={() => {
                 setProjectEditorDetail(null);
                 navigateTo("project-create");
-              }}><Plus size={15} /> Create</button>
+              }}><Plus size={15} /> Create</button> : null}
               {view === "project-change" ? (
                 <button className="active" onClick={() => {}}>
                   <PencilLine size={15} /> Change
@@ -1111,24 +1146,24 @@ export function App() {
             </div>
           ) : null}
         </div> : null}
-        {authUser.role === "ADMIN" ? (
+        {can(authUser, "master_data.view") ? (
           <div className={`sidebar-group ${view === "master-data" ? "active" : ""}`}>
             <button className={view === "master-data" ? "active" : ""} onClick={() => { setExpandedSidebarGroup(null); navigateTo("master-data"); }}>
               <Database size={18} /> Master Data
             </button>
           </div>
         ) : null}
-        <div className={`sidebar-group ${view === "settings" ? "active" : ""}`}>
+        {canOpenView(authUser, "settings") ? <div className={`sidebar-group ${view === "settings" ? "active" : ""}`}>
           <button className={view === "settings" ? "active" : ""} onClick={() => { setExpandedSidebarGroup(null); navigateTo("settings"); }}>
             <Sliders size={18} /> Settings
           </button>
-        </div>
-        <div className={`sidebar-group ${view === "audit-log" ? "active" : ""}`}>
+        </div> : null}
+        {can(authUser, "audit.view") ? <div className={`sidebar-group ${view === "audit-log" ? "active" : ""}`}>
           <button className={view === "audit-log" ? "active" : ""} onClick={() => { setExpandedSidebarGroup(null); navigateTo("audit-log"); }}>
             <ShieldCheck size={18} /> Audit Log
           </button>
-        </div>
-        {USER_MANAGEMENT_ENABLED && authUser.role === "ADMIN" ? (
+        </div> : null}
+        {USER_MANAGEMENT_ENABLED && can(authUser, "users.view") ? (
           <button className={view === "user-management" ? "active" : ""} onClick={() => { setExpandedSidebarGroup(null); navigateTo("user-management"); }}>
             <Users size={18} /> User Management
           </button>
@@ -1185,7 +1220,7 @@ export function App() {
               </div>
             ) : null}
           </div>
-          {view === "user-management" ? (
+          {view === "user-management" && can(authUser, "users.manage") ? (
             <div className="topbar-action-slot" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               <div style={{ display: "flex", gap: "4px", background: "var(--color-bg-subtle, #f1f5f9)", padding: "4px", borderRadius: "8px", border: "1px solid var(--color-border, #e2e8f0)" }}>
                 <button
@@ -1278,9 +1313,9 @@ export function App() {
             </div>
           ) : view === "settings" ? (
             <div className="topbar-action-slot" style={{ display: "flex", gap: "6px", background: "var(--color-bg-subtle, #f1f5f9)", padding: "4px", borderRadius: "8px", border: "1px solid var(--color-border, #e2e8f0)" }}>
-              {authUser?.role === "ADMIN" && (
+              {(can(authUser, "settings.target_systems") || can(authUser, "settings.general") || can(authUser, "settings.ai") || can(authUser, "settings.templates")) && (
                 <>
-                  <button
+                  {can(authUser, "settings.target_systems") ? <button
                     type="button"
                     onClick={() => window.dispatchEvent(new CustomEvent("set-settings-tab", { detail: "sap_systems" }))}
                     style={{
@@ -1295,8 +1330,8 @@ export function App() {
                     }}
                   >
                     Target Systems
-                  </button>
-                  <button
+                  </button> : null}
+                  {can(authUser, "settings.general") || can(authUser, "settings.ai") || can(authUser, "settings.templates") ? <button
                     type="button"
                     onClick={() => window.dispatchEvent(new CustomEvent("set-settings-tab", { detail: "general_settings" }))}
                     style={{
@@ -1311,8 +1346,8 @@ export function App() {
                     }}
                   >
                     General Settings
-                  </button>
-                  <button
+                  </button> : null}
+                  {can(authUser, "settings.ai") ? <button
                     type="button"
                     onClick={() => window.dispatchEvent(new CustomEvent("set-settings-tab", { detail: "ai_instructions" }))}
                     style={{
@@ -1327,10 +1362,10 @@ export function App() {
                     }}
                   >
                     AI Instructions
-                  </button>
+                  </button> : null}
                 </>
               )}
-              <button
+              {can(authUser, "settings.appearance") ? <button
                 type="button"
                 onClick={() => window.dispatchEvent(new CustomEvent("set-settings-tab", { detail: "appearance" }))}
                 style={{
@@ -1345,7 +1380,7 @@ export function App() {
                 }}
               >
                 Appearance
-              </button>
+              </button> : null}
             </div>
           ) : view === "dashboard" ? (
             <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
@@ -1442,7 +1477,7 @@ export function App() {
               <button
                 type="button"
                 className="primary sync-button"
-                disabled={loading || syncSystems.length === 0}
+                disabled={!can(authUser, "transport.sync") || loading || syncSystems.length === 0}
                 onClick={() => runSync()}
                 style={{
                   display: "inline-flex",
@@ -2178,12 +2213,12 @@ export function App() {
 
                 </div>
                 <div className="report-action-group">
-              <button type="button" className="secondary report-export-button" disabled={exportingReport} onClick={async () => {
+              <button type="button" className="secondary report-export-button" onClick={async () => {
                 setExportingReport(true);
                 try { await downloadReportExcel("cr", filters); }
                 catch (err) { setError(err instanceof Error ? err.message : String(err)); }
                 finally { setExportingReport(false); }
-              }}><FileOutput size={15} /> {exportingReport ? "Exporting..." : "Export Excel"}</button>
+              }} disabled={exportingReport || !can(authUser, "transport.export")}><FileOutput size={15} /> {exportingReport ? "Exporting..." : "Export Excel"}</button>
 
                 </div>
               </div>
@@ -3350,12 +3385,12 @@ export function App() {
 
                 </div>
                 <div className="report-action-group">
-              <button type="button" className="secondary report-export-button" disabled={exportingReport} onClick={async () => {
+              <button type="button" className="secondary report-export-button" onClick={async () => {
                 setExportingReport(true);
                 try { await downloadReportExcel("issue", issueFilters); }
                 catch (err) { setError(err instanceof Error ? err.message : String(err)); }
                 finally { setExportingReport(false); }
-              }}><FileOutput size={15} /> {exportingReport ? "Exporting..." : "Export Excel"}</button>
+              }} disabled={exportingReport || !can(authUser, "issue.export")}><FileOutput size={15} /> {exportingReport ? "Exporting..." : "Export Excel"}</button>
               {/* Column Menu Button for Issue */}
               {view === "issue-display" && (
                 <IssueColumnMenu
@@ -3743,9 +3778,9 @@ export function App() {
             setView("dashboard");
           }}
         /> : view === "master-data" ? (
-          <MasterDataWorkspace mode="master-data" isAdmin={authUser.role === "ADMIN"} username={authUser.username} />
+          <MasterDataWorkspace mode="master-data" isAdmin={authUser.role === "ADMIN"} username={authUser.username} permissions={authUser.permissions} />
         ) : view === "settings" ? (
-          <MasterDataWorkspace mode="settings" isAdmin={authUser.role === "ADMIN"} username={authUser.username} />
+          <MasterDataWorkspace mode="settings" isAdmin={authUser.role === "ADMIN"} username={authUser.username} permissions={authUser.permissions} />
         ) : view === "audit-log" ? (
           <AuditLogReport />
         ) : view === "dashboard" ? (
@@ -3759,7 +3794,7 @@ export function App() {
             onTrendClick={openReportFromTrend}
             onIssueTrendClick={openIssueFromTrend}
             onMetricClick={openMetricPopup}
-            onNavigateView={(v) => setView(v)}
+            onNavigateView={(v) => navigateTo(v)}
             onOpenChangeIssue={(issueId) => {
               if (!navigateTo("issue-change")) return;
               setExpandedSidebarGroup("issue");
@@ -3779,8 +3814,8 @@ export function App() {
             onRequestCreated={() => {
               setSyncRefreshToken((current) => current + 1);
               void Promise.all([
-                loadReport({ ...filters, page: 1 }),
-                loadIssues({ ...issueFilters, page: 1 })
+                can(authUser, "transport.view") ? loadReport({ ...filters, page: 1 }) : Promise.resolve(),
+                can(authUser, "issue.view") ? loadIssues({ ...issueFilters, page: 1 }) : Promise.resolve()
               ]).catch((err) => setError(err instanceof Error ? err.message : String(err)));
             }}
           />
@@ -3823,6 +3858,7 @@ export function App() {
           />
         ) : view === "issue-display" ? (
           <IssueDisplay
+            accessUser={authUser}
             issues={issues}
             filters={draftIssueFilters}
             visibleIssueColumns={visibleIssueColumns}
@@ -3846,7 +3882,7 @@ export function App() {
               setChangeIssueInitialItem(null);
               navigateTo("issue-change");
             }}
-            canSendReminder={Boolean(authUser?.isReminder)}
+            canSendReminder={can(authUser, "issue.reminder")}
             onSendReminder={async (issueId) => {
               try {
                 const preview = await fetchIssueReminderPreview(issueId);
@@ -3912,6 +3948,7 @@ export function App() {
             key={`issue-create-${issuePageRefreshToken}`}
             mode="create"
             detail={null}
+            accessUser={authUser}
             layoutStyleOverride={createFormLayoutStyle}
             externalCreateMode={issueCreateMode}
             onExternalCreateModeChange={setIssueCreateMode}
@@ -3933,10 +3970,10 @@ export function App() {
                 setIssueFormDirty(false);
                 setSyncRefreshToken((current) => current + 1);
                 showToast("success", "Issue saved.");
-                setView("issue-change");
+                setView(canOpenView(authUser, "issue-change") ? "issue-change" : "issue-display");
                 await Promise.all([
                   loadIssues({ ...issueFilters, page: 1 }),
-                  loadDashboardData()
+                  can(authUser, "dashboard.view") ? loadDashboardData() : Promise.resolve()
                 ]);
               } catch (err) {
                 setError(err instanceof Error ? err.message : String(err));
@@ -3948,6 +3985,7 @@ export function App() {
             q={projectSearch}
             status={projectStatus}
             userRole={authUser.role}
+            permissions={authUser.permissions}
             onCreate={() => {
               setProjectEditorDetail(null);
               navigateTo("project-create");
@@ -3970,7 +4008,7 @@ export function App() {
               setProjectFormDirty(false);
               setProjectEditorDetail(saved);
               showToast("success", "Project created.");
-              setView("project-change");
+              setView(canOpenView(authUser, "project-change") ? "project-change" : "project-report");
             }}
           />
         ) : view === "project-change" ? (
@@ -3988,6 +4026,7 @@ export function App() {
             q={projectSearch}
             status={projectStatus}
             userRole={authUser.role}
+            permissions={authUser.permissions}
             onChange={openProjectEditor}
             onOpenIssue={openIssueFromProjectLink}
             onOpenIncompleteItem={openIncompleteIssueFromProject}
@@ -4008,7 +4047,8 @@ export function App() {
             onTargetSystemChange={setCrTargetSystem}
             sapSystems={sapSystems}
             onNotify={showToast}
-            canSendReminder={Boolean(authUser?.isReminder)}
+            canSendReminder={can(authUser, "issue.reminder")}
+            accessUser={authUser}
             onDirtyChange={setIssueFormDirty}
             onSave={async (payload) => {
               setError("");
@@ -4021,10 +4061,10 @@ export function App() {
                 setIssueFormDirty(false);
                 setSyncRefreshToken((current) => current + 1);
                 showToast("success", "Issue saved.");
-                setView("issue-change");
+                setView(canOpenView(authUser, "issue-change") ? "issue-change" : "issue-display");
                 await Promise.all([
                   loadIssues({ ...issueFilters, page: 1 }),
-                  loadDashboardData()
+                  can(authUser, "dashboard.view") ? loadDashboardData() : Promise.resolve()
                 ]);
               } catch (err) {
                 setError(err instanceof Error ? err.message : String(err));
@@ -4041,7 +4081,7 @@ export function App() {
                 setView("issue-display");
                 await Promise.all([
                   loadIssues({ ...issueFilters, page: 1 }),
-                  loadDashboardData()
+                  can(authUser, "dashboard.view") ? loadDashboardData() : Promise.resolve()
                 ]);
               } catch (err) {
                 setError(err instanceof Error ? err.message : String(err));
@@ -4058,7 +4098,7 @@ export function App() {
                 setView("issue-display");
                 await Promise.all([
                   loadIssues({ ...issueFilters, page: 1 }),
-                  loadDashboardData()
+                  can(authUser, "dashboard.view") ? loadDashboardData() : Promise.resolve()
                 ]);
               } catch (err) {
                 setError(err instanceof Error ? err.message : String(err));
@@ -5281,6 +5321,7 @@ function Report({
 }
 
 function IssueDisplay({
+  accessUser,
   issues,
   filters,
   pagination,
@@ -5305,6 +5346,7 @@ function IssueDisplay({
   onOpenCr,
   visibleIssueColumns = [...DEFAULT_ISSUE_COLUMNS]
 }: {
+  accessUser?: AuthUser | null;
   issues: IssueRow[];
   filters: IssueFilters;
   pagination: { page: number; pageSize: number; total: number; totalPages: number };
@@ -5349,6 +5391,7 @@ function IssueDisplay({
   const selectedIssue = issues.find((issue) => issue.id === selectedId) || detail?.issue || null;
   const hasDetail = Boolean(selectedId && selectedIssue);
   const canGenerateCrForm = Boolean(detail?.crLinks?.length);
+  const allowed = (key: PermissionKey) => accessUser ? can(accessUser, key) : true;
   const primaryGlpiTicket = detail?.glpi?.find((ticket) => ticket.is_primary)?.ticket_number
     ?? detail?.glpi?.[0]?.ticket_number
     ?? selectedIssue?.primary_glpi_ticket;
@@ -5405,7 +5448,7 @@ function IssueDisplay({
         <div className="issue-batch-toolbar">
           <strong>{selectedBatchIssueIds.size} Issues selected</strong>
           <button type="button" className="secondary issue-batch-clear" onClick={() => onSelectedBatchIssueIdsChange(new Set())}>Clear selection</button>
-          <button type="button" className="issue-batch-download" onClick={() => void onDownloadCrForms([...selectedBatchIssueIds])}><FileOutput size={15} /> Download CR Forms (.zip)</button>
+          {allowed("issue.generate_cr_transport_form") ? <button type="button" className="issue-batch-download" onClick={() => void onDownloadCrForms([...selectedBatchIssueIds])}><FileOutput size={15} /> Download CR Forms (.zip)</button> : null}
         </div>
       ) : null}
       <div className="report-layout issue-layout controlled-dual-pane detail-closed">
@@ -5569,6 +5612,7 @@ function IssueDisplay({
                               <button
                                 type="button"
                                 onClick={() => onChangeIssue(issue.id)}
+                                disabled={!allowed("issue.edit")}
                                 title="Edit Issue"
                                 style={{
                                   display: "inline-flex",
@@ -5641,14 +5685,13 @@ function IssueDisplay({
                                     }}
                                   >
                                     <button
-                                      type="button"
-                                      disabled={!canSendReminder}
+                                      type="button" disabled={!allowed("issue.reminder") || !canSendReminder}
                                       onClick={() => { setRowMenuOpenId(null); setRowMenuPos(null); onSendReminder?.(issue.id); }}
                                     >
                                       <Mail size={14} /> Send Reminder Email
                                     </button>
                                     <button
-                                      type="button"
+                                      type="button" disabled={!allowed("issue.edit")}
                                       onClick={() => {
                                         setRowMenuOpenId(null);
                                         setRowMenuPos(null);
@@ -5658,7 +5701,7 @@ function IssueDisplay({
                                       <PencilLine size={14} /> Change Issue
                                     </button>
                                     <button
-                                      type="button"
+                                      type="button" disabled={!allowed("issue.generate_cr_transport_form")}
                                       onClick={() => {
                                         setRowMenuOpenId(null);
                                         setRowMenuPos(null);
@@ -5668,7 +5711,7 @@ function IssueDisplay({
                                       <FileSearch size={14} /> Generate CR Transport Form
                                     </button>
                                     <button
-                                      type="button"
+                                      type="button" disabled={!allowed("issue.generate_cr_user_form")}
                                       onClick={() => {
                                         setRowMenuOpenId(null);
                                         setRowMenuPos(null);
@@ -5682,8 +5725,7 @@ function IssueDisplay({
                                       <FileOutput size={14} /> Generate CR User Form
                                     </button>
                                     <button
-                                      type="button"
-                                      disabled={issue.issue_status === "cancelled"}
+                                      type="button" disabled={!allowed("issue.cancel_delete") || issue.issue_status === "cancelled"}
                                       onClick={() => {
                                         setRowMenuOpenId(null);
                                         setRowMenuPos(null);
@@ -5693,7 +5735,7 @@ function IssueDisplay({
                                       <XCircle size={14} /> Cancel Issue
                                     </button>
                                     <button
-                                      type="button"
+                                      type="button" disabled={!allowed("issue.cancel_delete")}
                                       className="danger-menu-item"
                                       onClick={() => {
                                         setRowMenuOpenId(null);
@@ -5744,28 +5786,28 @@ function IssueDisplay({
               </button>
               {detailMenuOpen && (
                 <div className="detail-action-menu-list" style={{ right: 0, top: "100%", marginTop: "4px" }}>
-                  <button type="button" onClick={() => { setDetailMenuOpen(false); onCloseDetail(); onChangeIssue(selectedIssue.id); }}>
+                  {allowed("issue.edit") ? <button type="button" onClick={() => { setDetailMenuOpen(false); onCloseDetail(); onChangeIssue(selectedIssue.id); }}>
                     <PencilLine size={15} /> Change Issue
-                  </button>
+                  </button> : null}
                   {canGenerateCrForm && (
                     <>
-                      <button type="button" onClick={() => { setDetailMenuOpen(false); onGenerateCrForm(selectedIssue.id); }}>
+                      {allowed("issue.generate_cr_transport_form") ? <button type="button" onClick={() => { setDetailMenuOpen(false); onGenerateCrForm(selectedIssue.id); }}>
                         <FileSearch size={15} /> Generate CR Transport Form
-                      </button>
-                      <button type="button" onClick={() => { setDetailMenuOpen(false); if (onGenerateUserCrForm) onGenerateUserCrForm(selectedIssue.id); else onGenerateCrForm(selectedIssue.id); }}>
+                      </button> : null}
+                      {allowed("issue.generate_cr_user_form") ? <button type="button" onClick={() => { setDetailMenuOpen(false); if (onGenerateUserCrForm) onGenerateUserCrForm(selectedIssue.id); else onGenerateCrForm(selectedIssue.id); }}>
                         <FileOutput size={15} /> Generate CR User Form
-                      </button>
+                      </button> : null}
                     </>
                   )}
-                  <button type="button" disabled={!canSendReminder} onClick={() => { setDetailMenuOpen(false); onSendReminder?.(selectedIssue.id); }}>
+                  {allowed("issue.reminder") ? <button type="button" disabled={!canSendReminder} onClick={() => { setDetailMenuOpen(false); onSendReminder?.(selectedIssue.id); }}>
                     <Mail size={15} /> Send Reminder Email
-                  </button>
-                  <button type="button" disabled={selectedIssue.issue_status === "cancelled"} onClick={() => { setDetailMenuOpen(false); onIssueAction(selectedIssue.id, "cancel"); }}>
+                  </button> : null}
+                  {allowed("issue.cancel_delete") ? <button type="button" disabled={selectedIssue.issue_status === "cancelled"} onClick={() => { setDetailMenuOpen(false); onIssueAction(selectedIssue.id, "cancel"); }}>
                     <XCircle size={15} /> Cancel Issue
-                  </button>
-                  <button type="button" className="danger-menu-item" onClick={() => { setDetailMenuOpen(false); onIssueAction(selectedIssue.id, "delete"); }}>
+                  </button> : null}
+                  {allowed("issue.cancel_delete") ? <button type="button" className="danger-menu-item" onClick={() => { setDetailMenuOpen(false); onIssueAction(selectedIssue.id, "delete"); }}>
                     <X size={15} /> Delete Issue
-                  </button>
+                  </button> : null}
                 </div>
               )}
             </div>
@@ -6218,7 +6260,8 @@ function IssueEditor({
   onDelete,
   onCrReleased,
   onDirtyChange,
-  canSendReminder = false
+  canSendReminder = false,
+  accessUser
 }: {
   mode: "create" | "change";
   detail: IssueDetail | null;
@@ -6239,6 +6282,7 @@ function IssueEditor({
   onCrReleased?: () => void | Promise<void>;
   onDirtyChange?: (dirty: boolean) => void;
   canSendReminder?: boolean;
+  accessUser?: AuthUser | null;
 }) {
   const [form, setForm] = useState<IssueSavePayload>(() => issueFormFromDetail(detail));
   const initialFormRef = useRef<IssueSavePayload>(issueFormFromDetail(detail));
@@ -6868,6 +6912,7 @@ function IssueEditor({
   const issueKey = detail?.issue?.issue_key || [displayedIssueNo, displayedSubIssueNo].filter(Boolean).join("-");
   const isCancelled = (detail?.issue?.issue_status || form.sourceIssueStatus) === "cancelled";
   const formDisabled = mode === "change" && isCancelled;
+  const canIssue = (key: PermissionKey) => can(accessUser, key);
   const devDisabled = isCancelled || !hasCrAssigned;
   const qaDisabled = isCancelled || !qaReady;
   const prdRequestDisabled = isCancelled || !qaReady;
@@ -7497,7 +7542,7 @@ function IssueEditor({
               </h3>
               <div className="initiation-pair reference-pair">
                 <div className="reference-field-group" data-incomplete-target="issue-glpi">
-                  <ValueHelpField label={<FieldLabel label="CR Helpdesk No." badge="optional" />} kind="cr-helpdesk" value={form.crHelpdeskNumbers || ""} onChange={(value) => update("crHelpdeskNumbers", value)} placeholder="CR Helpdesk No." disabled={formDisabled} />
+                  <ValueHelpField label={<FieldLabel label="CR Helpdesk No." badge="optional" />} kind="cr-helpdesk" value={form.crHelpdeskNumbers || ""} onChange={(value) => update("crHelpdeskNumbers", value)} placeholder="CR Helpdesk No." disabled={formDisabled || !canIssue("issue.helpdesk_references")} />
                 </div>
                 <div className="reference-field-group">
                   <ValueHelpField
@@ -7518,7 +7563,7 @@ function IssueEditor({
                       }));
                     }}
                     placeholder="16095; 16096"
-                    disabled={formDisabled}
+                    disabled={formDisabled || !canIssue("issue.glpi_references")}
                   />
                   {glpiTokens.length ? (
                     <div className="reference-hints">
@@ -7563,10 +7608,10 @@ function IssueEditor({
                         }));
                       }}
                       placeholder="TRDK..."
-                      disabled={formDisabled}
+                      disabled={formDisabled || !canIssue("issue.cr_references")}
                     />
                   </div>
-                  {!form.crLinks?.trim() && !formDisabled ? (
+                  {!form.crLinks?.trim() && !formDisabled && canIssue("transport.create") && canIssue("issue.cr_references") ? (
                     <button
                       type="button"
                       className="primary"
@@ -7592,7 +7637,7 @@ function IssueEditor({
                             <span>Create CR</span>
                     </button>
                   ) : null}
-                  {eligibleIssueReleaseCandidates.length > 0 && !formDisabled ? (
+                  {eligibleIssueReleaseCandidates.length > 0 && !formDisabled && canIssue("transport.release") ? (
                     <button
                       type="button"
                       className="primary issue-release-cr-button"
@@ -7728,27 +7773,27 @@ function IssueEditor({
                 </button>
                 {generateMenuOpen ? (
                   <div className="sticky-action-menu-list">
-                    <button type="button" onClick={() => {
+                    {canIssue("issue.generate_glpi_template") ? <button type="button" onClick={() => {
                       setGenerateMenuOpen(false);
                       generateTemplate("ticket");
-                    }}><FileOutput size={15} /> GLPI Ticket Template</button>
-                    {hasSavedCrLink && hasSavedGlpiNo ? (
+                    }}><FileOutput size={15} /> GLPI Ticket Template</button> : null}
+                    {hasSavedCrLink && hasSavedGlpiNo && canIssue("issue.generate_email") ? (
                       <button type="button" onClick={() => {
                         setGenerateMenuOpen(false);
                         generateTemplate("email");
                       }}><FileOutput size={15} /> Confirmation Email</button>
                     ) : null}
-                    {canSendReminder ? <button type="button" onClick={() => { setGenerateMenuOpen(false); generateTemplate("reminder"); }}><Mail size={15} /> Reminder Email</button> : null}
+                    {canSendReminder && canIssue("issue.reminder") ? <button type="button" onClick={() => { setGenerateMenuOpen(false); generateTemplate("reminder"); }}><Mail size={15} /> Reminder Email</button> : null}
                     {hasSavedCrLink ? (
                       <>
-                        <button type="button" onClick={() => {
+                        {canIssue("issue.generate_cr_transport_form") ? <button type="button" onClick={() => {
                           setGenerateMenuOpen(false);
                           generateCrTransportTemplate();
-                        }}><FileOutput size={15} /> CR Transport Form</button>
-                        <button type="button" onClick={() => {
+                        }}><FileOutput size={15} /> CR Transport Form</button> : null}
+                        {canIssue("issue.generate_cr_user_form") ? <button type="button" onClick={() => {
                           setGenerateMenuOpen(false);
                           generateUserCrTemplate();
-                        }}><FileOutput size={15} /> CR User Form</button>
+                        }}><FileOutput size={15} /> CR User Form</button> : null}
                       </>
                     ) : null}
                   </div>
@@ -7764,16 +7809,16 @@ function IssueEditor({
               }}><MoreVertical size={16} /> More <ChevronDown size={14} /></button>
               {moreMenuOpen ? (
                 <div className="sticky-action-menu-list">
-                  {!isCancelled ? (
+                  {!isCancelled && canIssue("issue.cancel_delete") ? (
                     <button type="button" onClick={() => {
                       setMoreMenuOpen(false);
                       setActionDialog("cancel");
                     }}><Ban size={15} /> Cancel Issue</button>
                   ) : null}
-                  <button className="danger-menu-item" type="button" onClick={() => {
+                  {canIssue("issue.cancel_delete") ? <button className="danger-menu-item" type="button" onClick={() => {
                     setMoreMenuOpen(false);
                     setActionDialog("delete");
-                  }}><Trash2 size={15} /> Delete Issue</button>
+                  }}><Trash2 size={15} /> Delete Issue</button> : null}
                 </div>
               ) : null}
               {isCancelled ? <span className="readonly-note">Read-Only</span> : null}
@@ -7850,7 +7895,7 @@ function IssueEditor({
                 <span>{copiedTemplate ? "Copied!" : "Copy Template"}</span>
               </button>
 
-              {templatePreview.title.includes("GLPI") && (
+              {templatePreview.title.includes("GLPI") && canIssue("issue.create_glpi_ticket") && canIssue("issue.generate_glpi_template") && (
                 <button
                   type="button"
                   className="primary"
@@ -8203,7 +8248,8 @@ function ChangeIssue({
   onDelete,
   onNotify,
   onDirtyChange,
-  canSendReminder = false
+  canSendReminder = false,
+  accessUser
 }: {
   initialIssueId?: number | null;
   initialAction?: "" | "cancel" | "delete";
@@ -8219,6 +8265,7 @@ function ChangeIssue({
   onNotify: (type: "success" | "error", message: string) => void;
   onDirtyChange?: (dirty: boolean) => void;
   canSendReminder?: boolean;
+  accessUser?: AuthUser | null;
 }) {
   const [selection, setSelection] = useState({ q: "", glpi: "", crHelpdesk: "", cr: "" });
   const [candidates, setCandidates] = useState<IssueRow[]>([]);
@@ -8331,6 +8378,7 @@ function ChangeIssue({
         <IssueEditor
           mode="change"
           detail={changeDetail}
+          accessUser={accessUser}
           layoutStyleOverride={layoutStyleOverride}
           initialAction={initialAction}
           navigationRequest={navigationRequest}

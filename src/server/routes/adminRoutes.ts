@@ -2,7 +2,7 @@ import { Router } from "express";
 import net from "net";
 import { pool } from "../db/pool.js";
 import { requireAdmin, requirePermission, resolveAuthUser } from "../auth/middleware.js";
-import { visibleSettings, writableSettings } from "../admin/settingsPermissionPolicy.js";
+import { transportSystemOptions, visibleSettings, writableSettings } from "../admin/settingsPermissionPolicy.js";
 import { recordActivityLog } from "../db/auditRepository.js";
 import { deleteAdminPerson, PeopleAdminError } from "../admin/peopleAdminService.js";
 import {
@@ -100,7 +100,7 @@ adminRoutes.put("/people/:id", requirePermission("master_data.people"), async (r
   }
 });
 
-adminRoutes.delete("/people/:id", requirePermission("master_data.people"), requireAdmin, async (req, res, next) => {
+adminRoutes.delete("/people/:id", requireAdmin, requirePermission("master_data.people"), async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     await deleteAdminPerson(id);
@@ -447,7 +447,11 @@ async function ensureSapSystemsTable() {
   }
 }
 
-adminRoutes.get("/systems", requirePermission("settings.target_systems"), async (_req, res, next) => {
+adminRoutes.get("/systems", (req, res, next) => {
+  const grants = req.authUser?.permissions || [];
+  if (grants.some((key) => ["settings.target_systems", "transport.create", "transport.release"].includes(key))) return next();
+  return requirePermission("settings.target_systems")(req, res, next);
+}, async (req, res, next) => {
   try {
     await ensureSapSystemsTable();
     const { rows } = await pool.query(`
@@ -455,7 +459,8 @@ adminRoutes.get("/systems", requirePermission("settings.target_systems"), async 
       FROM sap_systems
       ORDER BY id
     `);
-    res.json({ rows });
+    const fullAccess = req.authUser?.permissions.includes("settings.target_systems");
+    res.json({ rows: fullAccess ? rows : transportSystemOptions(rows) });
   } catch (error) {
     next(error);
   }

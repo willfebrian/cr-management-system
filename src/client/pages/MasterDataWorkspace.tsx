@@ -1,4 +1,6 @@
 import { useEffect, useState, useRef } from "react";
+import type { PermissionKey } from "../../shared/permissions";
+import { settingPermission } from "../../server/admin/settingsPermissionPolicy";
 import { fetchAdminPeople, fetchAdminSettings, updateAdminPerson, updateAdminSettings, createAdminPerson, deleteAdminPerson, fetchGroupEmails, createGroupEmail, updateGroupEmail, deleteGroupEmail, fetchSapSystems, createSapSystem, updateSapSystem, deleteSapSystem, testSapSystemConnection, testAiConnection, testMcpEmailConnection, fetchDocxTemplatesInfo, uploadDocxTemplate, resetDocxTemplate, downloadDocxTemplateUrl, type AdminPersonRow, type GroupEmailRow, type SapSystemRow, type DocxTemplatesInfo } from "../api";
 import { Check, Loader2, Save, X, Trash2, CheckCircle2, XCircle, AlertTriangle, Mail, Palette, Type, Sliders, User, Database, LayoutGrid, Server, Eye, EyeOff, Plus, Edit2, Activity, ShieldCheck, Radio, FileCode2, FileText, Upload, Download, RotateCcw, FileCheck, Zap, Globe } from "lucide-react";
 import { STATUS_COLOR_CONFIGS, STATUS_COLOR_GROUP_ORDER, applyCustomStatusColors } from "../utils/tagColors";
@@ -11,24 +13,29 @@ interface MasterDataWorkspaceProps {
   mode?: "master-data" | "settings";
   isAdmin?: boolean;
   username?: string;
+  permissions?: PermissionKey[];
 }
 
-export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, username }: MasterDataWorkspaceProps) {
+export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, username, permissions }: MasterDataWorkspaceProps) {
+  const has = (key: PermissionKey) => permissions ? permissions.includes(key) : isAdmin || key === "settings.appearance";
+  const allowedTab = (tab: string) => tab === "people" || tab === "group_emails"
+    ? mode === "master-data" && has("master_data.view")
+    : tab === "sap_systems" ? has("settings.target_systems")
+    : tab === "general_settings" ? ["settings.general", "settings.ai", "settings.templates"].some((key) => has(key as PermissionKey))
+    : tab === "ai_instructions" ? has("settings.ai")
+    : tab === "appearance" ? has("settings.appearance") : false;
   const storageKey = getActiveAppearanceKey(username);
 
   const [activeTab, setActiveTab] = useState<"people" | "group_emails" | "sap_systems" | "general_settings" | "ai_instructions" | "appearance">("people");
 
   useEffect(() => {
-    if (mode === "settings") {
-      if (!isAdmin) {
-        setActiveTab("appearance");
-      } else if (activeTab === "people" || activeTab === "group_emails") {
-        setActiveTab("sap_systems");
-      }
-    } else if (mode === "master-data" && (activeTab === "sap_systems" || activeTab === "general_settings" || activeTab === "ai_instructions" || activeTab === "appearance")) {
-      setActiveTab("people");
+    const order = mode === "settings"
+      ? ["sap_systems", "general_settings", "ai_instructions", "appearance"]
+      : ["people", "group_emails"];
+    if (!order.includes(activeTab) || !allowedTab(activeTab)) {
+      setActiveTab((order.find((tab) => allowedTab(tab)) || "appearance") as typeof activeTab);
     }
-  }, [mode, isAdmin]);
+  }, [mode, permissions?.join(","), activeTab]);
 
   const [people, setPeople] = useState<AdminPersonRow[]>([]);
   const [groupEmails, setGroupEmails] = useState<GroupEmailRow[]>([]);
@@ -291,10 +298,10 @@ Regards,
     } catch {}
 
     Promise.all([
-      isAdmin ? fetchAdminPeople().catch(() => ({ rows: [] })) : Promise.resolve({ rows: [] }),
-      fetchAdminSettings().catch(() => ({} as Record<string, string>)),
-      isAdmin ? fetchGroupEmails().catch(() => ({ rows: [] })) : Promise.resolve({ rows: [] }),
-      isAdmin ? fetchSapSystems().catch(() => ({ rows: [] })) : Promise.resolve({ rows: [] })
+      mode === "master-data" && has("master_data.view") ? fetchAdminPeople().catch(() => ({ rows: [] })) : Promise.resolve({ rows: [] }),
+      mode === "settings" ? fetchAdminSettings().catch(() => ({} as Record<string, string>)) : Promise.resolve({} as Record<string, string>),
+      mode === "master-data" && has("master_data.view") ? fetchGroupEmails().catch(() => ({ rows: [] })) : Promise.resolve({ rows: [] }),
+      mode === "settings" && has("settings.target_systems") ? fetchSapSystems().catch(() => ({ rows: [] })) : Promise.resolve({ rows: [] })
     ])
       .then(([peopleRes, settingsRes, groupEmailsRes, sapSystemsRes]) => {
         setPeople(peopleRes.rows || []);
@@ -343,7 +350,7 @@ Regards,
         setSettings(merged);
       })
       .finally(() => setLoading(false));
-  }, [isAdmin]);
+  }, [isAdmin, mode, permissions?.join(",")]);
 
   useEffect(() => {
     if (activeTab === "general_settings") {
@@ -486,7 +493,7 @@ Regards,
     const handleSetTab = (e: Event) => {
       const customEvent = e as CustomEvent<string>;
       if (customEvent.detail) {
-        setActiveTab(customEvent.detail as any);
+        if (allowedTab(customEvent.detail)) setActiveTab(customEvent.detail as any);
       }
     };
     window.addEventListener("set-master-data-tab", handleSetTab);
@@ -585,8 +592,12 @@ Regards,
   }
 
   async function saveSettings() {
-    const mcpValidationError = settings.outlook_mcp_config?.trim()
-      ? validateMcpEmailConfigJson(settings.outlook_mcp_config)
+    const update = Object.fromEntries(Object.entries(settings).filter(([key]) => {
+      const required = settingPermission(key);
+      return required && required !== "settings.appearance" && has(required);
+    }));
+    const mcpValidationError = update.outlook_mcp_config?.trim()
+      ? validateMcpEmailConfigJson(update.outlook_mcp_config)
       : null;
     if (mcpValidationError) {
       showToast("error", mcpValidationError);
@@ -594,7 +605,7 @@ Regards,
     }
     setSaving(true);
     try {
-      await updateAdminSettings(settings);
+      await updateAdminSettings(update);
       if (settings.outlook_mcp_config?.trim()) {
         const savedSettings = await fetchAdminSettings();
         setSettings((current) => ({
@@ -642,7 +653,7 @@ Regards,
   const [showAdminAppearanceModal, setShowAdminAppearanceModal] = useState(false);
 
   function handleSaveAppearanceClick() {
-    if (isAdmin) {
+    if (isAdmin && has("settings.general")) {
       setShowAdminAppearanceModal(true);
     } else {
       saveAppearanceSettingsLocalOnly();
@@ -681,7 +692,7 @@ Regards,
 
     setSaving(true);
     try {
-      await updateAdminSettings(settings);
+      await updateAdminSettings(appearanceSettings);
       setShowAdminAppearanceModal(false);
       showToast("success", "Appearance settings saved to Database (System Default) & Local Storage!");
     } catch (err) {
@@ -773,7 +784,7 @@ Regards,
         />
       ) : null}
 
-      {activeTab === "people" && (
+      {activeTab === "people" && allowedTab("people") && (
         <div className="people-tab" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           <div style={{ background: "var(--color-bg-elevated, #ffffff)", padding: "1.5rem", borderRadius: "8px", border: "1px solid var(--color-border, #e5e7eb)", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.5rem", flexWrap: "wrap", gap: "1rem" }}>
@@ -906,7 +917,7 @@ Regards,
       </div>
       )}
 
-      {activeTab === "group_emails" && (
+      {activeTab === "group_emails" && allowedTab("group_emails") && (
         <div className="group-emails-tab">
           <div style={{ background: "var(--color-bg-elevated, #ffffff)", padding: "1.5rem", borderRadius: "8px", border: "1px solid var(--color-border, #e5e7eb)", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.5rem", flexWrap: "wrap", gap: "1rem" }}>
@@ -960,7 +971,7 @@ Regards,
         </div>
       )}
 
-      {activeTab === "sap_systems" && (
+      {activeTab === "sap_systems" && allowedTab("sap_systems") && (
         <div className="sap-systems-tab" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           <div style={{ background: "var(--color-bg-elevated, #ffffff)", padding: "1.5rem", borderRadius: "8px", border: "1px solid var(--color-border, #e5e7eb)", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.5rem", flexWrap: "wrap", gap: "1rem" }}>
@@ -1329,7 +1340,7 @@ Regards,
         </div>
       )}
 
-      {activeTab === "general_settings" && (
+      {activeTab === "general_settings" && allowedTab("general_settings") && (
         <div className="general-settings-tab" style={{ display: "flex", flexDirection: "column", gap: "2rem", maxWidth: "100%" }}>
           <div style={{ background: "var(--color-bg-elevated, #ffffff)", padding: "2rem", borderRadius: "8px", border: "1px solid var(--color-border, #e5e7eb)", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
             <h3 style={{ marginTop: 0, marginBottom: "0.5rem", fontSize: "1.25rem", color: "var(--color-text-heading, #111827)" }}>General Settings</h3>
@@ -2380,7 +2391,7 @@ Regards,
         </div>
       )}
 
-      {activeTab === "ai_instructions" && (
+      {activeTab === "ai_instructions" && allowedTab("ai_instructions") && (
         <div className="settings-tab" style={{ display: "flex", flexDirection: "column", gap: "2rem", maxWidth: "100%" }}>
           <div style={{ background: "var(--color-bg-elevated, #ffffff)", padding: "2rem", borderRadius: "8px", border: "1px solid var(--color-border, #e5e7eb)", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
             <h3 style={{ marginTop: 0, marginBottom: "0.5rem", fontSize: "1.25rem", color: "var(--color-text-heading, #111827)" }}>System Prompts &amp; AI Instructions</h3>
@@ -2452,7 +2463,7 @@ Regards,
         </div>
       )}
 
-      {activeTab === "appearance" && (
+      {activeTab === "appearance" && allowedTab("appearance") && (
         <div className="settings-tab" style={{ display: "flex", flexDirection: "column", gap: "2rem", maxWidth: "100%", paddingBottom: "5rem" }}>
           {!isAdmin ? (
             <div style={{ padding: "0.875rem 1.25rem", borderRadius: "8px", background: "#f0fdf4", border: "1px solid #bbf7d0", color: "#166534", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "8px" }}>
