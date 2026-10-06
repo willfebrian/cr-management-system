@@ -13,9 +13,11 @@ export const DEFAULT_ISSUE_COLUMNS = [
 export type IssueColumnKey =
   | (typeof DEFAULT_ISSUE_COLUMNS)[number]
   | "glpi"
-  | "crHelpdesk";
+  | "crHelpdesk"
+  | "modules";
 
 export const OPTIONAL_ISSUE_COLUMNS: ReadonlyArray<{ key: IssueColumnKey; label: string }> = [
+  { key: "modules", label: "Modules" },
   { key: "glpi", label: "GLPI" },
   { key: "crHelpdesk", label: "CR Helpdesk" }
 ];

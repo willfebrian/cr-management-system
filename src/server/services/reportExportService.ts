@@ -1,8 +1,9 @@
 import { getCrDetailForSystem, listCrRequests } from "../db/crRepository.js";
 import { getIssueDetail, listIssues } from "../db/issueRepository.js";
+import {formatModules} from "../../shared/moduleTypes.js";
 import { buildXlsx, type WorkbookSheet } from "./xlsxWorkbook.js";
 
-type Filters = Record<string, string | number | undefined>;
+type Filters = Record<string, string | number | number[] | undefined>;
 type Row = Array<string | number | boolean | null | undefined>;
 
 async function allRows(list: (filters: any) => Promise<any>, filters: Filters): Promise<any[]> {
@@ -51,7 +52,7 @@ export async function exportCrReport(filters: Filters): Promise<Buffer> {
 }
 
 export async function exportIssueReport(filters: Filters): Promise<Buffer> {
-  const summary = sheet("Issue Summary", ["Issue", "Name", "Status", "Source Status", "Created On", "Requester", "ABAPer", "Email Subject", "Email Received At", "Problem Analysis", "Impact Analysis", "Primary GLPI", "Primary CR Helpdesk", "Primary CR", "Missing Data Count", "Cancelled At", "Cancelled By", "Cancel Reason"]);
+  const summary = sheet("Issue Summary", ["Issue", "Name", "Status", "Source Status", "Created On", "Requester", "ABAPer", "Email Subject", "Email Received At", "Problem Analysis", "Impact Analysis", "Primary GLPI", "Primary CR Helpdesk", "Primary CR", "Missing Data Count", "Cancelled At", "Cancelled By", "Cancel Reason", "Modules"]);
   const transports = sheet("CR Transports", ["Issue", "SAP System", "CR", "Primary", "Relation Type", "Description", "SAP Status", "Lifecycle", "Created DEV", "Released DEV", "QA Import Date", "QA Import Time", "PRD Import Date", "PRD Import Time"]);
   const people = sheet("PICs", ["Issue", "Phase/Role", "Name", "Nickname", "Department", "Primary"]);
   const references = sheet("GLPI & Helpdesk", ["Issue", "Type", "Number", "Primary"]);
@@ -62,7 +63,7 @@ export async function exportIssueReport(filters: Filters): Promise<Buffer> {
     const detail = await getIssueDetail(row.id);
     const issue = detail.issue;
     if (!issue) continue;
-    summary.rows.push([row.issue_key, row.issue_name, row.issue_status, row.source_issue_status, date(row.create_issue_date), row.requester_name_snapshot, row.abaper_name_snapshot, issue.email_subject, date(issue.email_date_received), issue.problem_analysis, issue.impact_analysis, row.primary_glpi_ticket, row.primary_cr_helpdesk_no, row.primary_cr, row.missing_data_count, date(issue.cancelled_date), issue.cancelled_by_name_snapshot, issue.cancelled_reason]);
+    summary.rows.push([row.issue_key, row.issue_name, row.issue_status, row.source_issue_status, date(row.create_issue_date), row.requester_name_snapshot, row.abaper_name_snapshot, issue.email_subject, date(issue.email_date_received), issue.problem_analysis, issue.impact_analysis, row.primary_glpi_ticket, row.primary_cr_helpdesk_no, row.primary_cr, row.missing_data_count, date(issue.cancelled_date), issue.cancelled_by_name_snapshot, issue.cancelled_reason, formatModules(issue.modules)]);
     for (const cr of detail.crLinks) transports.rows.push([row.issue_key, cr.sap_system_code, cr.trkorr, cr.is_primary, cr.relation_type, cr.cr_description_snapshot, cr.status_group, cr.lifecycle_status, date(cr.sap_created_at), date(cr.sap_released_at), date(cr.qa_import_date), date(cr.qa_import_time), date(cr.prd_import_date), date(cr.prd_import_time)]);
     for (const person of detail.participants) people.rows.push([row.issue_key, person.role, person.full_name || person.person_name_snapshot, person.nickname, person.department, person.is_primary]);
     for (const glpi of detail.glpi) references.rows.push([row.issue_key, "GLPI", glpi.ticket_number, glpi.is_primary]);

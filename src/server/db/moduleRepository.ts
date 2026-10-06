@@ -24,7 +24,7 @@ async function saveModule(id:number|undefined,input:ModuleSaveInput,actor:AuthUs
   let before:ModuleSummary|undefined;
   if(id){before=(await client.query('SELECT '+MODULE_COLUMNS+' FROM module_master WHERE id=$1 FOR UPDATE',[id])).rows[0];if(!before)throw new ModuleError('Module not found.',404);if(before.group!==data.group||before.code!==data.code)throw new ModuleError('Module group and code cannot be changed.');}
   const params=[data.group,data.code,data.name,data.description||null,data.isActive];
-  const {rows}=id?await client.query('UPDATE module_master SET name=$3,description=$4,is_active=$5,updated_at=now() WHERE id=$6 RETURNING '+MODULE_COLUMNS,[...params,id]):await client.query('INSERT INTO module_master (module_group,code,name,description,is_active) VALUES ($1,$2,$3,$4,$5) RETURNING '+MODULE_COLUMNS,params);
+  const {rows}=id?await client.query('UPDATE module_master SET name=$1,description=$2,is_active=$3,updated_at=now() WHERE id=$4 RETURNING '+MODULE_COLUMNS,[data.name,data.description||null,data.isActive,id]):await client.query('INSERT INTO module_master (module_group,code,name,description,is_active) VALUES ($1,$2,$3,$4,$5) RETURNING '+MODULE_COLUMNS,params);
   const result={...rows[0],id:Number(rows[0].id)} as ModuleSummary;
   await writeModuleAudit(client,actor,id?'update_module':'create_module','Module '+result.code+' '+(id?'updated':'created'),{before:before||null,after:result});
   await client.query('COMMIT');return result;

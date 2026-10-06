@@ -11,7 +11,7 @@ import {
 
 test("keeps the report defaults focused on scanning with actions available", () => {
   assert.deepEqual(DEFAULT_ISSUE_COLUMNS, ["issue", "name", "abaper", "cr", "status", "completeness", "actions"]);
-  assert.deepEqual(OPTIONAL_ISSUE_COLUMNS.map((column) => column.key), ["glpi", "crHelpdesk"]);
+  assert.deepEqual(OPTIONAL_ISSUE_COLUMNS.map((column) => column.key), ["modules", "glpi", "crHelpdesk"]);
 });
 
 test("renders accessible optional column checkboxes", () => {
@@ -25,9 +25,10 @@ test("renders accessible optional column checkboxes", () => {
   );
 
   assert.match(markup, /Columns/);
+  assert.match(markup, /Modules/);
   assert.match(markup, /GLPI/);
   assert.match(markup, /CR Helpdesk/);
-  assert.equal((markup.match(/type="checkbox"/g) || []).length, 2);
+  assert.equal((markup.match(/type="checkbox"/g) || []).length, 3);
 });
 
 test("uses a controlled dual-pane workspace", () => {

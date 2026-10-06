@@ -21,6 +21,10 @@ import { PaginationControls } from "../components/PaginationControls";
 import { ProjectEditor } from "../components/projects/ProjectEditor";
 import { ProjectReport } from "../components/projects/ProjectReport";
 import { UserManagementWorkspace } from "../components/users/UserManagementWorkspace";
+import {ModuleReportFilters} from "../components/modules/ModuleReportFilters";
+import {IssueModulesField} from "../components/modules/IssueModulesField";
+import {ModuleBadges} from "../components/modules/ModuleBadges";
+import "../styles/modules.css";
 import { MasterDataWorkspace } from "./MasterDataWorkspace";
 import { AuditLogReport } from "./AuditLogReport";
 import { CrTransportCreate, appendExistingCrLink, getCreatedCrPreview } from "../components/crTransport/CrTransportCreate";
@@ -998,6 +1002,9 @@ export function App() {
       cr: draftIssueFilters.cr?.trim() || undefined,
       glpi: draftIssueFilters.glpi?.trim() || undefined,
       crHelpdesk: draftIssueFilters.crHelpdesk?.trim() || undefined,
+      moduleGroup: draftIssueFilters.moduleGroup,
+      moduleIds: draftIssueFilters.moduleIds,
+      moduleAssignment: draftIssueFilters.moduleAssignment,
       fromDate: draftIssueFilters.fromDate || undefined,
       toDate: draftIssueFilters.toDate || undefined,
       page: 1,
@@ -1012,7 +1019,7 @@ export function App() {
     }, queryChanged ? 450 : 80);
 
     return () => window.clearTimeout(timeout);
-  }, [draftIssueFilters.status, draftIssueFilters.q, draftIssueFilters.requester, draftIssueFilters.abaper, draftIssueFilters.cr, draftIssueFilters.glpi, draftIssueFilters.crHelpdesk, draftIssueFilters.fromDate, draftIssueFilters.toDate, view, issuePagination.pageSize]);
+  }, [draftIssueFilters.status, draftIssueFilters.q, draftIssueFilters.requester, draftIssueFilters.abaper, draftIssueFilters.cr, draftIssueFilters.glpi, draftIssueFilters.crHelpdesk, draftIssueFilters.fromDate, draftIssueFilters.toDate, draftIssueFilters.moduleGroup, draftIssueFilters.moduleIds, draftIssueFilters.moduleAssignment, view, issuePagination.pageSize]);
 
   useEffect(() => {
     if (!selected) {
@@ -1313,6 +1320,7 @@ export function App() {
               >
                 Group Emails
               </button>
+              <button type="button" className="module-tab-button" aria-pressed={masterDataTab === "modules"} onClick={() => window.dispatchEvent(new CustomEvent("set-master-data-tab", { detail: "modules" }))}>Modules</button>
             </div>
           ) : view === "settings" ? (
             <div className="topbar-action-slot" style={{ display: "flex", gap: "6px", background: "var(--color-bg-subtle, #f1f5f9)", padding: "4px", borderRadius: "8px", border: "1px solid var(--color-border, #e2e8f0)" }}>
@@ -3136,6 +3144,7 @@ export function App() {
 
 
 
+              <ModuleReportFilters filters={draftIssueFilters} onChange={setDraftIssueFilters}/>
               {/* Issue Custom Status Filter Dropdown */}
               {(() => {
                 const issueStatusOptions = [
@@ -5247,6 +5256,7 @@ function IssueDisplay({
   const detailIncompleteItems = detail?.issue?.issue_status !== "cancelled" && detail ? getIncompleteItems(detail) : [];
   const detailIncompleteGroups = groupIncompleteItems(detailIncompleteItems);
   const issueColumns = useResizableColumns("issue-report-columns-v4", {
+    modules: 230,
     issue: 95,
     name: 340,
     abaper: 190,
@@ -5257,6 +5267,7 @@ function IssueDisplay({
     completeness: 110,
     actions: 90
   }, {
+    modules: 150,
     issue: 85,
     name: 240,
     abaper: 140,
@@ -5308,6 +5319,7 @@ function IssueDisplay({
                 <col style={{ width: 42 }} />
                 <col style={{ width: issueColumns.widths.issue }} />
                 <col style={{ width: issueColumns.widths.name }} />
+                {hasIssueColumn("modules") ? <col style={{ width: issueColumns.widths.modules }} /> : null}
                 <col style={{ width: issueColumns.widths.abaper }} />
                 {hasIssueColumn("glpi") ? <col style={{ width: issueColumns.widths.glpi }} /> : null}
                 {hasIssueColumn("crHelpdesk") ? <col style={{ width: issueColumns.widths.crHelpdesk }} /> : null}
@@ -5323,6 +5335,7 @@ function IssueDisplay({
                   </th>
                   <ResizableHeader label="Issue" column="issue" width={issueColumns.widths.issue} onResize={issueColumns.startResize} />
                   <ResizableHeader label="Name" column="name" width={issueColumns.widths.name} onResize={issueColumns.startResize} />
+                  {hasIssueColumn("modules") ? <ResizableHeader label="Modules" column="modules" width={issueColumns.widths.modules} onResize={issueColumns.startResize} /> : null}
                   <ResizableHeader label="ABAPer" column="abaper" width={issueColumns.widths.abaper} onResize={issueColumns.startResize} />
                   {hasIssueColumn("glpi") ? <ResizableHeader label="GLPI" column="glpi" width={issueColumns.widths.glpi} onResize={issueColumns.startResize} /> : null}
                   {hasIssueColumn("crHelpdesk") ? <ResizableHeader label="CR Helpdesk" column="crHelpdesk" width={issueColumns.widths.crHelpdesk} onResize={issueColumns.startResize} /> : null}
@@ -5370,6 +5383,7 @@ function IssueDisplay({
                         </td>
                         <td>{issue.issue_key}</td>
                         <td>{issue.issue_name}</td>
+                        {hasIssueColumn("modules") ? <td><ModuleBadges modules={issue.modules || []}/></td> : null}
                         <td>{issue.abaper_name_snapshot || "-"}</td>
                         {hasIssueColumn("glpi") ? <td>{formatGlpi(issue.primary_glpi_ticket)}</td> : null}
                         {hasIssueColumn("crHelpdesk") ? <td>{issue.primary_cr_helpdesk_no || "-"}</td> : null}
@@ -6037,6 +6051,7 @@ function IssueEditor({
 }) {
   const [form, setForm] = useState<IssueSavePayload>(() => issueFormFromDetail(detail));
   const initialFormRef = useRef<IssueSavePayload>(issueFormFromDetail(detail));
+  const moduleIssueIdRef = useRef(detail?.issue?.id);
   const [saving, setSaving] = useState(false);
   const [actionBusy, setActionBusy] = useState<"" | "cancel" | "delete">("");
   const [cancelReason, setCancelReason] = useState(detail?.issue?.cancelled_reason || "");
@@ -6529,8 +6544,10 @@ function IssueEditor({
     }
 
     const nextForm = issueFormFromDetail(detail);
+    const preservedModuleIds = moduleIssueIdRef.current === detail?.issue?.id && JSON.stringify(form.moduleIds) !== JSON.stringify(initialFormRef.current.moduleIds) ? form.moduleIds : nextForm.moduleIds;
+    moduleIssueIdRef.current = detail?.issue?.id;
     initialFormRef.current = nextForm;
-    setForm(nextForm);
+    setForm({...nextForm, moduleIds: preservedModuleIds});
     setCreateMode("new");
     setBaseIssueSearch("");
     setBaseIssueCandidates([]);
@@ -6572,7 +6589,7 @@ function IssueEditor({
     return () => window.clearTimeout(timeout);
   }, [mode, createMode, baseIssueSearch]);
 
-  function update(key: keyof IssueSavePayload, value: string) {
+  function update<K extends keyof IssueSavePayload>(key: K, value: IssueSavePayload[K]) {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
@@ -6944,6 +6961,7 @@ function IssueEditor({
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", minWidth: 0, flex: 1 }}>
               <strong style={{ fontSize: "1.1rem" }}>{detail.issue.issue_key}</strong>
               <span style={{ fontSize: "0.95rem", color: "var(--color-text-muted)" }}>{detail.issue.issue_name}</span>
+              <ModuleBadges modules={detail.issue.modules || []}/>
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
@@ -7172,6 +7190,7 @@ function IssueEditor({
                   <input className={mode === "create" ? "readonly-input" : ""} value={displayedSubIssueNo} onChange={(event) => update("subIssueNo", event.target.value)} readOnly={mode === "create"} disabled={formDisabled} />
                 </label>
               </div>
+              <IssueModulesField key={detail?.issue?.id || "new"} ids={form.moduleIds || []} storedModules={detail?.issue?.modules || []} onChange={ids => update("moduleIds", ids)} disabled={formDisabled} />
               <label data-incomplete-target="issue-name">
                 <FieldLabel label="Issue Name" badges={["required", "ai-powered"]} />
                 <input value={form.issueName || ""} onChange={(event) => update("issueName", event.target.value)} required disabled={formDisabled} />
@@ -8526,7 +8545,10 @@ function issueFilterKey(value: IssueFilters) {
     value.crHelpdesk?.trim() || "",
     value.fromDate || "",
     value.toDate || "",
-    value.pageSize || 25
+    value.pageSize || 25,
+    value.moduleGroup || "",
+    [...(value.moduleIds || [])].sort((a,b)=>a-b).join(","),
+    value.moduleAssignment || ""
   ].join("|");
 }
 
@@ -8585,6 +8607,7 @@ function issueFormFromDetail(detail: IssueDetail | null): IssueSavePayload {
   ) as Record<string, string>;
 
   return {
+    moduleIds: issue?.modules?.map(module => module.id) || [],
     id: issue?.id,
     issueNo: issue?.issue_no,
     subIssueNo: issue?.sub_issue_no || "01",

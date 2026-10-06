@@ -4,6 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 const inventory = {
+  "moduleRoutes.ts": [["get", "/admin/modules", "master_data.view"], ["post", "/admin/modules", "master_data.modules"], ["put", "/admin/modules/:id", "master_data.modules"], ["get", "/value-help/modules", "issue.view"], ["get", "/value-help/modules/report", "issue.view"]],
   "crRoutes.ts": [
     ["get", "/health", "public liveness endpoint"], ["get", "/systems", "dashboard.view transport.view transport.create transport.release"],
     ["get", "/cr/export", "transport.export"], ["get", "/issues/export", "issue.export"],
@@ -67,7 +68,7 @@ test("all feature routers have an authentication boundary", () => {
 test("inventory lists every route and checks the permission assigned to it", () => {
   for (const [file, entries] of Object.entries(inventory)) {
     const source = read(`../src/server/routes/${file}`);
-    const prefix = file === "projectRoutes.ts" ? "routes" : file === "userRoutes.ts" ? "router" : file.replace("Routes.ts", "Routes");
+    const prefix = ["projectRoutes.ts", "moduleRoutes.ts"].includes(file) ? "routes" : file === "userRoutes.ts" ? "router" : file.replace("Routes.ts", "Routes");
     const declarations = [...source.matchAll(new RegExp(`${prefix}\\.(?:get|post|put|patch|delete)\\(`, "g"))];
     assert.equal(declarations.length, entries.length, `${file} route inventory is complete`);
     for (const [method, path, decision] of entries) {

@@ -91,6 +91,9 @@ export async function fetchSystems(): Promise<{ rows: SapSystemConfig[] }> {
 }
 
 export type IssueFilters = {
+  moduleGroup?: import("../shared/moduleTypes").ModuleGroup;
+  moduleIds?: number[];
+  moduleAssignment?: 'assigned' | 'unassigned';
   status?: string;
   lifecycleStatus?: string;
   completionStatus?: string;

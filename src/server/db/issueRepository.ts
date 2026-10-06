@@ -1,10 +1,11 @@
+import {appendModuleFilters} from "../modules/moduleFilters.js";
 import {replaceIssueModules, issueModulesSql} from "../modules/issueModuleAssignments.js";
 import { pool } from "./pool.js";
 import type { AuthUser } from "../auth/authService.js";
 import { assertIssueReferenceChangesAllowed, type IssueReferenceSets } from "../issues/issueReferenceAuthorization.js";
 import { findActiveProjectForIssue, ProjectRepositoryError } from "./projectRepository.js";
 
-export type IssueFilters = {
+export type IssueFilters = import("../modules/moduleFilters.js").ModuleFilters & {
   status?: string;
   lifecycleStatus?: string;
   completionStatus?: string;
@@ -143,6 +144,7 @@ export async function listIssues(filters: IssueFilters = {}) {
     )`);
   }
 
+  appendModuleFilters(filters, where, params);
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const baseSelectSql = `
     SELECT

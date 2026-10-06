@@ -1,3 +1,4 @@
+import {parseModuleFilters} from "../modules/moduleFilters.js";
 import { Router } from "express";
 import { requirePermission } from "../auth/middleware.js";
 import type { PermissionKey } from "../../shared/permissions.js";
@@ -39,6 +40,7 @@ crRoutes.get("/issues/export", requirePermission("issue.export"), async (req, re
   try {
     await assertDatabaseConfigured();
     const data = await exportIssueReport({
+      ...parseModuleFilters(req.query),
       status: stringQuery(req.query.status), lifecycleStatus: stringQuery(req.query.lifecycleStatus),
       completionStatus: stringQuery(req.query.completionStatus), q: stringQuery(req.query.q),
       requester: stringQuery(req.query.requester), abaper: stringQuery(req.query.abaper),
@@ -124,6 +126,7 @@ crRoutes.get("/issues", requirePermission("issue.view"), async (req, res, next) 
   try {
     await assertDatabaseConfigured();
     res.json(await listIssues({
+      ...parseModuleFilters(req.query),
       status: stringQuery(req.query.status),
       lifecycleStatus: stringQuery(req.query.lifecycleStatus),
       completionStatus: stringQuery(req.query.completionStatus),
