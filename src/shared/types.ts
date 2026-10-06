@@ -190,6 +190,7 @@ export type CrDetail = {
 };
 
 export type IssueRow = {
+  modules?: import("./moduleTypes").ModuleSummary[];
   id: number;
   issue_no: number;
   sub_issue_no: string;

@@ -1,3 +1,4 @@
+import {replaceIssueModules, issueModulesSql} from "../modules/issueModuleAssignments.js";
 import { pool } from "./pool.js";
 import type { AuthUser } from "../auth/authService.js";
 import { assertIssueReferenceChangesAllowed, type IssueReferenceSets } from "../issues/issueReferenceAuthorization.js";
@@ -20,6 +21,7 @@ export type IssueFilters = {
 };
 
 export type IssueSavePayload = {
+  moduleIds?: number[];
   id?: number;
   createMode?: "new" | "sub";
   issueNo?: number | string;
@@ -145,6 +147,7 @@ export async function listIssues(filters: IssueFilters = {}) {
   const baseSelectSql = `
     SELECT
       h.id,
+      ${issueModulesSql("h.id")} AS modules,
       h.issue_no,
       h.sub_issue_no,
       h.issue_no::text || '-' || h.sub_issue_no AS issue_key,
@@ -713,6 +716,7 @@ export async function getIssueDetail(id: number) {
     pool.query(`
       SELECT
         id,
+        ${issueModulesSql("issue_headers.id")} AS modules,
         issue_no,
         sub_issue_no,
         issue_no::text || '-' || sub_issue_no AS issue_key,
@@ -1181,6 +1185,7 @@ export async function saveIssue(payload: IssueSavePayload, actor: AuthUser) {
       issueId = Number(insert.rows[0].id);
     }
 
+    if (payload.moduleIds !== undefined) await replaceIssueModules(client, issueId, payload.moduleIds, actor);
     if (payload.glpiTickets !== undefined) await replaceGlpiTickets(client, issueId, payload.glpiTickets);
     if (payload.crHelpdeskNumbers !== undefined) await replaceCrHelpdeskNumbers(client, issueId, payload.crHelpdeskNumbers);
     if (payload.crLinks !== undefined) await replaceCrLinks(client, issueId, payload.crLinks);

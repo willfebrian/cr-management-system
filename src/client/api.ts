@@ -204,6 +204,7 @@ function filenameFromDisposition(disposition: string | null) {
 }
 
 export type IssueSavePayload = {
+  moduleIds?: number[];
   id?: number;
   createMode?: "new" | "sub";
   issueNo?: number | string;
