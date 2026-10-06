@@ -1,3 +1,4 @@
+import {ModuleMasterPanel} from "../components/modules/ModuleMasterPanel";
 import { useEffect, useState, useRef } from "react";
 import type { PermissionKey } from "../../shared/permissions";
 import { settingPermission } from "../../server/admin/settingsPermissionPolicy";
@@ -18,7 +19,7 @@ interface MasterDataWorkspaceProps {
 
 export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, username, permissions }: MasterDataWorkspaceProps) {
   const has = (key: PermissionKey) => permissions ? permissions.includes(key) : isAdmin || key === "settings.appearance";
-  const allowedTab = (tab: string) => tab === "people" || tab === "group_emails"
+  const allowedTab = (tab: string) => tab === "people" || tab === "group_emails" || tab === "modules"
     ? mode === "master-data" && has("master_data.view")
     : tab === "sap_systems" ? has("settings.target_systems")
     : tab === "general_settings" ? ["settings.general", "settings.ai", "settings.templates"].some((key) => has(key as PermissionKey))
@@ -26,12 +27,12 @@ export function MasterDataWorkspace({ mode = "master-data", isAdmin = true, user
     : tab === "appearance" ? has("settings.appearance") : false;
   const storageKey = getActiveAppearanceKey(username);
 
-  const [activeTab, setActiveTab] = useState<"people" | "group_emails" | "sap_systems" | "general_settings" | "ai_instructions" | "appearance">("people");
+  const [activeTab, setActiveTab] = useState<"modules" | "people" | "group_emails" | "sap_systems" | "general_settings" | "ai_instructions" | "appearance">("people");
 
   useEffect(() => {
     const order = mode === "settings"
       ? ["sap_systems", "general_settings", "ai_instructions", "appearance"]
-      : ["people", "group_emails"];
+      : ["people", "group_emails", "modules"];
     if (!order.includes(activeTab) || !allowedTab(activeTab)) {
       setActiveTab((order.find((tab) => allowedTab(tab)) || "appearance") as typeof activeTab);
     }
@@ -784,6 +785,7 @@ Regards,
         />
       ) : null}
 
+      {activeTab === "modules" && allowedTab("modules") && <ModuleMasterPanel canManage={has("master_data.modules")} />}
       {activeTab === "people" && allowedTab("people") && (
         <div className="people-tab" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           <div style={{ background: "var(--color-bg-elevated, #ffffff)", padding: "1.5rem", borderRadius: "8px", border: "1px solid var(--color-border, #e5e7eb)", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
