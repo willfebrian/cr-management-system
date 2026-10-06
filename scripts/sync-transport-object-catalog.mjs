@@ -1,11 +1,12 @@
 import "dotenv/config";
 import path from "node:path";
+import fs from "node:fs/promises";
+import { fetchTransportObjectCatalog } from "../mcp/sap/transport-object-catalog.mjs";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { AuditLogger } from "../mcp/sap/audit-logger.mjs";
 import { createSapClients } from "../mcp/sap/sap-client-factory.mjs";
 import { SapGateway } from "../mcp/sap/sap-gateway.mjs";
-import { createSapTools } from "../mcp/sap/tools.mjs";
 
 const { Pool } = pg;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -19,99 +20,6 @@ const fallbackProgramIds = new Map(Object.entries({
   LIMU: "Repository sub-object",
   R3TR: "Repository object"
 }));
-const fallbackObjectTypes = new Map(Object.entries({
-  ADIR: "Object directory entry",
-  AUTH: "Authorization object",
-  BSVS: "Status schema",
-  CDAT: "Customizing data",
-  CINS: "BC set content",
-  CLAS: "Class",
-  CINC: "Class include",
-  CLSD: "Class definition",
-  CMOD: "Enhancement project",
-  CORR: "Correction",
-  CPUB: "Class public section",
-  CPRI: "Class private section",
-  CPRO: "Class protected section",
-  CUAD: "GUI status",
-  DEVC: "Package",
-  DOCU: "Documentation",
-  DOMA: "Domain",
-  DOMD: "Domain definition",
-  DTEL: "Data element",
-  DTED: "Data element definition",
-  DYNP: "Screen",
-  ENHO: "Enhancement implementation",
-  ENHS: "Enhancement spot",
-  FUNC: "Function module",
-  FUGR: "Function group",
-  FUGT: "Function group text",
-  INDX: "Technical index object",
-  INTF: "Interface",
-  MESS: "Message",
-  METH: "Class method",
-  MSAG: "Message class",
-  NOTE: "SAP Note",
-  PRIN: "Print object",
-  PROG: "Program",
-  RELE: "Release information",
-  REPS: "Source/include ABAP",
-  REPT: "Program text",
-  SHLP: "Search help",
-  SBXL: "Business object extension",
-  SBXP: "Business object extension part",
-  SCVI: "View cluster",
-  SPDV: "Standard variant",
-  SSFO: "Smart Form",
-  SSST: "Smart Style",
-  STVI: "View cluster object",
-  SUSC: "Authorization field",
-  SUSO: "Authorization object",
-  SXCI: "Customer enhancement implementation",
-  TABD: "Table contents",
-  TABL: "Table",
-  TABT: "Table text",
-  TABU: "Table contents",
-  TDAT: "Table technical settings",
-  TEXT: "Text object",
-  TOBJ: "Transport object",
-  TRAN: "Transaction",
-  TTYP: "Table type",
-  VARX: "Variant",
-  VDAT: "View data",
-  XSLT: "XSLT transformation",
-  VIEW: "View"
-}));
-const fallbackPairLabels = new Map(Object.entries({
-  "CORR RELE": "Release information",
-  "LIMU CINC": "Class include",
-  "LIMU CLSD": "Class definition",
-  "LIMU CPUB": "Class public section",
-  "LIMU CPRI": "Class private section",
-  "LIMU CPRO": "Class protected section",
-  "LIMU CUAD": "GUI status",
-  "LIMU FUNC": "Function module",
-  "LIMU FUGT": "Function group text",
-  "LIMU METH": "Class method",
-  "LIMU REPS": "Source/include ABAP",
-  "LIMU REPT": "Program text",
-  "LIMU TABD": "Table contents",
-  "R3TR CLAS": "Class",
-  "R3TR DOMA": "Domain",
-  "R3TR DTEL": "Data element",
-  "R3TR ENHO": "Enhancement implementation",
-  "R3TR ENHS": "Enhancement spot",
-  "R3TR FUGR": "Function group",
-  "R3TR INTF": "Interface",
-  "R3TR MSAG": "Message class",
-  "R3TR PROG": "Program",
-  "R3TR SHLP": "Search help",
-  "R3TR TABL": "Table",
-  "R3TR TRAN": "Transaction",
-  "R3TR TTYP": "Table type",
-  "R3TR VIEW": "View"
-}));
-
 const pool = new Pool(
   process.env.DATABASE_URL
     ? { connectionString: process.env.DATABASE_URL, options: `-c search_path=${schemaName},public` }
@@ -133,15 +41,30 @@ const gateway = new SapGateway({
   }),
   timeoutMs: Number(process.env.SAP_RFC_TIMEOUT_MS || 60000)
 });
-const tools = createSapTools(gateway);
+const snapshotPath = path.join(projectRoot, "src/shared/transportObjectCatalog.json");
+let standardPairs = new Map();
+let database;
+let transactionOpen = false;
 
 try {
+  if (language !== "E") throw new Error("The application catalog requires English descriptions");
+  const snapshot = process.argv.includes("--from-snapshot")
+    ? JSON.parse(await fs.readFile(snapshotPath, "utf8"))
+    : { sourceServer: sapServer, sourceSystemCode, language, verifiedAt: new Date().toISOString(),
+        rows: await fetchTransportObjectCatalog(gateway, { server: sapServer, language }) };
+  if (snapshot.language !== language || snapshot.sourceServer !== sapServer || snapshot.sourceSystemCode !== sourceSystemCode) throw new Error("Catalog snapshot source or language does not match");
+  standardPairs = new Map(snapshot.rows.filter(row => row.description).map(row => [`${row.pgmid} ${row.objectType}`, row]));
+  if (!standardPairs.has("LIMU REPS") || !standardPairs.has("R3TR PROG")) throw new Error("Incomplete standard CTS catalog");
+  if (!process.argv.includes("--snapshot-only")) {
+  database = await pool.connect();
+  await database.query("BEGIN");
+  transactionOpen = true;
   await ensureTables();
 
   const [programIds, objectTypes, pairRows] = await Promise.all([
-    fetchDomainTexts("PGMID", 500),
-    fetchDomainTexts("OBJECT", 5000),
-    pool.query(`
+    Promise.resolve(new Map(fallbackProgramIds)),
+    Promise.resolve(new Map(snapshot.rows.filter(row => row.description).map(row => [row.objectType, row.description]))),
+    database.query(`
       SELECT DISTINCT upper(trim(pgmid)) AS pgmid, upper(trim(object_type)) AS object_type
       FROM cr_objects
       WHERE NULLIF(trim(coalesce(pgmid, '')), '') IS NOT NULL
@@ -151,12 +74,16 @@ try {
   ]);
 
   mergeFallback(programIds, fallbackProgramIds);
-  mergeFallback(objectTypes, fallbackObjectTypes);
+
 
   await upsertProgramIds(programIds);
   await upsertObjectTypes(objectTypes);
-  await upsertObservedPairs(pairRows.rows, programIds, objectTypes);
+  const pairs = new Map(pairRows.rows.map(row => [`${row.pgmid} ${row.object_type}`, row]));
+  for (const row of snapshot.rows) pairs.set(`${row.pgmid} ${row.objectType}`, { pgmid: row.pgmid, object_type: row.objectType });
+  await upsertObservedPairs([...pairs.values()], programIds, objectTypes);
 
+  await database.query("COMMIT");
+  transactionOpen = false;
   console.log(JSON.stringify({
     ok: true,
     sourceServer: sapServer,
@@ -166,13 +93,19 @@ try {
     objectTypes: objectTypes.size,
     observedPairs: pairRows.rows.length
   }, null, 2));
+  }
+  await fs.writeFile(snapshotPath, JSON.stringify(snapshot, null, 2) + "\n");
+} catch (error) {
+  if (transactionOpen) await database.query("ROLLBACK");
+  throw error;
 } finally {
+  database?.release();
   await gateway.closeAll?.();
   await pool.end();
 }
 
 async function ensureTables() {
-  await pool.query(`
+  await database.query(`
     CREATE TABLE IF NOT EXISTS sap_transport_program_ids (
       pgmid TEXT PRIMARY KEY,
       description TEXT,
@@ -198,32 +131,16 @@ async function ensureTables() {
       PRIMARY KEY (pgmid, object_type)
     );
 
+    ALTER TABLE sap_transport_object_catalog ADD COLUMN IF NOT EXISTS language TEXT NOT NULL DEFAULT 'E';
+    ALTER TABLE sap_transport_object_catalog ADD COLUMN IF NOT EXISTS description_source TEXT;
     CREATE INDEX IF NOT EXISTS idx_sap_transport_object_catalog_label
       ON sap_transport_object_catalog(display_label);
   `);
 }
 
-async function fetchDomainTexts(domainName, rowCount) {
-  const result = await tools.sap_domain_texts_normalized({
-    agentName: "sap_abap_technical_agent",
-    server: sapServer,
-    domainName,
-    language,
-    rowCount,
-    userQuestion: `Sync SAP transport object catalog domain ${domainName}`
-  });
-  const texts = new Map();
-  for (const row of result.texts || []) {
-    const value = clean(row.value);
-    if (!value) continue;
-    texts.set(value, clean(row.text) || value);
-  }
-  return texts;
-}
-
 async function upsertProgramIds(programIds) {
   for (const [pgmid, description] of programIds) {
-    await pool.query(`
+    await database.query(`
       INSERT INTO sap_transport_program_ids (pgmid, description, language, source_system_code, updated_at)
       VALUES ($1, $2, $3, $4, now())
       ON CONFLICT (pgmid) DO UPDATE SET
@@ -237,7 +154,7 @@ async function upsertProgramIds(programIds) {
 
 async function upsertObjectTypes(objectTypes) {
   for (const [objectType, description] of objectTypes) {
-    await pool.query(`
+    await database.query(`
       INSERT INTO sap_transport_object_types (object_type, description, language, source_system_code, updated_at)
       VALUES ($1, $2, $3, $4, now())
       ON CONFLICT (object_type) DO UPDATE SET
@@ -256,7 +173,7 @@ async function upsertObservedPairs(pairs, programIds, objectTypes) {
     if (!pgmid || !objectType) continue;
 
     if (!programIds.has(pgmid)) {
-      await pool.query(`
+      await database.query(`
         INSERT INTO sap_transport_program_ids (pgmid, description, language, source_system_code, updated_at)
         VALUES ($1, $1, $2, $3, now())
         ON CONFLICT (pgmid) DO NOTHING
@@ -264,7 +181,7 @@ async function upsertObservedPairs(pairs, programIds, objectTypes) {
     }
 
     if (!objectTypes.has(objectType)) {
-      await pool.query(`
+      await database.query(`
         INSERT INTO sap_transport_object_types (object_type, description, language, source_system_code, updated_at)
         VALUES ($1, $1, $2, $3, now())
         ON CONFLICT (object_type) DO NOTHING
@@ -272,14 +189,16 @@ async function upsertObservedPairs(pairs, programIds, objectTypes) {
     }
 
     const pairKey = `${pgmid} ${objectType}`.trim().toUpperCase();
-    await pool.query(`
-      INSERT INTO sap_transport_object_catalog (pgmid, object_type, display_label, source_system_code, updated_at)
-      VALUES ($1, $2, $3, $4, now())
+    await database.query(`
+      INSERT INTO sap_transport_object_catalog (pgmid, object_type, display_label, source_system_code, language, description_source, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, now())
       ON CONFLICT (pgmid, object_type) DO UPDATE SET
-        display_label = EXCLUDED.display_label,
+        display_label = COALESCE(NULLIF(EXCLUDED.display_label, ''), sap_transport_object_catalog.display_label),
+        language = EXCLUDED.language,
+        description_source = COALESCE(EXCLUDED.description_source, sap_transport_object_catalog.description_source),
         source_system_code = EXCLUDED.source_system_code,
         updated_at = now()
-    `, [pgmid, objectType, fallbackPairLabels.get(pairKey) || objectTypes.get(objectType) || objectType, sourceSystemCode]);
+    `, [pgmid, objectType, standardPairs.get(pairKey)?.description || null, sourceSystemCode, language, standardPairs.get(pairKey)?.descriptionSource || null]);
   }
 }
 

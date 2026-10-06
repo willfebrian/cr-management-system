@@ -1,3 +1,6 @@
+import { CrDetailContent } from "../components/crTransport/CrDetailContent";
+import "../components/crTransport/cr-detail.css";
+import "../styles/issue-detail.css";
 import { can, canOpenView, firstAccessibleView } from "../permissions";
 import type { PermissionKey } from "../../shared/permissions";
 import { applyCustomStatusColors } from "../utils/tagColors";
@@ -5131,6 +5134,7 @@ function Report({
         isOpen={hasDetail}
         onClose={onCloseDetail}
         title={displayRequest?.trkorr || "CR Detail"}
+        titleBadge={displayRequest ? <Status value={displayLifecycleStatusFromDetail(detail, displayRequest.lifecycle_status || displayRequest.status_group)} /> : null}
         subtitle={displayRequest?.description}
         type="primary"
         maxWidth="980px"
@@ -5139,180 +5143,25 @@ function Report({
         {loadingDetail ? (
           <SkeletonDetailLoader title="Fetching CR Transport Detail & SAP Objects..." />
         ) : (
-        <div className="cr-modal-content-animated" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-          {/* 1. Header Banner & Quick Metadata */}
-          <div style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "0.85rem",
-            background: "var(--color-bg-subtle, #f8fafc)",
-            padding: "1rem 1.25rem",
-            borderRadius: "12px",
-            border: "1px solid var(--color-border, #e2e8f0)"
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <span style={{ fontSize: "1.1rem", fontWeight: "700", color: "var(--color-text-heading)" }}>
-                  {displayRequest?.trkorr}
-                </span>
-                {displayRequest && (
-                  <Status value={displayLifecycleStatusFromDetail(detail, displayRequest.lifecycle_status || displayRequest.status_group)} />
-                )}
-              </div>
-              <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: "4px" }}>
-                <span>Last Changed: <strong>{formatDate(displayRequest?.changed_date)}</strong></span>
-              </div>
-            </div>
-
-            <SummaryStrip
-              className="cr-summary-strip"
-              items={[
-                { label: "Owner", value: displayRequest?.owner || "-" },
-                { label: "Target System", value: displayRequest?.target_system || "-" },
-                { label: "CR Type", value: displayRequest?.function_code || "-" }
-              ]}
-            />
-          </div>
-
-          {/* 2. Middle Section: Related Issues & Child Tasks + Lifecycle Timeline */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", gap: "1.25rem", alignItems: "stretch" }}>
-            
-            {/* Box A: Linked Issues & Tasks */}
-            <div style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "1rem",
-              background: "var(--color-bg-elevated, #ffffff)",
-              border: "1px solid var(--color-border, #e2e8f0)",
-              borderRadius: "12px",
-              padding: "1.1rem"
-            }}>
-              {/* Linked Issues */}
-              <div>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
-                  <h3 style={{ fontSize: "0.95rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "6px", margin: 0, color: "var(--color-text-heading)" }}>
-                    <FolderKanban size={16} color="#0f766e" /> Linked Issues ({detail?.issueLinks.length || 0})
-                  </h3>
-                </div>
-                <div className="rows compact cr-related-issues">
-                  {(detail?.issueLinks || []).map((link) => {
-                    const issueKey = link.issue_no ? `${link.issue_no}-${link.sub_issue_no || "01"}` : "Issue removed";
-                    const status = formatIssueLinkStatus(link.relation_status, link.current_issue_status || link.issue_status_snapshot);
-                    return link.issue_id ? (
-                      <button className="cr-related-issue-link" type="button" key={link.id} onClick={() => { onCloseDetail(); onOpenIssue(link); }}>
-                        <span className="cr-related-issue-copy">
-                          <span className="cr-related-issue-heading">
-                            <strong>{issueKey}</strong>
-                            <Status value={status} />
-                          </span>
-                          <span className="cr-related-issue-name">{link.issue_name || "-"}</span>
-                        </span>
-                        <ChevronRight className="cr-related-issue-chevron" size={16} aria-hidden="true" />
-                      </button>
-                    ) : (
-                      <div className="cr-related-issue-link historical" key={link.id}>
-                        <span className="cr-related-issue-copy">
-                          <span className="cr-related-issue-heading">
-                            <strong>{issueKey}</strong>
-                            <Status value={status} />
-                          </span>
-                          <span className="cr-related-issue-name">{link.issue_name || "Issue removed"}</span>
-                        </span>
-                      </div>
-                    );
-                  })}
-                  {detail && detail.issueLinks.length === 0 ? <div className="empty" style={{ padding: "12px", textAlign: "center", color: "var(--color-text-muted)", fontSize: "0.85rem" }}>No Issue linked to this CR.</div> : null}
-                </div>
-              </div>
-
-              {/* Child Tasks */}
-              <div style={{ paddingTop: "0.75rem", borderTop: "1px solid var(--color-border, #f1f5f9)" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
-                  <h3 style={{ fontSize: "0.95rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "6px", margin: 0, color: "var(--color-text-heading)" }}>
-                    <ClipboardList size={16} color="#0f766e" /> Child Transport Tasks ({detail?.tasks.length || 0})
-                  </h3>
-                </div>
-                <div className="rows compact">
-                  {(detail?.tasks || []).map((task) => (
-                    <div className="row task-row" key={task.trkorr} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "var(--color-bg-subtle, #f8fafc)", borderRadius: "8px", border: "1px solid var(--color-border, #e2e8f0)", marginBottom: "6px" }}>
-                      <strong style={{ fontSize: "0.85rem" }}>{task.trkorr}</strong>
-                      <Status value={displayLifecycleStatus(task.lifecycle_status || task.status_group)} />
-                    </div>
-                  ))}
-                  {detail && detail.tasks.length === 0 ? <div className="empty" style={{ padding: "12px", textAlign: "center", color: "var(--color-text-muted)", fontSize: "0.85rem" }}>No child tasks cached.</div> : null}
-                </div>
-              </div>
-            </div>
-
-            {/* Box B: Lifecycle Timeline */}
-            <div style={{
-              display: "flex",
-              flexDirection: "column",
-              background: "var(--color-bg-elevated, #ffffff)",
-              border: "1px solid var(--color-border, #e2e8f0)",
-              borderRadius: "12px",
-              padding: "1.1rem"
-            }}>
-              <h3 style={{ fontSize: "0.95rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "6px", marginBottom: "1rem", color: "var(--color-text-heading)" }}>
-                <ShieldCheck size={16} color="#0f766e" /> Transport Lifecycle Audit Trail
-              </h3>
-              <div className="issue-timeline cr-lifecycle-timeline" style={{ flex: 1 }}>
-                {[
-                  { label: "Created", value: formatIssueTimestamp(detail?.lifecycle.created_at), filled: Boolean(detail?.lifecycle.created_at) },
-                  { label: "Released", value: formatIssueTimestamp(detail?.lifecycle.released_at), filled: Boolean(detail?.lifecycle.released_at) },
-                  { label: "In QA", value: lifecycleLabel(detail?.lifecycle.qa_status, detail?.lifecycle.qa_imported_at), filled: detail?.lifecycle.qa_status === "imported" },
-                  { label: "In PRD", value: lifecycleLabel(detail?.lifecycle.prd_status, detail?.lifecycle.prd_imported_at), filled: detail?.lifecycle.prd_status === "imported" }
-                ].map((event) => (
-                  <div className={`timeline-event ${event.filled ? "filled" : "missing"}`} key={event.label}>
-                    <span className="timeline-dot" />
-                    <div>
-                      <small>{event.value || "-"}</small>
-                      <strong>{event.label}</strong>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-          </div>
-
-          {/* 3. Bottom Section: SAP Objects (SE03 Objects) */}
-          <div style={{
-            background: "var(--color-bg-elevated, #ffffff)",
-            border: "1px solid var(--color-border, #e2e8f0)",
-            borderRadius: "12px",
-            padding: "1.1rem"
-          }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
-              <h3 style={{ fontSize: "0.95rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "6px", margin: 0, color: "var(--color-text-heading)" }}>
-                <Database size={16} color="#0f766e" /> SAP Objects Catalog / SE03 ({detail?.objects.length || 0} Objects)
-              </h3>
-            </div>
-            <div className="object-list se03-object-list">
-              {groupObjectsBySe03Label(detail?.objects || []).map((group) => (
-                <div className="object-group" key={group.key} style={{ marginBottom: "1rem" }}>
-                  <div className="object-group-title" style={{ background: "var(--color-bg-subtle, #f1f5f9)", padding: "8px 12px", borderRadius: "6px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <strong>{group.label}</strong>
-                    <code style={{ fontSize: "0.75rem", background: "var(--color-bg-elevated, #ffffff)", padding: "2px 6px", borderRadius: "4px", border: "1px solid var(--color-border, #cbd5e1)" }}>{group.key}</code>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "8px", marginTop: "8px" }}>
-                    {group.objects.map((object) => (
-                      <div className="object-row se03-object-row" key={`${object.trkorr}-${object.position}`} style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid var(--color-border, #e2e8f0)", background: "var(--color-bg-elevated, #ffffff)" }}>
-                        <code>{object.pgmid} {object.object_type}</code>
-                        <div>
-                          <strong style={{ fontSize: "0.85rem", wordBreak: "break-word" }}>{object.object_name}</strong>
-                          <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>{object.trkorr} - {object.position}</span>
-                          <small>{labelDiffReadiness(object.diff_readiness)}</small>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-              {detail && detail.objects.length === 0 ? <div className="empty" style={{ padding: "20px", textAlign: "center", color: "var(--color-text-muted)" }}>No objects cached for this CR.</div> : null}
-            </div>
-          </div>
-        </div>
+        <CrDetailContent
+          detail={detail}
+          metadata={[
+            { label: "Owner", value: displayRequest?.owner || "-" },
+            { label: "Target system", value: displayRequest?.target_system || "-" },
+            { label: "CR type", value: displayRequest?.function_code || "-" },
+            { label: "Last changed", value: formatDate(displayRequest?.changed_date) }
+          ]}
+          lifecycle={[
+            { label: "Created", value: formatIssueTimestamp(detail?.lifecycle.created_at), filled: Boolean(detail?.lifecycle.created_at) },
+            { label: "Released", value: formatIssueTimestamp(detail?.lifecycle.released_at), filled: Boolean(detail?.lifecycle.released_at) },
+            { label: "In QA", value: detail?.lifecycle.qa_status === "pending" ? "Pending import" : lifecycleLabel(detail?.lifecycle.qa_status, detail?.lifecycle.qa_imported_at), filled: detail?.lifecycle.qa_status === "imported" },
+            { label: "In PRD", value: detail?.lifecycle.prd_status === "pending" ? "Pending import" : lifecycleLabel(detail?.lifecycle.prd_status, detail?.lifecycle.prd_imported_at), filled: detail?.lifecycle.prd_status === "imported" }
+          ]}
+          renderStatus={value => <Status value={value} />}
+          issueStatus={link => formatIssueLinkStatus(link.relation_status, link.current_issue_status || link.issue_status_snapshot)}
+          taskStatus={task => displayLifecycleStatus(task.lifecycle_status || task.status_group)}
+          onOpenIssue={link => { onCloseDetail(); onOpenIssue(link); }}
+        />
         )}
       </UIModal>
       </section>
@@ -5821,97 +5670,13 @@ function IssueDisplay({
           <SkeletonDetailLoader title="Fetching Issue Details & Linked CR Transports..." />
         ) : (
           <div className="cr-modal-content-animated" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-            {/* Summary Strip Banner */}
-            <div style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "12px",
-              background: "var(--color-bg-subtle, #f8fafc)",
-              padding: "14px 16px",
-              borderRadius: "12px",
-              border: "1px solid var(--color-border, #e2e8f0)"
-            }}>
-              {/* Row 1: Email Subject (Left) + GLPI & CR Helpdesk badges (Right Aligned) */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" }}>
-                <div style={{ flex: 1, minWidth: "220px" }}>
-                  <div style={{ fontSize: "0.8rem", fontWeight: "400", color: "var(--color-text-muted, #64748b)", marginBottom: "4px" }}>
-                    Email Subject
-                  </div>
-                  <div style={{ fontSize: "0.95rem", fontWeight: "700", color: "var(--color-text-heading, #0f172a)", wordBreak: "break-word", lineHeight: 1.4 }}>
-                    {detail?.issue?.email_subject || "-"}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", flexShrink: 0 }}>
-                  {/* GLPI Ticket Badge */}
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "#f0fdf4", border: "1px solid #bbf7d0", padding: "4px 10px", borderRadius: "8px" }}>
-                    <span style={{ fontSize: "0.75rem", fontWeight: "600", color: "#166534" }}>GLPI:</span>
-                    {primaryGlpiTicket ? (
-                      <a href={glpiUrl(primaryGlpiTicket)} target="_blank" rel="noreferrer" style={{ fontSize: "0.85rem", fontWeight: "700", color: "#059669", textDecoration: "underline" }}>
-                        #{primaryGlpiTicket}
-                      </a>
-                    ) : (
-                      <span style={{ fontSize: "0.85rem", fontWeight: "600", color: "#64748b" }}>-</span>
-                    )}
-                  </div>
-
-                  {/* CR Helpdesk No. Badge */}
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "var(--color-bg, #ffffff)", border: "1px solid var(--color-border, #cbd5e1)", padding: "4px 10px", borderRadius: "8px" }}>
-                    <span style={{ fontSize: "0.75rem", fontWeight: "600", color: "var(--color-text-muted, #64748b)" }}>CR Helpdesk:</span>
-                    <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "var(--color-text, #1e293b)" }}>
-                      {formatCrHelpdeskNumbers(detail) || selectedIssue?.primary_cr_helpdesk_no || "-"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Row 2: Requester | ABAPer | Created Date */}
-              <div style={{ borderTop: "1px solid var(--color-border-soft, #e2e8f0)", paddingTop: "10px" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px" }}>
-                  <div>
-                    <div style={{ fontSize: "0.8rem", fontWeight: "400", color: "var(--color-text-muted, #64748b)", marginBottom: "4px" }}>
-                      Requester
-                    </div>
-                    <div style={{ fontSize: "0.9rem", fontWeight: "700", color: "var(--color-text, #1e293b)" }}>
-                      <DisplayNameList value={selectedIssue?.requester_name_snapshot} />
-                    </div>
-                  </div>
-
-                  <div>
-                    <div style={{ fontSize: "0.8rem", fontWeight: "400", color: "var(--color-text-muted, #64748b)", marginBottom: "4px" }}>
-                      ABAPer
-                    </div>
-                    <div style={{ fontSize: "0.9rem", fontWeight: "700", color: "var(--color-text, #1e293b)" }}>
-                      <DisplayNameList value={selectedIssue?.abaper_name_snapshot} />
-                    </div>
-                  </div>
-
-                  <div>
-                    <div style={{ fontSize: "0.8rem", fontWeight: "400", color: "var(--color-text-muted, #64748b)", marginBottom: "4px" }}>
-                      Created
-                    </div>
-                    <div style={{ fontSize: "0.9rem", fontWeight: "700", color: "var(--color-text, #1e293b)" }}>
-                      {formatIssueTimestamp(selectedIssue?.create_issue_date)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Incomplete Warning if any */}
+            <div className="issue-detail-split"><div className="issue-detail-main">
+<section className="issue-detail-reference"><small>Email subject</small><p>{detail?.issue?.email_subject || "-"}</p><div className="issue-detail-reference-links"><span>GLPI {primaryGlpiTicket ? <a href={glpiUrl(primaryGlpiTicket)} target="_blank" rel="noreferrer">#{primaryGlpiTicket} <ExternalLink size={12} /></a> : "-"}</span><span>CR Helpdesk <strong>{formatCrHelpdeskNumbers(detail) || selectedIssue?.primary_cr_helpdesk_no || "-"}</strong></span></div></section>            {/* Incomplete Warning if any */}
             {detailIncompleteItems.length ? (
-              <section className="issue-missing-box" style={{ margin: 0, borderRadius: "10px" }}>
-                <strong>Incomplete items</strong>
-                <IncompleteGroupCards
-                  groups={detailIncompleteGroups}
-                  onItemClick={(item) => {
-                    if (selectedIssue) {
-                      onCloseDetail();
-                      onChangeIssue(selectedIssue.id, item);
-                    }
-                  }}
-                />
-              </section>
+              <details className="issue-detail-incomplete">
+                <summary><AlertTriangle size={16} /><strong>Incomplete items</strong><span>{detailIncompleteItems.length} items</span><span className="issue-detail-complete">View items <ChevronDown size={14} /></span></summary>
+                <div className="issue-detail-incomplete-items">{detailIncompleteGroups.map(group => <div key={group.section}><strong>{group.title}</strong><div>{group.items.map(item => <button type="button" key={item.id} onClick={() => { if (selectedIssue) { onCloseDetail(); onChangeIssue(selectedIssue.id, item); } }}>{item.label}<ChevronRight size={12} /></button>)}</div></div>)}</div>
+              </details>
             ) : null}
 
             {detail?.issue?.issue_status === "cancelled" ? (
@@ -5921,12 +5686,7 @@ function IssueDisplay({
               </section>
             ) : null}
 
-            {/* 2-Column Grid Layout */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", gap: "1.25rem", alignItems: "start" }}>
-              
-              {/* Left Column: Analysis, Linked CRs, Participants */}
-              <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-                <div style={{ background: "var(--color-bg-elevated, #ffffff)", border: "1px solid var(--color-border, #e2e8f0)", borderRadius: "12px", padding: "1.1rem" }}>
+                <div className="issue-detail-section">
                   <h3 style={{ fontSize: "0.95rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "6px", margin: "0 0 0.85rem 0", color: "var(--color-text-heading)" }}>
                     <Sparkles size={16} color="#0f766e" /> Analysis & Impact
                   </h3>
@@ -5938,25 +5698,22 @@ function IssueDisplay({
                   </div>
                 </div>
 
-                <div style={{ background: "var(--color-bg-elevated, #ffffff)", border: "1px solid var(--color-border, #e2e8f0)", borderRadius: "12px", padding: "1.1rem" }}>
+                <div className="issue-detail-section">
                   <h3 style={{ fontSize: "0.95rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "6px", margin: "0 0 0.85rem 0", color: "var(--color-text-heading)" }}>
                     <Database size={16} color="#0f766e" /> Linked CR Transports ({detail?.crLinks.length || 0})
                   </h3>
                   <div className="rows">
                     {(detail?.crLinks || []).map((link) => (
                       <button className="row issue-link-row issue-link-button" type="button" key={link.id} onClick={() => { onCloseDetail(); onOpenCr(link); }}>
-                        <span>{link.trkorr}</span>
-                        <small>{link.cr_description_snapshot || "-"}</small>
+                        <span className="issue-detail-cr-copy"><strong>{link.trkorr}</strong><small>{link.cr_description_snapshot || "-"}</small></span><ChevronRight size={16} />
                       </button>
                     ))}
                     {detail && detail.crLinks.length === 0 ? <div className="empty" style={{ padding: "12px", textAlign: "center", color: "var(--color-text-muted)", fontSize: "0.85rem" }}>No CR linked.</div> : null}
                   </div>
                 </div>
 
-                <div style={{ background: "var(--color-bg-elevated, #ffffff)", border: "1px solid var(--color-border, #e2e8f0)", borderRadius: "12px", padding: "1.1rem" }}>
-                  <h3 style={{ fontSize: "0.95rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "6px", margin: "0 0 0.85rem 0", color: "var(--color-text-heading)" }}>
-                    <Users size={16} color="#0f766e" /> Issue Participants ({detail?.participants.length || 0})
-                  </h3>
+                <details className="issue-detail-participants">
+                  <summary><strong>Participants <small>{detail?.participants.length || 0}</small></strong><ChevronRight size={16} /></summary>
                   <div className="rows compact-participants">
                     {participantGroups(detail?.participants || []).map((group) => (
                       <section className="participant-phase" key={group.title}>
@@ -5994,47 +5751,41 @@ function IssueDisplay({
                     ))}
                     {detail && detail.participants.length === 0 ? <div className="empty" style={{ padding: "12px", textAlign: "center", color: "var(--color-text-muted)", fontSize: "0.85rem" }}>No participants cached.</div> : null}
                   </div>
-                </div>
-              </div>
-
-              {/* Right Column: Timelines */}
-              <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-                <div style={{ background: "var(--color-bg-elevated, #ffffff)", border: "1px solid var(--color-border, #e2e8f0)", borderRadius: "12px", padding: "1.1rem" }}>
-                  <h3 style={{ fontSize: "0.95rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "6px", margin: "0 0 0.85rem 0", color: "var(--color-text-heading)" }}>
-                    <ShieldCheck size={16} color="#0f766e" /> Timeline Issue
-                  </h3>
+                </details>
+</div><aside className="issue-detail-sidebar">
+<section className="issue-detail-assignment"><h3>Assignment</h3><div className="issue-detail-assignment-grid">
+<div><small>Requester</small><DisplayNameList value={selectedIssue?.requester_name_snapshot} /></div>
+<div><small>ABAPer</small><DisplayNameList value={selectedIssue?.abaper_name_snapshot} /></div>
+<div className="issue-detail-created"><small>Created</small><strong>{formatIssueTimestamp(selectedIssue?.create_issue_date)}</strong></div>
+</div></section>                <details className="issue-detail-history" open>
+                  <summary><strong>Issue history</strong><ChevronDown size={16} /></summary>
                   <div className="issue-timeline">
                     {issueTimelineEvents(detail).map((event) => (
                       <div className={`timeline-event ${event.date ? "filled" : "missing"}`} key={`${event.source}-${event.label}`}>
                         <span className="timeline-dot" />
                         <div>
-                          <small>{event.date ? formatIssueTimestamp(event.date, event.time) : "-"}</small>
-                          <strong>{event.source} - {event.label}</strong>
+                          <strong>{event.label}</strong>
+                          <small>{event.date ? formatIssueTimestamp(event.date, event.time) : "Pending"}</small>
                         </div>
                       </div>
                     ))}
                   </div>
-                </div>
+                </details>
 
-                <div style={{ background: "var(--color-bg-elevated, #ffffff)", border: "1px solid var(--color-border, #e2e8f0)", borderRadius: "12px", padding: "1.1rem" }}>
-                  <h3 style={{ fontSize: "0.95rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "6px", margin: "0 0 0.85rem 0", color: "var(--color-text-heading)" }}>
-                    <ShieldCheck size={16} color="#0f766e" /> Lifecycle CR Transport
-                  </h3>
+                <details className="issue-detail-history" open>
+                  <summary><strong>Transport lifecycle</strong><ChevronDown size={16} /></summary>
                   <div className="issue-timeline cr-lifecycle-timeline">
                     {issueCrLifecycleEvents(detail).map((event) => (
                       <div className={`timeline-event ${event.date ? "filled" : "missing"}`} key={`${event.source}-${event.label}`}>
                         <span className="timeline-dot" />
                         <div>
-                          <small>{event.date ? formatIssueTimestamp(event.date, event.time) : "-"}</small>
                           <strong>{event.label}</strong>
+                          <small>{event.date ? formatIssueTimestamp(event.date, event.time) : "Pending import"}</small>
                         </div>
                       </div>
                     ))}
                   </div>
-                </div>
-              </div>
-
-            </div>
+                </details></aside></div>
           </div>
         )}
       </UIModal>
@@ -8744,61 +8495,6 @@ function formatIssueTimestamp(value?: string, time?: string) {
   if (!value) return "-";
   const date = parseAppTimestamp(value, time || "08:00:00");
   return date ? date.toLocaleString() : "-";
-}
-
-function groupObjectsBySe03Label(objects: CrDetail["objects"]) {
-  const groups = new Map<string, { key: string; label: string; objects: CrDetail["objects"] }>();
-  for (const object of objects) {
-    const key = `${object.pgmid || "-"} ${object.object_type || "-"}`;
-    const label = object.object_label || object.object_type_description || se03ObjectLabel(object.pgmid, object.object_type);
-    if (!groups.has(key)) groups.set(key, { key, label, objects: [] });
-    groups.get(key)!.objects.push(object);
-  }
-  return [...groups.values()];
-}
-
-function se03ObjectLabel(pgmid?: string, objectType?: string) {
-  const key = `${pgmid || ""} ${objectType || ""}`.trim().toUpperCase();
-  const labels: Record<string, string> = {
-    "CORR RELE": "Release information",
-    "LIMU REPS": "Source/include ABAP",
-    "LIMU REPT": "Program text",
-    "LIMU CINC": "Class include",
-    "LIMU CPUB": "Class public section",
-    "LIMU CPRI": "Class private section",
-    "LIMU CPRO": "Class protected section",
-    "LIMU METH": "Class method",
-    "LIMU FUNC": "Function module",
-    "LIMU FUGT": "Function group text",
-    "R3TR PROG": "Program",
-    "R3TR FUGR": "Function group",
-    "R3TR CLAS": "Class",
-    "R3TR INTF": "Interface",
-    "R3TR TABL": "Table",
-    "R3TR VIEW": "View",
-    "R3TR DTEL": "Data element",
-    "R3TR DOMA": "Domain",
-    "R3TR TTYP": "Table type",
-    "R3TR SHLP": "Search help",
-    "R3TR TRAN": "Transaction",
-    "R3TR MSAG": "Message class",
-    "R3TR ENHO": "Enhancement implementation",
-    "R3TR ENHS": "Enhancement spot"
-  };
-  return labels[key] || `${objectType || "Object"} (${pgmid || "-"})`;
-}
-
-function labelDiffReadiness(value?: string) {
-  switch (value) {
-    case "source_snapshot_or_version_compare":
-      return "Source/version compare";
-    case "ddic_snapshot_or_version_compare":
-      return "DDIC compare";
-    case "repository_subobject_compare":
-      return "Repository subobject";
-    default:
-      return "Inventory only";
-  }
 }
 
 function pageText(pagination: { page: number; pageSize: number; total: number }) {

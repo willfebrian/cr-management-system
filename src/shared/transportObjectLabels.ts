@@ -1,3 +1,5 @@
+import catalog from "./transportObjectCatalog.json";
+
 export const transportProgramIdDescriptions: Record<string, string> = {
   CORR: "Correction and transport entry",
   LIMU: "Repository sub-object",
@@ -40,15 +42,15 @@ export const transportObjectTypeDescriptions: Record<string, string> = {
   PRIN: "Print object",
   PROG: "Program",
   RELE: "Release information",
-  REPS: "Source/include ABAP",
+  REPS: "Report Source Code",
   REPT: "Program text",
   SBXL: "Business object extension",
   SBXP: "Business object extension part",
   SCVI: "View cluster",
   SHLP: "Search help",
   SPDV: "Standard variant",
-  SSFO: "Smart Form",
-  SSST: "Smart Style",
+  SSFO: "SAP Smart Form",
+  SSST: "SAP Smart Style",
   STVI: "View cluster object",
   SUSC: "Authorization field",
   SUSO: "Authorization object",
@@ -68,40 +70,16 @@ export const transportObjectTypeDescriptions: Record<string, string> = {
   VIEW: "View"
 };
 
-export const transportObjectPairLabels: Record<string, string> = {
-  "CORR RELE": "Release information",
-  "LIMU CINC": "Class include",
-  "LIMU CLSD": "Class definition",
-  "LIMU CPUB": "Class public section",
-  "LIMU CPRI": "Class private section",
-  "LIMU CPRO": "Class protected section",
-  "LIMU CUAD": "GUI status",
-  "LIMU FUNC": "Function module",
-  "LIMU FUGT": "Function group text",
-  "LIMU METH": "Class method",
-  "LIMU REPS": "Source/include ABAP",
-  "LIMU REPT": "Program text",
-  "LIMU TABD": "Table contents",
-  "R3TR CLAS": "Class",
-  "R3TR DOMA": "Domain",
-  "R3TR DTEL": "Data element",
-  "R3TR ENHO": "Enhancement implementation",
-  "R3TR ENHS": "Enhancement spot",
-  "R3TR FUGR": "Function group",
-  "R3TR INTF": "Interface",
-  "R3TR MSAG": "Message class",
-  "R3TR PROG": "Program",
-  "R3TR SHLP": "Search help",
-  "R3TR TABL": "Table",
-  "R3TR TRAN": "Transaction",
-  "R3TR TTYP": "Table type",
-  "R3TR VIEW": "View"
-};
+export const transportObjectPairLabels: Record<string, string> = Object.fromEntries(
+  catalog.rows.filter(row => row.description).map(row => [`${row.pgmid} ${row.objectType}`, row.description])
+);
 
-export function transportObjectLabel(pgmid?: string, objectType?: string) {
-  const key = `${pgmid || ""} ${objectType || ""}`.trim().toUpperCase();
-  if (transportObjectPairLabels[key]) return transportObjectPairLabels[key];
+export function transportObjectLabel(pgmid?: string, objectType?: string, savedLabel?: string) {
+  const normalizedPgmid = String(pgmid || "").trim().toUpperCase();
   const normalizedObjectType = String(objectType || "").trim().toUpperCase();
-  if (transportObjectTypeDescriptions[normalizedObjectType]) return transportObjectTypeDescriptions[normalizedObjectType];
+  const key = `${normalizedPgmid} ${normalizedObjectType}`.trim();
+  if (transportObjectPairLabels[key]) return transportObjectPairLabels[key];
+  if (savedLabel?.trim() && savedLabel.trim() !== normalizedObjectType) return savedLabel.trim();
+  if (!normalizedPgmid && transportObjectTypeDescriptions[normalizedObjectType]) return transportObjectTypeDescriptions[normalizedObjectType];
   return key ? `SAP transport object (${key})` : "SAP transport object";
 }

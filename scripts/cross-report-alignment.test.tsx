@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { DisplayNameList, splitDisplayNames } from "../src/client/components/DisplayNameList";
 
 const app = readFileSync(new URL("../src/client/pages/App.tsx", import.meta.url), "utf8");
+const crDetail = readFileSync(new URL("../src/client/components/crTransport/CrDetailContent.tsx", import.meta.url), "utf8");
 
 test("splits comma and semicolon separated display names into stable lines", () => {
   assert.deepEqual(
@@ -28,7 +29,7 @@ test("renders each display name on its own line with an empty fallback", () => {
 });
 
 test("uses the shared hierarchy in CR and Issue detail", () => {
-  assert.match(app, /<SummaryStrip\s+className="cr-summary-strip"/);
+  assert.match(crDetail, /<SummaryStrip\s+className="cr-summary-strip cr-detail-metadata"/);
   assert.match(app, /label:\s*"Owner",\s*value:\s*displayRequest\?\.owner/);
-  assert.match(app, /className="cr-related-issue-chevron"/);
+  assert.match(crDetail, /className="cr-related-issue-chevron"/);
 });

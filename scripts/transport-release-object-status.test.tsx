@@ -7,7 +7,7 @@ import { TransportReleaseService } from "../mcp/sap/transport-release-service.mj
 import { transportObjectLabel } from "../src/shared/transportObjectLabels.js";
 
 test("provides a readable description for known and unknown SAP transport object types", () => {
-  assert.equal(transportObjectLabel("LIMU", "REPS"), "Source/include ABAP");
+  assert.equal(transportObjectLabel("LIMU", "REPS"), "Report Source Code");
   assert.equal(transportObjectLabel("R3TR", "TABL"), "Table");
   assert.equal(transportObjectLabel("R3TR", "ZNEW"), "SAP transport object (R3TR ZNEW)");
 });
