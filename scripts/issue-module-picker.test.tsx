@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import React from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {ModulePicker} from '../src/client/components/modules/ModulePicker.js';
+import {ModuleBadges} from '../src/client/components/modules/ModuleBadges.js';
+import {toggleModuleSelection} from '../src/client/components/modules/moduleSelection.js';
+const pp={id:1,group:'SAP' as const,code:'PP',name:'Production Planning',description:null,isActive:true};
+const olap={id:2,group:'NON-SAP' as const,code:'OLAP',name:'OLAP',description:null,isActive:true};
+test('mixed-group choices are independently selectable',()=>{assert.deepEqual(toggleModuleSelection([1],2),[1,2]);assert.deepEqual(toggleModuleSelection([1,2],1),[2]);const html=renderToStaticMarkup(<ModulePicker options={[pp,olap]} selectedModules={[pp]} onChange={()=>{}}/>);assert.match(html,/Production Planning/);assert.match(html,/NON-SAP/);assert.match(html,/checked/);});
+test('inactive selected module stays visible but inactive new choice is disabled',()=>{const html=renderToStaticMarkup(<ModulePicker options={[{...olap,isActive:false}]} selectedModules={[{...pp,isActive:false}]} onChange={()=>{}}/>);assert.match(html,/Inactive/);assert.match(html,/disabled/);assert.match(renderToStaticMarkup(<ModuleBadges modules={[pp,olap]}/>),/SAP: PP/);});
