@@ -22,9 +22,9 @@ A fresh review identified two important issues, both fixed with regression tests
 
 ## Deployment and reversal
 
-The primary application database has not been migrated by this work. Apply database/migrations/20261006_module_classification.sql in a transaction with search_path set to the application's configured schema, before deploying the new code. The migration is additive and repeatable; existing Issues remain unassigned.
+The initial feature delivery did not migrate the primary application database. During the approved local recovery on 2026-10-06, the additive migration was applied to the configured application schema and the local server was restarted; the catalog contains twelve initial modules. Apply database/migrations/20261006_module_classification.sql in a transaction with search_path set to the application's configured schema, before deploying the new code. The migration is additive and repeatable; existing Issues remain unassigned.
 
-For reversal after deployment, restore the prior application code (base commit 72300a346c8ecc9f5426507f6f3331324be43217, or revert the feature's code commits). Retain module_master, issue_modules, and their data. The prior code ignores those tables. Keep the additive permission data with the tables. Do not drop classification data during a normal reversal. A subsequent redeployment can reuse it. Full data deletion would require a separately approved destructive migration.
+For reversal after deployment, restore the prior application code (base commit 72300a346c8ecc9f5426507f6f3331324be43217, or revert the feature's code commits). Retain module_master, issue_module_links, and their data. The prior code ignores those tables. Keep the additive permission data with the tables. Do not drop classification data during a normal reversal. A subsequent redeployment can reuse it. Full data deletion would require a separately approved destructive migration.
 
 ## Implementation rulings
 
@@ -44,3 +44,11 @@ For reversal after deployment, restore the prior application code (base commit 7
 - Add an explicit module-options Refresh control after an inactive-module save rejection. Lookup failures already expose Retry; users can remove the rejected selection or reopen the editor.
 
 The integration branch is codex/module-classification, based on master. Local merge, remote push/PR, and deployment remain separate integration decisions.
+
+## UI and local recovery follow-up
+
+The running local server had started before the feature merge and returned HTML 404 for the module endpoint. The configured schema also lacked both module tables. Applying only the additive module migration transactionally and restarting the verified local application restored the lookup. No Issue module assignment was written during browser verification.
+
+The approved UI follow-up adds a compact inline detail summary, grouped code/name choices, selection counts, search, and Refresh/Retry without clearing selections. HTML or malformed JSON responses now produce clear recovery messages rather than parser exceptions.
+
+Verification: full npm test passed (23 module tests passed; the optional PostgreSQL fixture was skipped on this UI-only follow-up); production build passed. Independent review found no blocking issue. Browser checks verified recovered lookup, mixed selection retained after Refresh, search, keyboard checkbox changes, compact detail, and single-column picker at a 650px viewport. The viewport was reset and test selections were removed without saving.

@@ -32,7 +32,7 @@
     "windows:install-startup": "powershell -ExecutionPolicy Bypass -File scripts/install-windows-startup-task.ps1",
     "windows:install-startup-shortcut": "powershell -ExecutionPolicy Bypass -File scripts/install-windows-startup-shortcut.ps1",
     "test:transport-catalog": "node --test scripts/transport-object-catalog.test.mjs && tsx --test scripts/transport-object-labels.test.ts",
-    "test:modules": "tsx --test scripts/module-domain.test.ts scripts/module-repository.test.ts scripts/module-routes.test.ts scripts/issue-module-assignment.test.ts scripts/module-master-ui.test.tsx scripts/issue-module-picker.test.tsx scripts/issue-module-filter.test.ts scripts/issue-module-export.test.ts scripts/issue-module-report-ui.test.tsx scripts/module-postgres.test.ts scripts/issue-module-form.test.ts"
+    "test:modules": "tsx --test scripts/module-domain.test.ts scripts/module-repository.test.ts scripts/module-routes.test.ts scripts/issue-module-assignment.test.ts scripts/module-master-ui.test.tsx scripts/issue-module-picker.test.tsx scripts/issue-module-filter.test.ts scripts/issue-module-export.test.ts scripts/issue-module-report-ui.test.tsx scripts/module-postgres.test.ts scripts/issue-module-form.test.ts scripts/module-client-recovery.test.ts"
   },
   "dependencies": {
     "@docx-editor.dev/core": "2.6.1",
