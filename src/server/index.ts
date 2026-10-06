@@ -18,6 +18,8 @@ import { transportRequestRoutes } from "./routes/transportRequestRoutes.js";
 import { transportReleaseRoutes } from "./routes/transportReleaseRoutes.js";
 import { checkDatabaseHealth, pool } from "./db/pool.js";
 
+import {moduleRoutes} from './routes/moduleRoutes.js';
+import {ModuleError} from './modules/moduleDomain.js';
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..", "..");
@@ -48,6 +50,7 @@ app.use("/api/ai", requireAuth, aiRoutes);
 app.use("/api", requireAuth, auditRoutes);
 app.use("/api/cr-transports/release", requireAuth, transportReleaseRoutes);
 app.use("/api/cr-transports", requireAuth, transportRequestRoutes);
+app.use("/api", requireAuth, moduleRoutes);
 app.use("/api", requireAuth, crRoutes);
 app.use(express.static(clientDist));
 
@@ -57,6 +60,7 @@ app.get("*", (_req, res, next) => {
 });
 
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  if (error instanceof ModuleError) return res.status(error.status).json({ok:false,code:error.code,message:error.message});
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof PermissionDeniedError) return res.status(error.status).json({ ok: false, code: error.code, message });
   if (error instanceof ProjectRepositoryError) {

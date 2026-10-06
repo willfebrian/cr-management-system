@@ -35,6 +35,7 @@ export const PERMISSION_CATALOG = [
   { key: "project.cancel_delete", label: "Cancel/Delete Project", group: "Project", requires: ["project.view"] },
   { key: "project.documents", label: "Generate CR Transport Document", group: "Project", requires: ["project.view"] },
   { key: "master_data.view", label: "View Master Data", group: "Master Data" },
+  { key: "master_data.modules", label: "Manage Modules", group: "Master Data", adminOnly: true, requires: ["master_data.view"] },
   { key: "master_data.people", label: "Manage People", group: "Master Data", requires: ["master_data.view"] },
   { key: "master_data.group_emails", label: "Manage Group Emails", group: "Master Data", requires: ["master_data.view"] },
   { key: "settings.target_systems", label: "Manage Target Systems", group: "Settings" },
@@ -80,7 +81,7 @@ export const REGULAR_USER_PRESET: PermissionKey[] = normalizePermissions([
 
 export const USER_ROLE_LOCKED_PERMISSIONS: readonly PermissionKey[] = [
   "transport.create", "transport.release", "transport.sync",
-  "master_data.people", "master_data.group_emails",
+  "master_data.people", "master_data.group_emails", "master_data.modules",
   "settings.target_systems", "settings.templates"
 ];
 
