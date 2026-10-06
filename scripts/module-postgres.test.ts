@@ -37,6 +37,9 @@ test('isolated PostgreSQL schema verifies migration, Issue reads, atomic saves, 
    const id=Number(detail.issue!.id);assert.deepEqual(detail.issue!.modules.map((m:any)=>Number(m.id)).sort((a:number,b:number)=>a-b),[mm.id,olap.id].sort((a,b)=>a-b));
    detail=await issues.saveIssue({id,issueNo:detail.issue!.issue_no,issueName:'Legacy edit'},actor);assert.equal(detail.issue!.modules.length,2);
    const filtered=await issues.listIssues({moduleIds:[mm.id,olap.id],pageSize:1});assert.equal(filtered.total,1);assert.equal(filtered.rows.length,1);
+   const {exportIssueReport}=await import('../src/server/services/reportExportService.js');
+   const workbook=await exportIssueReport({moduleIds:[mm.id,olap.id]});const xml=workbook.toString('utf8');
+   assert.match(xml,/>Modules</);assert.match(xml,/NON-SAP: OLAP; SAP: MM/);assert.equal((xml.match(/Legacy edit/g)||[]).length,1);
    await catalog.updateModule(mm.id,{...mm,description:mm.description||'',isActive:false},actor);
    detail=await issues.saveIssue({id,issueNo:detail.issue!.issue_no,issueName:'Retain inactive',moduleIds:[mm.id,olap.id]},actor);assert.equal(detail.issue!.modules.length,2);
    const before=(await connection.query('SELECT count(*) FROM activity_logs')).rows[0].count;

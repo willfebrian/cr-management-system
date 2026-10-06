@@ -8,7 +8,7 @@
 
 **Tech Stack:** React 19, TypeScript, Express, PostgreSQL/pg, Vite, Node test runner/tsx.
 
-**Spec:** `docs/superpowers/specs/2026-10-06-module-classification-design.md` (draft for user review alongside this plan).
+**Spec:** `docs/superpowers/specs/2026-10-06-module-classification-design.md` (approved by the user).
 
 ## Global Constraints
 
@@ -111,4 +111,4 @@ Integrate through existing schema, permissions, index, Issue repository/routes/t
 
 ## Handoff
 
-Review both draft documents before implementation. Recommended execution is native in this session because the six tasks share schema/type/API interfaces and follow existing application patterns. Subagent-driven execution is available if the user prefers per-task independent implementation/review. CR/User linking needs its own later scope review; do not silently copy classification from Issue to either entity.
+Both documents were approved by the user on 2026-10-06. Recommended execution is native in this session because the six tasks share schema/type/API interfaces and follow existing application patterns. Subagent-driven execution is available if the user prefers per-task independent implementation/review. CR/User linking needs its own later scope review; do not silently copy classification from Issue to either entity.

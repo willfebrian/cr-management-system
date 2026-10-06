@@ -21,6 +21,8 @@ import { PaginationControls } from "../components/PaginationControls";
 import { ProjectEditor } from "../components/projects/ProjectEditor";
 import { ProjectReport } from "../components/projects/ProjectReport";
 import { UserManagementWorkspace } from "../components/users/UserManagementWorkspace";
+import {IssueModuleSummary} from "../components/modules/IssueModuleSummary";
+import {moduleIdsFromModules} from "../components/modules/moduleSelection";
 import {ModuleReportFilters} from "../components/modules/ModuleReportFilters";
 import {IssueModulesField} from "../components/modules/IssueModulesField";
 import {ModuleBadges} from "../components/modules/ModuleBadges";
@@ -5685,6 +5687,7 @@ function IssueDisplay({
         ) : (
           <div className="cr-modal-content-animated" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
             <div className="issue-detail-split"><div className="issue-detail-main">
+<IssueModuleSummary modules={detail?.issue?.modules || []}/>
 <section className="issue-detail-reference"><small>Email subject</small><p>{detail?.issue?.email_subject || "-"}</p><div className="issue-detail-reference-links"><span>GLPI {primaryGlpiTicket ? <a href={glpiUrl(primaryGlpiTicket)} target="_blank" rel="noreferrer">#{primaryGlpiTicket} <ExternalLink size={12} /></a> : "-"}</span><span>CR Helpdesk <strong>{formatCrHelpdeskNumbers(detail) || selectedIssue?.primary_cr_helpdesk_no || "-"}</strong></span></div></section>            {/* Incomplete Warning if any */}
             {detailIncompleteItems.length ? (
               <details className="issue-detail-incomplete">
@@ -8607,7 +8610,7 @@ function issueFormFromDetail(detail: IssueDetail | null): IssueSavePayload {
   ) as Record<string, string>;
 
   return {
-    moduleIds: issue?.modules?.map(module => module.id) || [],
+    moduleIds: moduleIdsFromModules(issue?.modules),
     id: issue?.id,
     issueNo: issue?.issue_no,
     subIssueNo: issue?.sub_issue_no || "01",

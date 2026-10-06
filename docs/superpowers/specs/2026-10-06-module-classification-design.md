@@ -1,6 +1,6 @@
 # Shared Module Classification Design
 
-Status: Draft for review, based on the agreed conversation scope. Implementation has not started.
+Status: Approved by the user on 2026-10-06; implemented on codex/module-classification.
 
 ## Intent and scope
 
