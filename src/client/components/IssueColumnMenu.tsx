@@ -3,6 +3,7 @@ import { Columns3, Eye } from "lucide-react";
 export const DEFAULT_ISSUE_COLUMNS = [
   "issue",
   "name",
+  "modules",
   "abaper",
   "cr",
   "status",
