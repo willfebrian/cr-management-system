@@ -2,7 +2,7 @@ import type { PermissionKey } from "../../shared/permissions.js";
 
 const appearanceKeys = new Set(["app_font_size", "issue_form_layout", "create_issue_form_layout", "change_issue_form_layout"]);
 const generalKeys = new Set(["exchange_host", "exchange_user", "exchange_pass", "outlook_mcp_config", "outlook_max_email_count", "outlook_max_body_chars"]);
-const aiKeys = new Set(["ai_primary_provider", "ai_fallback_provider", "nine_router_enabled", "nine_router_base_url", "nine_router_model", "nine_router_api_key", "openrouter_enabled", "openrouter_api_key", "openrouter_model", "openrouter_fallback_model", "ai_instruction_glpi", "ai_instruction_email", "ai_instruction_issue_name", "ai_instruction_problem", "ai_instruction_impact"]);
+const aiKeys = new Set(["ai_primary_provider", "ai_fallback_provider", "nine_router_enabled", "nine_router_base_url", "nine_router_model", "nine_router_api_key", "local_llm_enabled", "local_llm_base_url", "local_llm_model", "local_llm_api_key", "local_llm_timeout", "openrouter_enabled", "openrouter_api_key", "openrouter_model", "openrouter_fallback_model", "ai_instruction_glpi", "ai_instruction_email", "ai_instruction_issue_name", "ai_instruction_problem", "ai_instruction_impact"]);
 
 export function settingPermission(key: string): PermissionKey | null {
   if (appearanceKeys.has(key) || /^status_color_[a-z0-9_]+_(bg|text|border)$/.test(key)) return "settings.appearance";

@@ -11,10 +11,11 @@ export type AnalysisGenerationResult = {
 };
 
 export type TestProviderParams = {
-  provider: "9router" | "openrouter";
+  provider: "9router" | "openrouter" | "local_llm";
   baseUrl?: string;
   model?: string;
   apiKey?: string;
+  timeoutMs?: number;
 };
 
 function normalizeChatEndpoint(baseUrl: string): string {
@@ -150,6 +151,67 @@ async function callNineRouter(
   }
 }
 
+async function callLocalLlm(
+  baseUrl: string,
+  model: string,
+  apiKey: string,
+  messages: Array<{ role: string; content: string }>,
+  timeoutMs = 60000
+): Promise<string> {
+  const endpoint = normalizeChatEndpoint(baseUrl || "http://192.168.1.166:11434/v1");
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "Accept": "application/json, text/event-stream, text/plain, */*",
+  };
+
+  if (apiKey && apiKey.trim()) {
+    headers["Authorization"] = `Bearer ${apiKey.trim()}`;
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model: model || "qwen3.8:latest",
+        messages,
+        temperature: 0.3,
+        stream: false,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    const responseText = await response.text().catch(() => "");
+
+    if (!response.ok) {
+      throw new Error(`LLM Local Error (${response.status}): ${responseText || response.statusText}`);
+    }
+
+    const { content, error } = parseOpenAiCompatibleResponse(responseText);
+
+    if (error) {
+      throw new Error(`LLM Local Error: ${error}`);
+    }
+
+    if (!content) {
+      throw new Error(`LLM Local (${model}) returned an empty response. Raw output: ${responseText.slice(0, 100)}`);
+    }
+
+    return content;
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err.name === "AbortError") {
+      throw new Error(`LLM Local connection timed out after ${timeoutMs / 1000}s. Check endpoint: ${endpoint}`);
+    }
+    throw err;
+  }
+}
+
 async function callOpenRouter(
   apiKey: string,
   model: string,
@@ -256,6 +318,18 @@ export async function testAiProviderConnection(params: TestProviderParams): Prom
       message: `Successfully connected to 9Router (${model})!`,
       output: raw.slice(0, 100),
     };
+  } else if (params.provider === "local_llm") {
+    const baseUrl = params.baseUrl || "http://192.168.1.166:11434/v1";
+    const model = params.model || "qwen3.8:latest";
+    const apiKey = params.apiKey || "";
+    const timeout = params.timeoutMs || 20000;
+
+    const raw = await callLocalLlm(baseUrl, model, apiKey, testMessages, timeout);
+    return {
+      ok: true,
+      message: `Successfully connected to LLM Local (${model})!`,
+      output: raw.slice(0, 100),
+    };
   } else if (params.provider === "openrouter") {
     const apiKey = params.apiKey || "";
     const model = params.model || "openrouter/auto";
@@ -290,6 +364,11 @@ export async function generateAnalysisFromEmail(
       'nine_router_base_url',
       'nine_router_model',
       'nine_router_api_key',
+      'local_llm_enabled',
+      'local_llm_base_url',
+      'local_llm_model',
+      'local_llm_api_key',
+      'local_llm_timeout',
       'openrouter_enabled',
       'openrouter_api_key',
       'openrouter_model',
@@ -314,6 +393,12 @@ export async function generateAnalysisFromEmail(
   const nineRouterBaseUrl = settingsMap.nine_router_base_url || process.env.NINEROUTER_BASE_URL || "http://192.168.88.83:20128/v1";
   const nineRouterModel = settingsMap.nine_router_model || process.env.NINEROUTER_MODEL || "ag/gemini-3.7-flash-medium";
   const nineRouterApiKey = settingsMap.nine_router_api_key || process.env.NINEROUTER_API_KEY || "";
+
+  const localLlmEnabled = settingsMap.local_llm_enabled !== "false";
+  const localLlmBaseUrl = settingsMap.local_llm_base_url || process.env.LOCAL_LLM_BASE_URL || "http://192.168.1.166:11434/v1";
+  const localLlmModel = settingsMap.local_llm_model || process.env.LOCAL_LLM_MODEL || "qwen3.8:latest";
+  const localLlmApiKey = settingsMap.local_llm_api_key || process.env.LOCAL_LLM_API_KEY || "";
+  const localLlmTimeout = Number(settingsMap.local_llm_timeout) || 60000;
 
   const openrouterEnabled = settingsMap.openrouter_enabled !== "false";
   const openrouterApiKey = settingsMap.openrouter_api_key || process.env.OPENROUTER_API_KEY || "";
@@ -419,6 +504,24 @@ ${emailContext}`;
         return true;
       } catch (err: any) {
         const msg = `9Router error: ${err.message}`;
+        console.warn(`[AI Service] ${msg}`);
+        errorLogs.push(msg);
+        return false;
+      }
+    }
+
+    if (provider === "local_llm") {
+      if (!localLlmEnabled) {
+        errorLogs.push("LLM Local is disabled in settings.");
+        return false;
+      }
+      try {
+        console.info(`[AI Service] Attempting generation with LLM Local (${localLlmModel}) at ${localLlmBaseUrl}...`);
+        rawContent = await callLocalLlm(localLlmBaseUrl, localLlmModel, localLlmApiKey, messages, localLlmTimeout);
+        providerUsed = `LLM Local (${localLlmModel})`;
+        return true;
+      } catch (err: any) {
+        const msg = `LLM Local error: ${err.message}`;
         console.warn(`[AI Service] ${msg}`);
         errorLogs.push(msg);
         return false;
