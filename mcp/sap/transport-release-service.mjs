@@ -1,6 +1,7 @@
 import { AuditLogger } from "./audit-logger.mjs";
 import { buildSapConnectionFromEnv, createSapClientForServer, SapRfcClient, SAP_GATEWAY_CALL_CONTEXT } from "./sap-client-factory.mjs";
 import { getTransportRequestTarget } from "./transport-request-targets.mjs";
+import { reconcileInactiveDiagnostics } from "./transport-release-diagnostics.mjs";
 
 /**
  * Service for releasing SAP transport requests via ZRFC_TRANSPORT_REQUEST_RELEASE.
@@ -58,7 +59,7 @@ export class TransportReleaseService {
         targetSystem: this.target.code,
         targetServer: this.target.server,
         hasErrors: rows.some((r) => r.status === "ERROR") || hasObjectErrors,
-        hasWarnings: rows.some((r) => r.status === "WARNING"),
+        hasWarnings: rows.some((r) => r.status === "WARNING" || r.objects.some((object) => object.status === "WARNING")),
         tasks: rows
       };
       this.audit("success", mode, trkorr, started, response);
@@ -107,7 +108,8 @@ export function parseReleaseRows(rawRows) {
   }
 
   return tasks.map((task) => {
-    const objects = objectsByRequest.get(task.trkorr) || [];
+    task = reconcileInactiveDiagnostics({ ...task, objects: objectsByRequest.get(task.trkorr) || [] });
+    const objects = task.objects;
     const failedObject = objects.find((object) => object.status === "ERROR");
     if (!failedObject || task.status === "ERROR") return { ...task, objects };
     return {

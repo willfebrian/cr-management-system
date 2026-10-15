@@ -2,9 +2,86 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { TransportReleaseService } from "../mcp/sap/transport-release-service.mjs";
 import { transportObjectLabel } from "../src/shared/transportObjectLabels.js";
+import { parseReleaseRows } from "../mcp/sap/transport-release-service.mjs";
+
+// ABAP source is maintained locally and excluded from Git.
+const localAbapSource = new URL("../sap/abap/zrfc_transport_request_release/ZRFC_TRANSPORT_REQUEST_RELEASE.abap", import.meta.url);
+const abapSourceTest = (name: string, run: () => void) => test(name, { skip: !existsSync(localAbapSource) }, run);
+
+test("maps the screenshot's legacy inactive diagnostic to the Smart Form instead of leaving every object green", () => {
+  const [task] = parseReleaseRows([
+    "TRDK924860|S|Label change|ERROR|Inactive ZMMR_LABELROL_TYB_BLANK :|1",
+    "OBJECT|TRDK924860|R3TR|PROG|ZMMR_LABELROL_TYB_WIN|PASS|Validation passed|1",
+    "OBJECT|TRDK924860|R3TR|SSFO|ZMMR_LABELROL_TYB_BLANK|PASS|Validation passed|2"
+  ]);
+  assert.equal(task.objects[0].status, "PASS");
+  assert.equal(task.objects[1].status, "ERROR");
+  assert.equal(task.objects[1].statusSource, "DIAGNOSTIC");
+  assert.match(task.message, /SAP Smart Form \(R3TR SSFO\) ZMMR_LABELROL_TYB_BLANK/);
+  assert.match(task.objects[1].message, /SAP diagnostic: Inactive ZMMR_LABELROL_TYB_BLANK :/);
+});
+
+test("does not report a clean pass when an inactive diagnostic cannot be mapped", () => {
+  const [task] = parseReleaseRows([
+    "TASK|TRDK924860|S|Label change|ERROR|Inactive ZUNLISTED :|1",
+    "OBJECT|TRDK924860|R3TR|PROG|ZUNLISTED_OTHER|PASS|Validation passed|1"
+  ]);
+  assert.equal(task.status, "ERROR");
+  assert.equal(task.objects[0].status, "WARNING");
+  assert.match(task.message, /did not identify a matching transport object/);
+  assert.match(task.objects[0].message, /validation is inconclusive/i);
+});
+
+test("uses explicit object type when the same name belongs to different SAP objects", () => {
+  const [task] = parseReleaseRows([
+    "TASK|TRDK924860|S|Label change|ERROR|Inactive SSFO : ZLABEL|1",
+    "OBJECT|TRDK924860|R3TR|PROG|ZLABEL|PASS|Validation passed|1",
+    "OBJECT|TRDK924860|R3TR|SSFO|ZLABEL|PASS|Validation passed|2"
+  ]);
+  assert.deepEqual(task.objects.map((object) => object.status), ["PASS", "ERROR"]);
+});
+
+test("shows ambiguity instead of guessing the type when objects share a name", () => {
+  const [task] = parseReleaseRows([
+    "TASK|TRDK924860|S|Label change|ERROR|Inactive ZLABEL :|1",
+    "OBJECT|TRDK924860|R3TR|PROG|ZLABEL|PASS|Validation passed|1",
+    "OBJECT|TRDK924860|R3TR|SSFO|ZLABEL|PASS|Validation passed|2"
+  ]);
+  assert.deepEqual(task.objects.map((object) => object.status), ["WARNING", "WARNING"]);
+  assert.match(task.message, /Ambiguous object type/);
+  assert.match(task.message, /R3TR PROG/);
+  assert.match(task.message, /R3TR SSFO/);
+});
+
+test("reconciles inactive diagnostics after adding synchronized objects missing from the RFC", async () => {
+  const { enrichReleaseResultWithObjects } = await import("../src/server/sap/transportReleaseService.js");
+  const result = await enrichReleaseResultWithObjects({
+    ok: false, message: "TEST_RUN_HAS_ERRORS", mode: "TEST_RUN", trkorr: "TRDK924859",
+    targetSystem: "DEV_AIX", targetServer: "DEV", hasErrors: true, hasWarnings: false,
+    tasks: [{ trkorr: "TRDK924860", trfunction: "S", description: "Label change", status: "ERROR",
+      message: "Inactive ZMMR_LABELROL_TYB_BLANK :", sequence: 1, objects: [] }]
+  }, "DEV_AIX", async () => ({ rows: [{ trkorr: "TRDK924860", pgmid: "R3TR", object_type: "SSFO", object_name: "ZMMR_LABELROL_TYB_BLANK" }] }));
+  assert.equal(result.tasks[0].objects[0].status, "ERROR");
+  assert.match(result.tasks[0].message, /SAP Smart Form/);
+});
+
+test("renders the reconciled Smart Form error with clear diagnostic provenance", async () => {
+  const { ReleaseResultsPanel } = await import("../src/client/components/crTransport/CrTransportRelease.js");
+  const tasks = parseReleaseRows([
+    "TASK|TRDK924860|S|Label change|ERROR|Inactive ZMMR_LABELROL_TYB_BLANK :|1",
+    "OBJECT|TRDK924860|R3TR|SSFO|ZMMR_LABELROL_TYB_BLANK|PASS|Validation passed|1"
+  ]);
+  const html = renderToStaticMarkup(React.createElement(ReleaseResultsPanel, {
+    title: "Test Run Result",
+    result: { ok: false, trkorr: "TRDK924859", message: "TEST_RUN_HAS_ERRORS", tasks } as any
+  }));
+  assert.match(html, /SAP Smart Form \(R3TR SSFO\) ZMMR_LABELROL_TYB_BLANK/);
+  assert.match(html, /Based on SAP task diagnostic/);
+  assert.doesNotMatch(html, /> Pass</);
+});
 
 test("provides a readable description for known and unknown SAP transport object types", () => {
   assert.equal(transportObjectLabel("LIMU", "REPS"), "Report Source Code");
@@ -12,7 +89,7 @@ test("provides a readable description for known and unknown SAP transport object
   assert.equal(transportObjectLabel("R3TR", "ZNEW"), "SAP transport object (R3TR ZNEW)");
 });
 
-test("RFC test run uses SAP's generic inactive-object release check", () => {
+abapSourceTest("RFC test run uses SAP's generic inactive-object release check", () => {
   const source = readFileSync(new URL("../sap/abap/zrfc_transport_request_release/ZRFC_TRANSPORT_REQUEST_RELEASE.abap", import.meta.url), "utf8");
   assert.match(source, /CALL FUNCTION 'TRINT_CHECK_INACTIVE_OBJECTS'/);
   assert.match(source, /TYPE STANDARD TABLE OF SPROT_U/);
@@ -20,7 +97,7 @@ test("RFC test run uses SAP's generic inactive-object release check", () => {
   assert.match(source, /Inactive' LV_INACTIVE_DESC/);
 });
 
-test("RFC test run uses SAP CTS preflight checks for repository, locks, and authorization", () => {
+abapSourceTest("RFC test run uses SAP CTS preflight checks for repository, locks, and authorization", () => {
   const source = readFileSync(new URL("../sap/abap/zrfc_transport_request_release/ZRFC_TRANSPORT_REQUEST_RELEASE.abap", import.meta.url), "utf8");
   assert.match(source, /CALL FUNCTION 'TR_REQ_CHECK_OBJECT'/);
   assert.match(source, /IV_ACCEPT_MISSING_TADIR\s*= SPACE/);
@@ -31,14 +108,14 @@ test("RFC test run uses SAP CTS preflight checks for repository, locks, and auth
   assert.match(source, /Repository or lock consistency check failed/);
 });
 
-test("RFC explains inactive REPT objects as program text and selection texts", () => {
+abapSourceTest("RFC explains inactive REPT objects as program text and selection texts", () => {
   const source = readFileSync(new URL("../sap/abap/zrfc_transport_request_release/ZRFC_TRANSPORT_REQUEST_RELEASE.abap", import.meta.url), "utf8");
   assert.match(source, /WHEN 'REPT'/);
   assert.match(source, /Program Text \/ Selection Texts/);
   assert.match(source, /Inactive' LV_INACTIVE_DESC/);
 });
 
-test("RFC summarizes multiple inactive objects without counting the task row", () => {
+abapSourceTest("RFC summarizes multiple inactive objects without counting the task row", () => {
   const source = readFileSync(new URL("../sap/abap/zrfc_transport_request_release/ZRFC_TRANSPORT_REQUEST_RELEASE.abap", import.meta.url), "utf8");
   assert.match(source, /LV_OBJECT_ERROR_COUNT/);
   assert.match(source, /object errors found/);
@@ -46,7 +123,7 @@ test("RFC summarizes multiple inactive objects without counting the task row", (
   assert.match(source, /DELETE ADJACENT DUPLICATES/);
 });
 
-test("RFC verifies each background release in E070 before continuing to the next request", () => {
+abapSourceTest("RFC verifies each background release in E070 before continuing to the next request", () => {
   const source = readFileSync(new URL("../sap/abap/zrfc_transport_request_release/ZRFC_TRANSPORT_REQUEST_RELEASE.abap", import.meta.url), "utf8");
   assert.match(source, /Release confirmation timeout/);
   assert.match(source, /SELECT SINGLE TRSTATUS INTO LV_VERIFIED_STATUS/);
@@ -55,7 +132,7 @@ test("RFC verifies each background release in E070 before continuing to the next
   assert.match(source, /WAIT UP TO 2 SECONDS/);
 });
 
-test("RFC verifies SAP status even when the immediate release return code is non-zero", () => {
+abapSourceTest("RFC verifies SAP status even when the immediate release return code is non-zero", () => {
   const source = readFileSync(new URL("../sap/abap/zrfc_transport_request_release/ZRFC_TRANSPORT_REQUEST_RELEASE.abap", import.meta.url), "utf8");
   const childConfirmation = source.slice(
     source.indexOf("*   The immediate return code is not final release status."),
@@ -72,7 +149,7 @@ test("RFC verifies SAP status even when the immediate release return code is non
   assert.doesNotMatch(parentConfirmation, /IF LV_SUBRC = 0 OR LV_SUBRC = 12\.\s+LV_WAIT_COUNT/);
 });
 
-test("RFC treats an already released parent as idempotent release success", () => {
+abapSourceTest("RFC treats an already released parent as idempotent release success", () => {
   const source = readFileSync(new URL("../sap/abap/zrfc_transport_request_release/ZRFC_TRANSPORT_REQUEST_RELEASE.abap", import.meta.url), "utf8");
   const statusGuard = source.slice(
     source.indexOf("IF LV_TRSTATUS <> 'D'."),

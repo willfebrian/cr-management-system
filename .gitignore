@@ -20,6 +20,7 @@ actions-runner/
 nginx-docker.conf
 
 # Local spreadsheet/source-data files
+*.abap
 *.xls
 *.xlsx
 *.xlsm

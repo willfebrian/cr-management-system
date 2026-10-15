@@ -16,7 +16,7 @@ export type ReleaseObjectResult = {
   status: "PASS" | "ERROR" | "WARNING" | "RELEASED" | "SKIPPED";
   message: string;
   sequence: number;
-  statusSource: "SAP" | "TASK";
+  statusSource: "SAP" | "TASK" | "DIAGNOSTIC";
 };
 
 export type ReleaseResult = {

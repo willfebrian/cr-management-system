@@ -6,6 +6,8 @@ import { config } from "../config.js";
 import { pool } from "../db/pool.js";
 import { findSapTransportTarget, type SapTransportTarget } from "./transportTargetRepository.js";
 import { transportTargetEnvironment, normalizeTargetSystem } from "./transportRequestService.js";
+import { reconcileInactiveDiagnostics } from "../../../mcp/sap/transport-release-diagnostics.mjs";
+import { transportObjectLabel } from "../../shared/transportObjectLabels.js";
 
 export type ReleaseTaskResult = {
   trkorr: string;
@@ -25,7 +27,7 @@ export type ReleaseObjectResult = {
   status: "PASS" | "ERROR" | "WARNING" | "RELEASED" | "SKIPPED";
   message: string;
   sequence: number;
-  statusSource: "SAP" | "TASK";
+  statusSource: "SAP" | "TASK" | "DIAGNOSTIC";
 };
 
 export type ReleaseResult = {
@@ -177,9 +179,10 @@ export async function enrichReleaseResultWithObjects(
       merged.set(releaseObjectKey(object), object);
     }
     for (const object of sapObjects) {
-      merged.set(releaseObjectKey(object), { ...object, statusSource: "SAP" });
+      merged.set(releaseObjectKey(object), { ...object, statusSource: object.statusSource || "SAP" });
     }
-    const objects = [...merged.values()];
+    task = reconcileInactiveDiagnostics({ ...task, objects: [...merged.values()] }, transportObjectLabel);
+    const objects = task.objects;
     const failedObject = objects.find((object) => object.status === "ERROR");
     return failedObject && task.status !== "ERROR"
       ? { ...task, status: "ERROR" as const, message: `Object validation failed: ${failedObject.message || failedObject.objectName}`, objects }
@@ -187,7 +190,8 @@ export async function enrichReleaseResultWithObjects(
   });
   const hasErrors = enrichedTasks.some((task) => task.status === "ERROR" || task.objects.some((object) => object.status === "ERROR"));
 
-  return { ...result, ok: result.ok && !hasErrors, hasErrors, tasks: enrichedTasks };
+  const hasWarnings = enrichedTasks.some((task) => task.status === "WARNING" || task.objects.some((object) => object.status === "WARNING"));
+  return { ...result, ok: result.ok && !hasErrors, hasErrors, hasWarnings, tasks: enrichedTasks };
 }
 
 function releaseObjectKey(object: Pick<ReleaseObjectResult, "trkorr" | "pgmid" | "objectType" | "objectName">) {

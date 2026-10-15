@@ -424,7 +424,7 @@ export function ReleaseResultsPanel({ title, result, compact = false }: { title:
                       <td><span className="cr-release-object-type">{object.objectType || "Object"}</span></td>
                       <td>
                         <strong className="cr-release-object-name">{object.objectName || "-"}</strong>
-                        <small>{object.pgmid || "-"} · {transportObjectLabel(object.pgmid, object.objectType)} · {object.statusSource === "SAP" ? "Validated by SAP" : "Inherited from task"}</small>
+                        <small>{object.pgmid || "-"} · {transportObjectLabel(object.pgmid, object.objectType)} · {object.statusSource === "SAP" ? "Validated by SAP" : object.statusSource === "DIAGNOSTIC" ? "Based on SAP task diagnostic" : "Inherited from task"}</small>
                       </td>
                       <td className="center"><span className={`cr-release-badge ${objectBadge.cls}`}>{objectBadge.icon} {objectBadge.label}</span></td>
                       <td className="muted">{object.message}</td>
