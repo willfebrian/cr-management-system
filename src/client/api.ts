@@ -510,10 +510,11 @@ export async function generateAnalysis(emailContext: string, emailSubject?: stri
 }
 
 export async function testAiConnection(params: {
-  provider: "9router" | "openrouter";
+  provider: "9router" | "openrouter" | "local_llm";
   baseUrl?: string;
   model?: string;
   apiKey?: string;
+  timeoutMs?: number;
 }): Promise<{ ok: boolean; message: string; output?: string }> {
   return fetchJson("/api/ai/test-connection", {
     method: "POST",
