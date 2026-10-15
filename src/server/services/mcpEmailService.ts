@@ -157,10 +157,11 @@ function toolPayload(result: any, toolName: string): any {
   try {
     return JSON.parse(text);
   } catch {
-    if (text.includes("Kredensial email pribadi Anda belum dikonfigurasi")) {
+    if (text.includes("Kredensial email pribadi Anda belum dikonfigurasi") || /personal.*belum dikonfigurasi/i.test(text)) {
       throw new Error("PERSONAL_NOT_CONFIGURED: " + text);
     }
-    throw new Error(`MCP tool ${toolName} returned invalid JSON content.`);
+    // Jika format teks bukan JSON valid, periksa apakah Gateway mengembalikan pesan string langsung
+    throw new Error(`MCP tool ${toolName} returned invalid JSON content: ${text.slice(0, 200)}`);
   }
 }
 
@@ -267,7 +268,13 @@ export async function searchMcpEmails(
       effectiveMailbox = "personal";
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes("PERSONAL_NOT_CONFIGURED") || /personal.*belum dikonfigurasi/i.test(msg)) {
+      if (
+        msg.includes("PERSONAL_NOT_CONFIGURED") ||
+        /personal.*belum dikonfigurasi/i.test(msg) ||
+        msg.includes("invalid JSON content") ||
+        msg.includes("search_emails failed")
+      ) {
+        // Fallback otomatis ke corporate jika personal gagal/belum dikonfigurasi/kembalikan error
         summaries = await executeSearch("corporate");
         effectiveMailbox = "corporate";
       } else {
@@ -286,11 +293,23 @@ export async function searchMcpEmails(
     if (effectiveMailbox) {
       readArgs.mailbox = effectiveMailbox;
     }
-    const readResult = await client.request("tools/call", {
-      name: "read_email",
-      arguments: readArgs
-    });
-    return normalizeEmail(toolPayload(readResult, "read_email"), options.maxBodyChars);
+    try {
+      const readResult = await client.request("tools/call", {
+        name: "read_email",
+        arguments: readArgs
+      });
+      return normalizeEmail(toolPayload(readResult, "read_email"), options.maxBodyChars);
+    } catch (err) {
+      if (!options.mailbox && effectiveMailbox === "personal") {
+        // Jika read pada personal gagal, coba read pada corporate
+        const fallbackReadResult = await client.request("tools/call", {
+          name: "read_email",
+          arguments: { messageId: id, mailbox: "corporate" }
+        });
+        return normalizeEmail(toolPayload(fallbackReadResult, "read_email"), options.maxBodyChars);
+      }
+      throw err;
+    }
   }));
 }
 
