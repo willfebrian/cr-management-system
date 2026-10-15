@@ -11,7 +11,9 @@ outlookRoutes.get("/search-email", requirePermission("issue.view"), async (req, 
     const q = String(req.query.q || "");
     const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : undefined;
     const maxChars = req.query.maxChars ? parseInt(String(req.query.maxChars), 10) : undefined;
-    const results = await searchOutlookEmails(q, limit, maxChars);
+    const mailboxParam = req.query.mailbox ? String(req.query.mailbox).toLowerCase() : undefined;
+    const mailbox = mailboxParam === "corporate" || mailboxParam === "personal" ? mailboxParam : undefined;
+    const results = await searchOutlookEmails(q, limit, maxChars, mailbox);
     res.json({ rows: results });
   } catch (error) {
     next(error);

@@ -157,6 +157,9 @@ function toolPayload(result: any, toolName: string): any {
   try {
     return JSON.parse(text);
   } catch {
+    if (text.includes("Kredensial email pribadi Anda belum dikonfigurasi")) {
+      throw new Error("PERSONAL_NOT_CONFIGURED: " + text);
+    }
     throw new Error(`MCP tool ${toolName} returned invalid JSON content.`);
   }
 }
@@ -178,9 +181,25 @@ function stringValue(value: unknown): string {
   if (Array.isArray(value)) return value.map(stringValue).filter(Boolean).join(", ");
   if (value && typeof value === "object") {
     const candidate = value as Record<string, unknown>;
-    return stringValue(candidate.email ?? candidate.address ?? candidate.name ?? "");
+    const val = candidate.email ?? candidate.address ?? candidate.name;
+    if (val !== undefined && val !== null) return stringValue(val);
+    return "";
   }
   return value === undefined || value === null ? "" : String(value);
+}
+
+function parseEmailAddress(raw: unknown): { name: string; email: string } {
+  let str = stringValue(raw);
+  if (!str) return { name: "", email: "" };
+  str = str.replace(/\\"/g, '"').trim();
+  const match = str.match(/^(?:["']?(.*?)["']?\s*)?<([^>]+)>$/);
+  if (match) {
+    return { name: match[1]?.trim() || "", email: match[2]?.trim() || "" };
+  }
+  if (str.includes("@")) {
+    return { name: "", email: str.trim() };
+  }
+  return { name: str.trim(), email: "" };
 }
 
 function normalizeEmail(payload: any, maxBodyChars: number): OutlookEmailMatch {
@@ -189,8 +208,9 @@ function normalizeEmail(payload: any, maxBodyChars: number): OutlookEmailMatch {
     throw new Error("MCP read_email returned an invalid email object.");
   }
   const from = email.from;
-  const senderName = stringValue(email.senderName ?? email.sender_name ?? from?.name);
-  const senderEmail = stringValue(email.senderEmail ?? email.sender_email ?? from?.email ?? from?.address ?? (typeof from === "string" ? from : ""));
+  const parsedFrom = parseEmailAddress(from);
+  const senderName = stringValue((email.senderName ?? email.sender_name ?? (typeof from === "object" ? from?.name : "")) || parsedFrom.name);
+  const senderEmail = stringValue((email.senderEmail ?? email.sender_email ?? (typeof from === "object" ? (from?.email ?? from?.address) : "")) || parsedFrom.email);
   const body = stringValue(email.body ?? email.text ?? email.content);
   return {
     receivedAt: stringValue(email.receivedAt ?? email.received_at ?? email.date ?? email.receivedDate),
@@ -209,24 +229,66 @@ export async function searchMcpEmails(
     maxResults: number;
     maxBodyChars: number;
     fetchImpl?: typeof fetch;
+    mailbox?: "personal" | "corporate";
   }
 ): Promise<OutlookEmailMatch[]> {
   if (!subject.trim()) return [];
   const { client } = await connectMcpEmailServer(config, options.fetchImpl || fetch);
-  const searchResult = await client.request("tools/call", {
-    name: "search_emails",
-    arguments: { query: subject.trim(), maxResults: options.maxResults, unreadOnly: false }
-  });
-  const summaries = searchRows(toolPayload(searchResult, "search_emails"));
+
+  const executeSearch = async (mailboxTarget?: "personal" | "corporate") => {
+    const searchArgs: Record<string, unknown> = {
+      query: subject.trim(),
+      maxResults: options.maxResults,
+      unreadOnly: false
+    };
+    if (mailboxTarget) {
+      searchArgs.mailbox = mailboxTarget;
+    }
+    const searchResult = await client.request("tools/call", {
+      name: "search_emails",
+      arguments: searchArgs
+    });
+    const parsedPayload = toolPayload(searchResult, "search_emails");
+    if (typeof parsedPayload === "string" && parsedPayload.includes("Kredensial email pribadi Anda belum dikonfigurasi")) {
+      throw new Error("PERSONAL_NOT_CONFIGURED: " + parsedPayload);
+    }
+    return searchRows(parsedPayload);
+  };
+
+  let summaries: any[] = [];
+  let effectiveMailbox: "personal" | "corporate" | undefined = options.mailbox;
+
+  if (options.mailbox) {
+    summaries = await executeSearch(options.mailbox);
+  } else {
+    // Dynamic Auto Fallback: try personal first, fallback to corporate if personal is not configured or errors
+    try {
+      summaries = await executeSearch("personal");
+      effectiveMailbox = "personal";
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("PERSONAL_NOT_CONFIGURED") || /personal.*belum dikonfigurasi/i.test(msg)) {
+        summaries = await executeSearch("corporate");
+        effectiveMailbox = "corporate";
+      } else {
+        throw err;
+      }
+    }
+  }
+
   const ids = summaries.map(messageId).filter(Boolean).slice(0, options.maxResults);
   if (summaries.length && !ids.length) {
     throw new Error("MCP search_emails results did not include messageId values.");
   }
 
   return Promise.all(ids.map(async (id) => {
+    const readArgs: Record<string, unknown> = { messageId: id };
+    if (effectiveMailbox) {
+      readArgs.mailbox = effectiveMailbox;
+    }
     const readResult = await client.request("tools/call", {
       name: "read_email",
-      arguments: { messageId: id }
+      arguments: readArgs
     });
     return normalizeEmail(toolPayload(readResult, "read_email"), options.maxBodyChars);
   }));

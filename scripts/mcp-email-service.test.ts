@@ -81,8 +81,8 @@ test("searches by subject, reads each message, and truncates the normalized body
   });
 
   assert.deepEqual(toolCalls, [
-    { name: "search_emails", arguments: { query: "PI/PO change", maxResults: 2, unreadOnly: false } },
-    { name: "read_email", arguments: { messageId: "uid:42" } }
+    { name: "search_emails", arguments: { query: "PI/PO change", maxResults: 2, unreadOnly: false, mailbox: "personal" } },
+    { name: "read_email", arguments: { messageId: "uid:42", mailbox: "personal" } }
   ]);
   assert.deepEqual(rows, [{
     receivedAt: "2026-08-25T08:00:00Z",

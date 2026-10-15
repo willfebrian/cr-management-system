@@ -39,6 +39,7 @@ export async function searchConfiguredMcpEmails(
   querySubject: string,
   limit?: number,
   maxChars?: number,
+  mailbox?: "personal" | "corporate",
   dependencies: OutlookMcpDependencies = {}
 ): Promise<OutlookEmailMatch[]> {
   if (!querySubject?.trim()) return [];
@@ -51,6 +52,7 @@ export async function searchConfiguredMcpEmails(
   return searchMcpEmails(parseMcpEmailConfig(rawConfig), querySubject, {
     maxResults: positiveInteger(limit, settings.outlook_max_email_count, 5),
     maxBodyChars: positiveInteger(maxChars, settings.outlook_max_body_chars, 15000),
+    mailbox,
     fetchImpl: dependencies.fetchImpl
   });
 }
@@ -58,9 +60,10 @@ export async function searchConfiguredMcpEmails(
 export async function searchOutlookEmails(
   querySubject: string,
   limit?: number,
-  maxChars?: number
+  maxChars?: number,
+  mailbox?: "personal" | "corporate"
 ): Promise<OutlookEmailMatch[]> {
-  return searchConfiguredMcpEmails(querySubject, limit, maxChars);
+  return searchConfiguredMcpEmails(querySubject, limit, maxChars, mailbox);
 }
 
 export async function sendConfiguredMcpEmail(

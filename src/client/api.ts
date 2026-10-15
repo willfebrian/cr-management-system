@@ -459,7 +459,8 @@ let cachedOutlookSettings: { limit: number; maxChars: number; timestamp: number 
 export async function searchOutlookEmail(
   subject: string,
   limit?: number,
-  maxChars?: number
+  maxChars?: number,
+  mailbox?: "personal" | "corporate"
 ): Promise<{ rows: OutlookSearchEmailResult[] }> {
   let finalLimit = limit;
   let finalMaxChars = maxChars;
@@ -487,6 +488,7 @@ export async function searchOutlookEmail(
   const queryParams = new URLSearchParams({ q: subject });
   if (finalLimit && finalLimit > 0) queryParams.set("limit", String(finalLimit));
   if (finalMaxChars && finalMaxChars > 0) queryParams.set("maxChars", String(finalMaxChars));
+  if (mailbox) queryParams.set("mailbox", mailbox);
   const queryString = queryParams.toString();
   return fetchJson(`/api/outlook/search-email?${queryString}`);
 }

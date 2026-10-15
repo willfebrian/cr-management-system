@@ -6074,6 +6074,7 @@ function IssueEditor({
   const [glpiPreview, setGlpiPreview] = useState<Record<string, { title?: string; openedAt?: string; status?: string; notFound?: boolean }>>({});
   const [expandedPhases, setExpandedPhases] = useState<ExpandedIssueSections>({ initiation: true, dev: true, qa: true, prd: true });
   const [fetchingEmail, setFetchingEmail] = useState(false);
+  const [emailMailboxTarget, setEmailMailboxTarget] = useState<"auto" | "personal" | "corporate">("auto");
   const [fetchedEmailContext, setFetchedEmailContext] = useState<string | null>(null);
   const [fetchingGlpi, setFetchingGlpi] = useState(false);
   const [fetchedGlpiContext, setFetchedGlpiContext] = useState<GlpiTicketDetail | null>(null);
@@ -6194,7 +6195,8 @@ function IssueEditor({
     }
     setFetchingEmail(true);
     try {
-      const res = await searchOutlookEmail(targetSubject);
+      const mailboxArg = emailMailboxTarget === "auto" ? undefined : emailMailboxTarget;
+      const res = await searchOutlookEmail(targetSubject, undefined, undefined, mailboxArg);
       if (!res.rows || res.rows.length === 0) {
         setFetchedEmailContext(null);
         onNotify?.("error", `No Outlook email found matching subject "${targetSubject}"`);
@@ -6207,7 +6209,8 @@ function IssueEditor({
       ).join("\n\n========================================\n\n");
       
       setFetchedEmailContext(combinedContext);
-      onNotify?.("success", `Fetched ${res.rows.length} email(s) from Outlook as AI context. AI Analysis is now enabled!`);
+      const mailboxLabel = emailMailboxTarget === "personal" ? "Personal Mailbox" : emailMailboxTarget === "corporate" ? "Company Mailbox" : "Gateway (Auto)";
+      onNotify?.("success", `Fetched ${res.rows.length} email(s) via ${mailboxLabel} as AI context. AI Analysis is now enabled!`);
     } catch (err) {
       setFetchedEmailContext(null);
       const msg = err instanceof Error ? err.message : String(err);
@@ -7212,7 +7215,31 @@ function IssueEditor({
                 </div>
               </div>
               <label>
-                <FieldLabel label="Email Subject" badge="required" />
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <FieldLabel label="Email Subject" badge="required" />
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "0.75rem", color: "var(--color-text-muted, #64748b)" }}>
+                    <span>Mailbox:</span>
+                    <select
+                      value={emailMailboxTarget}
+                      onChange={(e) => setEmailMailboxTarget(e.target.value as "auto" | "personal" | "corporate")}
+                      disabled={formDisabled || fetchingEmail}
+                      style={{
+                        padding: "2px 6px",
+                        fontSize: "0.75rem",
+                        borderRadius: "4px",
+                        border: "1px solid var(--color-border, #cbd5e1)",
+                        background: "var(--color-bg, #ffffff)",
+                        color: "var(--color-text, #1f2937)",
+                        cursor: "pointer"
+                      }}
+                      title="Select mailbox target or keep Auto (Personal first, then Company fallback)"
+                    >
+                      <option value="auto">⚡ Auto (Personal ➔ Company)</option>
+                      <option value="corporate">🏢 Company / Shared</option>
+                      <option value="personal">👤 Personal Mailbox</option>
+                    </select>
+                  </div>
+                </div>
                 <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem", alignItems: "center" }}>
                   <input
                     value={form.emailSubject || ""}
@@ -7242,7 +7269,7 @@ function IssueEditor({
                       opacity: (formDisabled || fetchingEmail || !form.emailSubject?.trim()) ? 0.6 : 1,
                       height: "38px"
                     }}
-                    title="Fetch email content from Outlook Desktop"
+                    title="Fetch email content from Outlook Desktop / MCP Email"
                   >
                     {fetchingEmail ? <Loader2 className="spinner" size={14} /> : <Mail size={14} />}
                     {fetchingEmail ? "Fetching..." : "Fetch Email"}
