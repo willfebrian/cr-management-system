@@ -144,7 +144,7 @@ export async function enrichReleaseResultWithObjects(
   const synchronized = requestNumbers.length
     ? await query(
       `SELECT trkorr, pgmid, object_type, object_name
-       FROM cr_management.cr_objects
+       FROM cr_objects
        WHERE sap_system_code = $1
          AND trkorr = ANY($2::text[])
        ORDER BY trkorr, position`,

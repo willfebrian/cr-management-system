@@ -32,11 +32,11 @@ export async function createOrGetActiveReleaseOperation(
   const trkorr = input.trkorr.trim().toUpperCase();
   const targetSystem = input.targetSystem.trim().toUpperCase();
   const result = await query(
-    `INSERT INTO cr_management.release_operations (trkorr, target_system)
+    `INSERT INTO release_operations (trkorr, target_system)
      VALUES ($1, $2)
      ON CONFLICT (target_system, trkorr)
        WHERE status IN ('queued', 'running')
-     DO UPDATE SET updated_at = cr_management.release_operations.updated_at
+     DO UPDATE SET updated_at = release_operations.updated_at
      RETURNING *`,
     [trkorr, targetSystem]
   );
@@ -49,7 +49,7 @@ export async function findReleaseOperation(
   query: Query = defaultQuery
 ): Promise<ReleaseOperation | null> {
   const result = await query(
-    `SELECT * FROM cr_management.release_operations WHERE id = $1`,
+    `SELECT * FROM release_operations WHERE id = $1`,
     [id]
   );
   return result.rows[0] ? mapReleaseOperation(result.rows[0]) : null;
@@ -60,7 +60,7 @@ export async function claimReleaseOperation(
   query: Query = defaultQuery
 ): Promise<ReleaseOperation | null> {
   const result = await query(
-    `UPDATE cr_management.release_operations
+    `UPDATE release_operations
         SET status = 'running',
             phase = 'releasing_children',
             message = 'Waiting for SAP to confirm child tasks and parent request',
@@ -87,7 +87,7 @@ export async function updateReleaseOperation(
   query: Query = defaultQuery
 ): Promise<ReleaseOperation> {
   const result = await query(
-    `UPDATE cr_management.release_operations
+    `UPDATE release_operations
         SET status = $2,
             phase = COALESCE($3, phase),
             message = COALESCE($4, message),
@@ -126,7 +126,7 @@ export async function updateReleaseOperationSync(
   query: Query = defaultQuery
 ): Promise<ReleaseOperation> {
   const result = await query(
-    `UPDATE cr_management.release_operations
+    `UPDATE release_operations
         SET sync_status = $2,
             sync_message = $3,
             updated_at = now()

@@ -16,7 +16,7 @@ import { PermissionDeniedError } from "./issues/issueReferenceAuthorization.js";
 import { ProjectRepositoryError } from "./db/projectRepository.js";
 import { transportRequestRoutes } from "./routes/transportRequestRoutes.js";
 import { transportReleaseRoutes } from "./routes/transportReleaseRoutes.js";
-import { checkDatabaseHealth, pool } from "./db/pool.js";
+import { assertDatabaseSchema, checkDatabaseHealth, pool } from "./db/pool.js";
 
 import {moduleRoutes} from './routes/moduleRoutes.js';
 import {ModuleError} from './modules/moduleDomain.js';
@@ -68,6 +68,14 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
   }
   res.status(500).json({ ok: false, message });
 });
+
+try {
+  await assertDatabaseSchema();
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  await pool.end();
+  process.exit(1);
+}
 
 const server = app.listen(config.port, config.host, () => {
   console.log(`CR Management System listening on http://${config.host}:${config.port}`);
