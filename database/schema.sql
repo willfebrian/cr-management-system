@@ -1,5 +1,4 @@
-CREATE SCHEMA IF NOT EXISTS cr_management;
-SET search_path TO cr_management;
+-- The caller must set search_path to the selected application schema.
 
 CREATE TABLE IF NOT EXISTS sap_systems (
   id BIGSERIAL PRIMARY KEY,

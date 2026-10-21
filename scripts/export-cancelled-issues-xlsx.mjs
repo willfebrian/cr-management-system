@@ -8,14 +8,14 @@ dotenv.config();
 const schema = process.env.PGSCHEMA || process.env.PG_SCHEMA || "cr_management";
 const pool = new pg.Pool(
   process.env.DATABASE_URL
-    ? { connectionString: process.env.DATABASE_URL, options: `-c search_path=${schema},public` }
+    ? { connectionString: process.env.DATABASE_URL, options: `-c search_path=${schema}` }
     : {
         host: process.env.PGHOST,
         port: Number(process.env.PGPORT || 5432),
         database: process.env.PGDATABASE,
         user: process.env.PGUSER,
         password: process.env.PGPASSWORD,
-        options: `-c search_path=${schema},public`
+        options: `-c search_path=${schema}`
       }
 );
 

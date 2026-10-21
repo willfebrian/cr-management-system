@@ -1,4 +1,4 @@
-SET search_path TO cr_management;
+-- The caller must set search_path to the selected application schema.
 
 CREATE TABLE IF NOT EXISTS release_operations (
   id BIGSERIAL PRIMARY KEY,

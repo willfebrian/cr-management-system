@@ -8,6 +8,12 @@ Web application for SAP Change Request management.
 - Additional lifecycle systems: `QA` and `PRD`.
 - Default CR owner: `TRSTDEV`.
 - Database: PostgreSQL schema from `PGSCHEMA`, default `cr_management`.
+
+Set `PGSCHEMA=cr_management_dev` in `.env` and restart the backend to use the development schema in the same database. All application reads and writes, including transport release tracking, follow this setting. The backend checks schema availability before listening and does not fall back to `public`. `DATABASE_URL`, when configured, takes precedence over the separate database connection fields; `PGSCHEMA` still selects the application schema.
+
+`npm run db:schema` creates and updates the selected schema in a transaction. SQL files in `database/` rely on the caller to select the schema; when applying a migration manually, set `search_path` explicitly on the same connection first. `db:migrate-schema` is a legacy command that moves tables from `public`; it does not duplicate a schema.
+
+Changing `PGSCHEMA` does not change SAP destinations or disable SAP synchronization. Configure `SAP_CR_AUTO_SYNC_ENABLED` and SAP connectivity separately for development.
 - Web URL: `http://127.0.0.1:3001`.
 
 ## Setup

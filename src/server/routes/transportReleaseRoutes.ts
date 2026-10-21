@@ -59,10 +59,10 @@ export async function loadReleaseCandidateSnapshot(
     dependencies.query(
     `SELECT cr.trkorr, cr.description, cr.owner, cr.status_group,
             cr.changed_date, cr.target_system,
-            (SELECT COUNT(*) FROM cr_management.cr_requests child
+            (SELECT COUNT(*) FROM cr_requests child
              WHERE child.parent_request = cr.trkorr
                AND child.sap_system_code = cr.sap_system_code) AS task_count
-     FROM cr_management.cr_requests cr
+     FROM cr_requests cr
      WHERE cr.status_group = 'outstanding'
        AND cr.parent_request IS NULL
        AND cr.sap_system_code = $1

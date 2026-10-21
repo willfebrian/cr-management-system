@@ -9,6 +9,7 @@ const outputPath = process.argv[2] || path.join(process.cwd(), "outputs", "issue
 const schema = process.env.PGSCHEMA || "cr_management";
 
 const pool = new Pool({
+  options: `-c search_path=${schema}`,
   connectionString: process.env.DATABASE_URL,
   host: process.env.DATABASE_URL ? undefined : process.env.PGHOST,
   port: process.env.DATABASE_URL ? undefined : Number(process.env.PGPORT || 5432),
@@ -18,7 +19,6 @@ const pool = new Pool({
 });
 
 try {
-  await pool.query(`SET search_path TO ${schema}, public`);
   const { rows } = await pool.query(`
     SELECT
       h.id,

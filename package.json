@@ -23,6 +23,7 @@
     "sap:reconcile-lifecycle": "tsx scripts/reconcile-transport-lifecycle.ts",
     "sap:sync-transport-object-catalog": "node scripts/sync-transport-object-catalog.mjs",
     "db:check": "node scripts/check-db.mjs",
+    "test:schema-isolation": "tsx --test scripts/schema-isolation.test.ts",
     "auth:seed": "tsx scripts/seed-auth-users.ts",
     "sync:summary": "node scripts/sync-summary.mjs",
     "issue:import-excel": "node scripts/import-issue-excel.mjs",
