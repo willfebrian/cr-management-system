@@ -87,3 +87,13 @@ test("counts unresolved legacy rows before validating the database constraint", 
     /VALIDATE CONSTRAINT chk_cr_transport_lifecycle_confirmed_step/i
   );
 });
+
+test("monitoring checkpoint excludes owner-specific and created-request runs", async () => {
+  const { getLastSuccessfulSyncRun } = await import("../src/server/db/crRepository.js");
+  const db = fakeDatabase([{ rows: [{ id: 9 }] }]);
+  const result = await getLastSuccessfulSyncRun("DEV", "*", db);
+  assert.equal(result.id, 9);
+  assert.deepEqual(db.calls[0].values, ["DEV", "*"]);
+  assert.match(db.calls[0].text, /scope_owner = \$2/);
+  assert.match(db.calls[0].text, /'created_request'/);
+});

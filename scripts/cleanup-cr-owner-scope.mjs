@@ -4,6 +4,7 @@ import { pool } from "../src/server/db/pool.ts";
 const apply = process.argv.includes("--apply");
 
 async function main() {
+  if (apply) throw new Error("Owner cleanup is disabled: cached data may be shared with the functional workspace.");
   const client = await pool.connect();
   try {
     await client.query("BEGIN");

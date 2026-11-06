@@ -1,3 +1,4 @@
+import { CrModuleFilter } from "../components/crTransport/CrModuleFilter";
 import { CrDetailContent } from "../components/crTransport/CrDetailContent";
 import "../components/crTransport/cr-detail.css";
 import "../styles/issue-detail.css";
@@ -974,6 +975,8 @@ export function App() {
     const nextFilters = {
       ...filters,
       status: draftFilters.status || "all",
+      owner: draftFilters.owner?.trim() || undefined,
+      moduleCode: draftFilters.moduleCode || undefined,
       lifecycleStatus: draftFilters.lifecycleStatus || "all",
       q: draftFilters.q?.trim() || undefined,
       fromDate: draftFilters.fromDate || undefined,
@@ -990,7 +993,7 @@ export function App() {
     }, queryChanged ? 450 : 80);
 
     return () => window.clearTimeout(timeout);
-  }, [draftFilters.status, draftFilters.lifecycleStatus, draftFilters.q, draftFilters.fromDate, draftFilters.toDate, view, pagination.pageSize]);
+  }, [draftFilters.status, draftFilters.lifecycleStatus, draftFilters.owner, draftFilters.moduleCode, draftFilters.q, draftFilters.fromDate, draftFilters.toDate, view, pagination.pageSize]);
 
   useEffect(() => {
     if (view !== "issue-display") return;
@@ -5070,10 +5073,12 @@ function Report({
   const crColumns = useResizableColumns("cr-report-columns", {
     cr: 144,
     description: 520,
+    module: 115,
     lifecycle: 140
   }, {
     cr: 110,
     description: 220,
+    module: 90,
     lifecycle: 120
   });
 
@@ -5090,7 +5095,14 @@ function Report({
   return (
     <>
       <section className="cr-data-workspace">
-        <div className="filterbar report-filterbar cr-workspace-filterbar" style={{ display: "none" }} />
+        <div className="filterbar report-filterbar cr-workspace-filterbar">
+          <label className="cr-workspace-filter">Owner
+            <select aria-label="Filter CR owner" value="TRSTDEV" onChange={() => updateFilter("owner", "TRSTDEV")}>
+              <option value="TRSTDEV">TRSTDEV</option>
+            </select>
+          </label>
+          <CrModuleFilter value={filters.moduleCode} onChange={value => updateFilter("moduleCode", value)} />
+        </div>
 
       <div className="report-layout detail-closed">
         <section className="table-panel report-table-panel cr-table-panel">
@@ -5099,25 +5111,27 @@ function Report({
               <colgroup>
                 <col style={{ width: crColumns.widths.cr }} />
                 <col style={{ width: crColumns.widths.description }} />
+                <col style={{ width: crColumns.widths.module }} />
                 <col style={{ width: crColumns.widths.lifecycle }} />
               </colgroup>
               <thead>
                 <tr>
                   <ResizableHeader label="CR" column="cr" width={crColumns.widths.cr} onResize={crColumns.startResize} />
                   <ResizableHeader label="Description" column="description" width={crColumns.widths.description} onResize={crColumns.startResize} />
+                  <ResizableHeader label="Module" column="module" width={crColumns.widths.module} onResize={crColumns.startResize} />
                   <ResizableHeader label="Lifecycle" column="lifecycle" width={crColumns.widths.lifecycle} onResize={crColumns.startResize} />
                 </tr>
               </thead>
               <tbody>
                 {loadingData ? (
                   <tr>
-                    <td colSpan={3} style={{ padding: 0 }}>
+                    <td colSpan={4} style={{ padding: 0 }}>
                       <TableDataLoader text="Loading CR Transport records..." />
                     </td>
                   </tr>
                 ) : requests.length === 0 ? (
                   <tr>
-                    <td colSpan={3} style={{ padding: "40px 0", textAlign: "center", color: "#64748b" }}>
+                    <td colSpan={4} style={{ padding: "40px 0", textAlign: "center", color: "#64748b" }}>
                       No parent CR found for the current filter.
                     </td>
                   </tr>
@@ -5126,6 +5140,7 @@ function Report({
                     <tr key={requestKey(request)} className={selected === requestKey(request) ? "selected" : ""} onClick={() => onSelect(requestKey(request))}>
                       <td>{request.trkorr}</td>
                       <td>{request.description}</td>
+                      <td title={request.module_name || undefined}>{request.module_code || ""}</td>
                       <td><Status value={displayLifecycleStatus(request.lifecycle_status || request.status_group)} /></td>
                     </tr>
                   ))
@@ -5158,6 +5173,7 @@ function Report({
           detail={detail}
           metadata={[
             { label: "Owner", value: displayRequest?.owner || "-" },
+            { label: "Module", value: detail?.request?.module_code || displayRequest?.module_code || "" },
             { label: "Target system", value: displayRequest?.target_system || "-" },
             { label: "CR type", value: displayRequest?.function_code || "-" },
             { label: "Last changed", value: formatDate(displayRequest?.changed_date) }
@@ -8450,7 +8466,7 @@ function parseRequestKey(value: string) {
 }
 
 function systemLabel(system: SapSystemConfig) {
-  return `${system.code} - ${system.server || "-"} - ${system.owner || "-"}`;
+  return `${system.code} - ${system.server || "-"} - ${"TRSTDEV"}`;
 }
 
 function toggleSystem(current: string[], code: string) {
@@ -8557,6 +8573,8 @@ function reportFilterKey(value: CrFilters) {
   return [
     value.status || "all",
     value.lifecycleStatus || "all",
+    value.owner || "",
+    value.moduleCode || "",
     value.q?.trim() || "",
     value.fromDate || "",
     value.toDate || "",

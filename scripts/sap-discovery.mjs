@@ -1,3 +1,4 @@
+import { readMonitoringTable as readPagedMonitoringTable } from "../mcp/sap/monitoring-table-reader.mjs";
 import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
@@ -204,7 +205,7 @@ function matchesSessionUser(row, user, sapClient) {
 }
 
 async function loginTest() {
-  const qa = await tools.sap_table_read_limited_normalized({
+  const qa = await readMonitoringTable({
     agentName,
     server: "SAP_QA",
     tableName: "T000",
@@ -230,7 +231,7 @@ async function loginTest() {
     userQuestion
   });
 
-  const prd = await tools.sap_table_read_limited_normalized({
+  const prd = await readMonitoringTable({
     agentName,
     server: "SAP_PRD",
     tableName: "T000",
@@ -266,7 +267,7 @@ async function loginTest() {
 async function tcodeLookup(tcode) {
   const code = tcode.toUpperCase();
   const mapping = await tools.sap_tcode_lookup({ agentName, server: "SAP_QA", tcode: code, userQuestion });
-  const text = await tools.sap_table_read_limited_normalized({
+  const text = await readMonitoringTable({
     agentName,
     server: "SAP_QA",
     tableName: "TSTCT",
@@ -283,7 +284,7 @@ async function tableRead(tableName, opts) {
   const fields = csv(opts.fields);
   const where = collect(opts.where);
   const rowCount = Number(opts["row-count"] || opts.rowCount || 100);
-  const result = await tools.sap_table_read_limited_normalized({
+  const result = await readMonitoringTable({
     agentName,
     server: opts.server || "SAP_QA",
     tableName: tableName.toUpperCase(),
@@ -298,7 +299,10 @@ async function tableRead(tableName, opts) {
 async function crList(opts) {
   const rowCount = Number(opts["row-count"] || opts.rowCount || 100);
   const server = String(opts.server || defaultCrServer).toUpperCase();
-  const owner = opts.owner === false ? "" : String(opts.owner || defaultCrOwner).toUpperCase();
+  const owner = defaultCrOwner;
+  if (opts.owner !== undefined && String(opts.owner).trim().toUpperCase() !== owner) {
+    throw new Error("CR monitoring is restricted to owner TRSTDEV.");
+  }
   const request = opts.request ? String(opts.request).toUpperCase() : "";
   const status = opts.status ? String(opts.status).toUpperCase() : "";
   const fromDate = normalizeSapDate(opts["from-date"] || opts.fromDate || defaultFromDate(Number(opts.days || 30)));
@@ -309,12 +313,12 @@ async function crList(opts) {
   else {
     if (fromDate) where.push(`AS4DATE >= '${fromDate}'`);
     if (toDate) where.push(`AS4DATE <= '${toDate}'`);
-    if (owner) where.push(`AS4USER = '${escapeSap(owner)}'`);
+    if (owner && owner !== "*") where.push(`AS4USER = '${escapeSap(owner)}'`);
     if (status) where.push(`TRSTATUS = '${escapeSap(status)}'`);
   }
   if (!where.length) throw new Error("cr-list requires --request or at least one bounded filter");
 
-  const header = await tools.sap_table_read_limited_normalized({
+  const header = await readMonitoringTable({
     agentName,
     server,
     tableName: "E070",
@@ -340,7 +344,7 @@ async function crDetail(transportRequest, opts) {
   const trkorr = String(transportRequest || "").trim().toUpperCase();
   const server = String(opts.server || defaultCrServer).toUpperCase();
   const rowCount = Number(opts["row-count"] || opts.rowCount || 1000);
-  const headerRows = await tools.sap_table_read_limited_normalized({
+  const headerRows = await readMonitoringTable({
     agentName,
     server,
     tableName: "E070",
@@ -349,7 +353,7 @@ async function crDetail(transportRequest, opts) {
     rowCount: 1,
     userQuestion
   });
-  const taskRows = await tools.sap_table_read_limited_normalized({
+  const taskRows = await readMonitoringTable({
     agentName,
     server,
     tableName: "E070",
@@ -365,7 +369,7 @@ async function crDetail(transportRequest, opts) {
   const objectGroups = [];
 
   for (const key of keysToRead) {
-    const objects = await tools.sap_table_read_limited_normalized({
+    const objects = await readMonitoringTable({
       agentName,
       server,
       tableName: "E071",
@@ -784,7 +788,7 @@ async function tableFields(tableName, server = "SAP_QA") {
 
 async function readTableSafe(tableName, fields, where, rowCount, server = "SAP_QA") {
   try {
-    return await tools.sap_table_read_limited_normalized({ agentName, server, tableName, fields, where, rowCount, userQuestion });
+    return await readMonitoringTable({ agentName, server, tableName, fields, where, rowCount, userQuestion });
   } catch (error) {
     return { rowCount: 0, rows: [], error: { message: error.message, code: error.code, key: error.key } };
   }
@@ -911,3 +915,5 @@ function timestamp() {
 
 
 
+
+function readMonitoringTable(options) { return readPagedMonitoringTable(tools, options); }

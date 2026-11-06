@@ -143,6 +143,7 @@ export async function getDashboard() {
              status, request_count, started_at, finished_at, message
       FROM sync_runs
       WHERE status = 'success'
+      AND scope_owner = 'TRSTDEV'
         AND COALESCE(period_type, '') <> 'orphan_recovery'
       ORDER BY id DESC
       LIMIT 1
@@ -152,7 +153,7 @@ export async function getDashboard() {
              sap_system_code, status, request_count, started_at, finished_at, message,
              sync_mode, lookback_days, from_date::text AS from_date, to_date::text AS to_date
       FROM sync_runs
-      WHERE COALESCE(period_type, '') <> 'orphan_recovery'
+      WHERE scope_owner = 'TRSTDEV' AND COALESCE(period_type, '') <> 'orphan_recovery'
       ORDER BY sap_system_code, id DESC
     `)
   ]);
@@ -229,6 +230,7 @@ export type CrRequestFilters = {
   lifecycleStatus?: string;
   agingDays?: number;
   owner?: string;
+  moduleCode?: string;
   q?: string;
   fromDate?: string;
   toDate?: string;
@@ -299,8 +301,14 @@ export async function listCrRequests(filters: CrRequestFilters = {}) {
     }
   }
   if (filters.owner) {
-    params.push(filters.owner.toUpperCase());
-    where.push(`cr_requests.owner = $${params.length}`);
+    params.push(filters.owner.trim().toUpperCase());
+    where.push(`upper(cr_requests.owner) = $${params.length}`);
+  }
+  if (filters.moduleCode === "unclassified") {
+    where.push("cr_requests.module_id IS NULL");
+  } else if (filters.moduleCode && filters.moduleCode !== "all") {
+    params.push(filters.moduleCode.trim().toUpperCase());
+    where.push(`EXISTS (SELECT 1 FROM module_master module WHERE module.id = cr_requests.module_id AND module.module_group = 'SAP' AND module.code = $${params.length})`);
   }
   if (filters.fromDate) {
     params.push(filters.fromDate);
@@ -349,6 +357,7 @@ export async function listCrRequests(filters: CrRequestFilters = {}) {
   const { rows } = await pool.query(`
     SELECT cr_requests.sap_system_code, cr_requests.trkorr, cr_requests.parent_request, cr_requests.description, cr_requests.function_code, cr_requests.status_code, cr_requests.status_group,
            cr_requests.target_system, cr_requests.category, cr_requests.owner, cr_requests.changed_date, cr_requests.changed_time, cr_requests.updated_at,
+           cr_requests.module_id, module.code AS module_code, module.name AS module_name,
            icl.issue_id AS linked_issue_id,
            CASE WHEN ih.id IS NOT NULL THEN ih.issue_no || '-' || ih.sub_issue_no ELSE NULL END AS linked_issue_key,
            ih.issue_name AS linked_issue_name,
@@ -372,6 +381,7 @@ export async function listCrRequests(filters: CrRequestFilters = {}) {
              ELSE 'unknown'
            END AS lifecycle_status
     FROM cr_requests
+    LEFT JOIN module_master module ON module.id = cr_requests.module_id
     LEFT JOIN issue_cr_links icl ON icl.trkorr = cr_requests.trkorr
     LEFT JOIN issue_headers ih ON ih.id = icl.issue_id
     ${whereSql}
@@ -396,8 +406,16 @@ export async function getCrDetail(trkorr: string) {
 
 export async function getCrDetailForSystem(trkorr: string, sapSystemCode: string) {
   const [request, tasks, objects, keys, lifecycle, issueLinks] = await Promise.all([
-    pool.query("SELECT * FROM cr_requests WHERE sap_system_code = $1 AND trkorr = $2", [sapSystemCode, trkorr]),
-    pool.query("SELECT * FROM cr_requests WHERE sap_system_code = $1 AND parent_request = $2 ORDER BY trkorr", [sapSystemCode, trkorr]),
+    pool.query(`SELECT cr.*, module.code AS module_code, module.name AS module_name
+      FROM cr_requests cr
+      LEFT JOIN cr_requests parent ON parent.sap_system_code = cr.sap_system_code AND parent.trkorr = cr.parent_request
+      LEFT JOIN module_master module ON module.id = COALESCE(parent.module_id, cr.module_id)
+      WHERE cr.sap_system_code = $1 AND cr.trkorr = $2`, [sapSystemCode, trkorr]),
+    pool.query(`SELECT child.*, module.code AS module_code, module.name AS module_name
+      FROM cr_requests child
+      JOIN cr_requests parent ON parent.sap_system_code = child.sap_system_code AND parent.trkorr = child.parent_request
+      LEFT JOIN module_master module ON module.id = parent.module_id
+      WHERE child.sap_system_code = $1 AND child.parent_request = $2 ORDER BY child.trkorr`, [sapSystemCode, trkorr]),
     pool.query(`
       SELECT
         cr_objects.*,
@@ -847,6 +865,7 @@ export async function hasDevParentCr(trkorr: string) {
     WHERE sap_system_code = 'DEV'
       AND trkorr = $1
       AND parent_request IS NULL
+      AND upper(owner) = 'TRSTDEV'
     LIMIT 1
   `, [trkorr]);
   return Boolean(rows[0]);
@@ -926,6 +945,7 @@ export async function getLastSuccessfulSyncAt() {
     SELECT COALESCE(finished_at, started_at) AS last_successful_sync_at
     FROM sync_runs
     WHERE status = 'success'
+      AND scope_owner = 'TRSTDEV'
       AND COALESCE(period_type, '') <> 'orphan_recovery'
     ORDER BY id DESC
     LIMIT 1
@@ -939,7 +959,7 @@ export async function getSyncHealthRows() {
            sap_system_code, status, request_count, started_at, finished_at, message,
            sync_mode, lookback_days, from_date::text AS from_date, to_date::text AS to_date
     FROM sync_runs
-    WHERE COALESCE(period_type, '') <> 'orphan_recovery'
+    WHERE scope_owner = 'TRSTDEV' AND COALESCE(period_type, '') <> 'orphan_recovery'
     ORDER BY sap_system_code, id DESC
   `);
   return rows;
@@ -977,16 +997,17 @@ export async function createSyncRun({
   return Number(rows[0].id);
 }
 
-export async function getLastSuccessfulSyncRun(sapSystemCode: string) {
-  const { rows } = await pool.query(`
+export async function getLastSuccessfulSyncRun(sapSystemCode: string, scopeOwner = "TRSTDEV", db: CrRepositoryDb = pool) {
+  const { rows } = await db.query(`
     SELECT id, sap_system_code, from_date::text AS from_date, to_date::text AS to_date, started_at, finished_at
     FROM sync_runs
     WHERE sap_system_code = $1
       AND status = 'success'
-      AND COALESCE(period_type, '') <> 'orphan_recovery'
+      AND scope_owner = $2
+      AND COALESCE(period_type, '') NOT IN ('orphan_recovery', 'created_request')
     ORDER BY finished_at DESC NULLS LAST, id DESC
     LIMIT 1
-  `, [sapSystemCode]);
+  `, [sapSystemCode, scopeOwner]);
   return rows[0] || null;
 }
 
@@ -1033,12 +1054,13 @@ export async function finishSyncRun(id: number, status: string, message: string 
 }
 
 export async function upsertCrHeader(header: CrHeader, sapSystemCode: string, syncRunId: number) {
+  // Preserve existing module assignments until new classification rules are approved.
   await pool.query(
     `
       INSERT INTO cr_requests (
         sap_system_code, trkorr, parent_request, description, function_code, status_code,
         status_group, target_system, category, owner, changed_date, changed_time, last_sync_run_id,
-        sap_released_at, sap_released_source, first_seen_at
+        sap_released_at, sap_released_source, first_seen_at, module_id
       )
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
@@ -1047,7 +1069,8 @@ export async function upsertCrHeader(header: CrHeader, sapSystemCode: string, sy
         $13,
         CASE WHEN $7 = 'released' AND NULLIF($11, '') IS NOT NULL THEN (to_date(NULLIF($11, ''), 'YYYYMMDD')::text || ' ' || COALESCE(to_timestamp(NULLIF($12, ''), 'HH24MISS')::time::text, '00:00:00') || '+07')::timestamptz ELSE NULL END,
         CASE WHEN $7 = 'released' AND NULLIF($11, '') IS NOT NULL THEN 'sap_e070_released' ELSE NULL END,
-        now()
+        now(),
+        NULL
       )
       ON CONFLICT (sap_system_code, trkorr) DO UPDATE SET
         parent_request = EXCLUDED.parent_request,

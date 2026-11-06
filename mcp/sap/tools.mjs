@@ -184,6 +184,7 @@ export function createSapTools(gateway) {
       fields = [],
       where = [],
       rowCount,
+      rowSkip = 0,
       delimiter = "|",
       userQuestion
     }) => {
@@ -196,7 +197,8 @@ export function createSapTools(gateway) {
           DELIMITER: delimiter,
           FIELDS: fields.map((FIELDNAME) => ({ FIELDNAME })),
           OPTIONS: where.map((TEXT) => ({ TEXT })),
-          ROWCOUNT: rowCount
+          ROWCOUNT: rowCount,
+          ROWSKIPS: rowSkip
         },
         userQuestion
       });

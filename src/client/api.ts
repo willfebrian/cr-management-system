@@ -35,6 +35,7 @@ export type CrFilters = {
   lifecycleStatus?: string;
   agingDays?: number;
   owner?: string;
+  moduleCode?: string;
   q?: string;
   fromDate?: string;
   toDate?: string;
@@ -713,4 +714,8 @@ export async function downloadUserCrTemplate(issueId: number) {
   link.click();
   link.remove();
   window.URL.revokeObjectURL(url);
+}
+
+export async function fetchCrModuleOptions(): Promise<{ rows: import("../shared/moduleTypes").ModuleSummary[] }> {
+  return fetchJson("/api/cr-modules");
 }

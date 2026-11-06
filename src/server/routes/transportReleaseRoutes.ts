@@ -64,6 +64,7 @@ export async function loadReleaseCandidateSnapshot(
                AND child.sap_system_code = cr.sap_system_code) AS task_count
      FROM cr_requests cr
      WHERE cr.status_group = 'outstanding'
+       AND upper(cr.owner) = 'TRSTDEV'
        AND cr.parent_request IS NULL
        AND cr.sap_system_code = $1
        ${searchClause}

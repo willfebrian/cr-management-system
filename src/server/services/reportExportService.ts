@@ -24,7 +24,7 @@ function date(value: unknown): string {
 }
 
 export async function exportCrReport(filters: Filters): Promise<Buffer> {
-  const summary = sheet("CR Summary", ["SAP System", "CR", "Description", "Owner", "Type", "Category", "Target System", "SAP Status", "Lifecycle", "Last Changed Date", "Last Changed Time"]);
+  const summary = sheet("CR Summary", ["SAP System", "CR", "Description", "Owner", "Module", "Type", "Category", "Target System", "SAP Status", "Lifecycle", "Last Changed Date", "Last Changed Time"]);
   const lifecycle = sheet("Lifecycle", ["SAP System", "CR", "Created DEV", "Released DEV", "QA Status", "QA Imported At", "QA Evidence", "QA Return Code", "PRD Status", "PRD Imported At", "PRD Evidence", "PRD Return Code"]);
   const objects = sheet("Objects & Keys", ["SAP System", "Parent CR", "Transport", "Position", "Program ID", "Object Type", "Object Label", "Object Name", "Diff Readiness", "Table Key"]);
   const tasks = sheet("Child Tasks", ["SAP System", "Parent CR", "Task", "Description", "Owner", "Status", "Changed Date", "Changed Time"]);
@@ -37,7 +37,7 @@ export async function exportCrReport(filters: Filters): Promise<Buffer> {
     exportedRequests.add(requestKey);
     const detail = await getCrDetailForSystem(request.trkorr, request.sap_system_code);
     const life = detail.lifecycle;
-    summary.rows.push([request.sap_system_code, request.trkorr, request.description, request.owner, request.function_code, request.category, request.target_system, request.status_group, request.lifecycle_status, date(request.changed_date), date(request.changed_time)]);
+    summary.rows.push([request.sap_system_code, request.trkorr, request.description, request.owner, request.module_code, request.function_code, request.category, request.target_system, request.status_group, request.lifecycle_status, date(request.changed_date), date(request.changed_time)]);
     lifecycle.rows.push([request.sap_system_code, request.trkorr, date(life.created_at), date(life.released_at), life.qa_status, date(life.qa_imported_at), life.qa_evidence_source, life.qa_return_code, life.prd_status, date(life.prd_imported_at), life.prd_evidence_source, life.prd_return_code]);
     const keys = new Map<string, string[]>();
     for (const key of detail.keys) {

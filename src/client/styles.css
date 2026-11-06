@@ -4551,6 +4551,38 @@ tr.selected td:first-child {
 }
 
 /* Data Table Container */
+.cr-workspace-filterbar .cr-workspace-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  min-width: 160px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.cr-workspace-filterbar .cr-workspace-filter select {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  box-sizing: border-box;
+  font-weight: 400;
+}
+
+.cr-workspace-module-filter {
+  width: 280px;
+  max-width: 100%;
+}
+
+@media (max-width: 600px) {
+  .cr-workspace-filterbar > .cr-workspace-filter,
+  .cr-workspace-module-filter {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
 .table-scroll {
   overflow-x: auto;
   background: #ffffff;

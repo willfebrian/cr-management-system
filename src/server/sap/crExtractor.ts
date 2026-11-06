@@ -101,7 +101,7 @@ export async function readCrList(options: { systemCode?: string; fromDate: strin
     "--to-date",
     options.toDate,
     "--owner",
-    options.owner || system.owner,
+    "TRSTDEV",
     "--row-count",
     String(options.rowCount || 500),
     "--compact"
@@ -220,7 +220,7 @@ export async function readCrCreationLogs(options: {
     `CRE_DATE >= '${fromDate}'`,
     `AND CRE_DATE <= '${toDate}'`
   ];
-  const owner = String(options.owner || system.owner || "").trim().toUpperCase();
+  const owner = "TRSTDEV";
   if (owner) where.push(`AND CRE_USER = '${owner}'`);
   const whereArgs = where.flatMap((condition) => ["--where", condition]);
   const result = await runSapDiscovery<{

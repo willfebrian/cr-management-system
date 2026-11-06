@@ -177,9 +177,9 @@ export async function runCrSync(options: RunCrSyncOptions): Promise<RunCrSyncRes
 
   for (const systemCode of systemCodes) {
     const system = getSapCrSystem(systemCode);
-    const owner = String(options.owner || system.owner).toUpperCase();
+    const owner = resolveMonitoringOwner(options.owner);
     const period = syncMode === "incremental"
-      ? await resolveIncrementalPeriod(system.code, lookbackDays)
+      ? await resolveIncrementalPeriod(system.code, lookbackDays, owner)
       : explicitPeriod;
     periodsBySystem.set(system.code, period);
     const syncRunId = await createSyncRun({
@@ -208,10 +208,6 @@ export async function runCrSync(options: RunCrSyncOptions): Promise<RunCrSyncRes
       let systemRequestCount = 0;
       for (const request of scopedParentRequests) {
         cachedRefreshSignatures.set(request.trkorr, await getCachedCrRefreshSignature(system.code, request.trkorr));
-        await upsertCrHeader(request, system.code, syncRunId);
-        await insertCrStatusSnapshot(request, system.code, syncRunId);
-        systemRequestCount += 1;
-        requestCount += 1;
       }
 
       if (system.code === "DEV") {
@@ -238,6 +234,8 @@ export async function runCrSync(options: RunCrSyncOptions): Promise<RunCrSyncRes
         if (detail.header) {
           await upsertCrHeader(detail.header, system.code, syncRunId);
           await insertCrStatusSnapshot(detail.header, system.code, syncRunId);
+          systemRequestCount += 1;
+          requestCount += 1;
         }
         for (const task of detail.tasks) {
           await upsertCrHeader(task, system.code, syncRunId);
@@ -395,9 +393,9 @@ export function resolveFullPeriod({ fromDate, toDate }: { fromDate?: unknown; to
   };
 }
 
-async function resolveIncrementalPeriod(systemCode: string, lookbackDays: number): Promise<SyncPeriod> {
+async function resolveIncrementalPeriod(systemCode: string, lookbackDays: number, owner: string): Promise<SyncPeriod> {
   const now = new Date();
-  const lastSync = await getLastSuccessfulSyncRun(systemCode);
+  const lastSync = await getLastSuccessfulSyncRun(systemCode, owner);
   const from = lastSync?.finished_at ? new Date(lastSync.finished_at) : new Date(now.getFullYear(), 0, 1);
   if (lastSync?.finished_at) from.setDate(from.getDate() - lookbackDays);
   return {
@@ -430,7 +428,7 @@ async function recoverOrphanImports({
     return { recovered: 0, failed: 0, recoveredLogs: [] };
   }
 
-  const owner = getSapCrSystem("DEV").owner;
+  const owner = "TRSTDEV";
   const limitedLogs = dedupeByTrkorr(logs).slice(0, config.orphanRecovery.maxPerSync);
   if (!limitedLogs.length) return { recovered: 0, failed: 0, recoveredLogs: [] };
 
@@ -455,8 +453,8 @@ async function recoverOrphanImports({
         if (!(await hasDevParentCr(log.trkorr))) {
           const detail = await readCrDetail(log.trkorr, "DEV");
           if (!detail.header) throw new Error("DEV parent CR detail was not returned by SAP.");
-          if (String(detail.header.owner || "").toUpperCase() !== owner) {
-            throw new Error(`Skipped because DEV owner is ${detail.header.owner || "<empty>"}, not ${owner}.`);
+          if (!isScopedParentRequest(detail.header, owner)) {
+            throw new Error("Import recovery requires a DEV parent request.");
           }
           await upsertCrHeader(detail.header, "DEV", syncRunId);
           await insertCrStatusSnapshot(detail.header, "DEV", syncRunId);
@@ -570,4 +568,11 @@ export function shouldRefreshDetail(
 function normalizeSapTime(value?: string | null) {
   const digits = String(value || "").replace(/\D/g, "");
   return digits ? digits.padStart(6, "0").slice(-6) : "";
+}
+
+export function resolveMonitoringOwner(owner?: string) {
+  if (owner && owner.trim().toUpperCase() !== "TRSTDEV") {
+    throw new Error("CR monitoring is restricted to owner TRSTDEV.");
+  }
+  return "TRSTDEV";
 }

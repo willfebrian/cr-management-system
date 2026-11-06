@@ -129,6 +129,9 @@ export type CrRequest = {
   target_system?: string;
   category?: string;
   owner?: string;
+  module_id?: number | string | null;
+  module_code?: string | null;
+  module_name?: string | null;
   changed_date?: string;
   changed_time?: string;
   requester_name?: string | null;

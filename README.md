@@ -6,7 +6,7 @@ Web application for SAP Change Request management.
 
 - Primary CR source: SAP DEV AIX, configured as `DEV`.
 - Additional lifecycle systems: `QA` and `PRD`.
-- Default CR owner: `TRSTDEV`.
+- CR monitoring is restricted to TRSTDEV. Module columns and stored assignments are retained; automatic classification is suspended.
 - Database: PostgreSQL schema from `PGSCHEMA`, default `cr_management`.
 
 Set `PGSCHEMA=cr_management_dev` in `.env` and restart the backend to use the development schema in the same database. All application reads and writes, including transport release tracking, follow this setting. The backend checks schema availability before listening and does not fall back to `public`. `DATABASE_URL`, when configured, takes precedence over the separate database connection fields; `PGSCHEMA` still selects the application schema.
@@ -199,3 +199,11 @@ npm run sap:refresh-transport-logs
 - `GET /api/cr`
 - `GET /api/cr/:trkorr`
 - `POST /api/sync/cr`
+
+### Current support-workspace CR scope (2026-11-06)
+
+This workspace monitors only SAP owner TRSTDEV. List, dashboard, exports, direct CR monitoring lookup, Issue CR search, and sync use that scope. Previously cached CRs from other owners are retained in SQL but excluded from this workspace's monitoring; no shared database data has been deleted.
+
+The Module column, nullable module_id relation, index, existing values, API fields and filter remain available. Automatic prefix classification is suspended pending new rules: new records have no module; sync preserves an existing module. The historical classification function/migration remains for compatibility, but sync does not invoke it and the legacy backfill script refuses --apply.
+
+The independent copy at D:\Discovery AI\cr-management-system-for-functional preserves the earlier all-owner/classification implementation. Its handoff describes that copied state. Do not apply those earlier scope settings back to this support workspace.

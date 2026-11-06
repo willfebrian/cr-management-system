@@ -217,11 +217,12 @@ export async function listIssues(filters: IssueFilters = {}) {
     LEFT JOIN LATERAL (
       SELECT
         link.trkorr,
-        link.cr_description_snapshot,
+        COALESCE(NULLIF(trim(cr.description), ''), link.cr_description_snapshot) AS cr_description_snapshot,
         cr.lifecycle_status
       FROM issue_cr_links link
       LEFT JOIN LATERAL (
         SELECT
+          req.description,
           CASE
             WHEN lifecycle_req.status_group <> 'released' THEN 'created'
             WHEN EXISTS (
@@ -758,7 +759,7 @@ export async function getIssueDetail(id: number) {
         l.trkorr,
         l.relation_type,
         l.is_primary,
-        l.cr_description_snapshot,
+        COALESCE(NULLIF(trim(cr.description), ''), l.cr_description_snapshot) AS cr_description_snapshot,
         cr.status_group,
         cr.lifecycle_status,
         cr.changed_date::text AS changed_date,
@@ -774,6 +775,7 @@ export async function getIssueDetail(id: number) {
       FROM issue_cr_links l
       LEFT JOIN LATERAL (
         SELECT
+          req.description,
           lifecycle_req.status_group,
           lifecycle_req.changed_date,
           lifecycle_req.changed_time,

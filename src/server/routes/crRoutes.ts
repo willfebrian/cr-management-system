@@ -1,3 +1,4 @@
+import { listModules } from "../db/moduleRepository.js";
 import {parseModuleFilters} from "../modules/moduleFilters.js";
 import { Router } from "express";
 import { requirePermission } from "../auth/middleware.js";
@@ -27,7 +28,7 @@ crRoutes.get("/cr/export", requirePermission("transport.export"), async (req, re
     const data = await exportCrReport({
       status: stringQuery(req.query.status), lifecycleStatus: stringQuery(req.query.lifecycleStatus),
       agingDays: numberQuery(req.query.agingDays, 0), sapSystemCode: stringQuery(req.query.sapSystemCode),
-      owner: stringQuery(req.query.owner), q: stringQuery(req.query.q),
+      owner: stringQuery(req.query.owner), moduleCode: stringQuery(req.query.moduleCode), q: stringQuery(req.query.q),
       fromDate: stringQuery(req.query.fromDate), toDate: stringQuery(req.query.toDate)
     });
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -100,6 +101,7 @@ crRoutes.get("/cr", requirePermission("transport.view"), async (_req, res, next)
         agingDays: numberQuery(_req.query.agingDays, 0) || undefined,
         sapSystemCode: stringQuery(_req.query.sapSystemCode),
         owner: stringQuery(_req.query.owner),
+        moduleCode: stringQuery(_req.query.moduleCode),
         q: stringQuery(_req.query.q),
         fromDate: stringQuery(_req.query.fromDate),
         toDate: stringQuery(_req.query.toDate),
@@ -112,11 +114,24 @@ crRoutes.get("/cr", requirePermission("transport.view"), async (_req, res, next)
   }
 });
 
+crRoutes.get("/cr-modules", requirePermission("transport.view"), async (_req, res, next) => {
+  try {
+    await assertDatabaseConfigured();
+    res.json({ rows: await listModules({ group: "SAP" }) });
+  } catch (error) { next(error); }
+});
+
 crRoutes.get("/cr/:trkorr", requirePermission("transport.view"), async (req, res, next) => {
   try {
     await assertDatabaseConfigured();
     const system = getSapCrSystem(stringQuery(req.query.sapSystemCode));
-    res.json(await getCrDetailForSystem(String(req.params.trkorr).toUpperCase(), system.code));
+    const requestNumber = String(req.params.trkorr).toUpperCase();
+    const scoped = await pool.query(`SELECT 1 FROM cr_requests cr
+      LEFT JOIN cr_requests parent ON parent.sap_system_code = cr.sap_system_code AND parent.trkorr = cr.parent_request
+      WHERE cr.sap_system_code = $1 AND cr.trkorr = $2
+        AND upper(COALESCE(parent.owner, cr.owner)) = 'TRSTDEV'`, [system.code, requestNumber]);
+    if (!scoped.rows.length) return res.status(404).json({ message: "CR not found in the TRSTDEV monitoring scope." });
+    res.json(await getCrDetailForSystem(requestNumber, system.code));
   } catch (error) {
     next(error);
   }

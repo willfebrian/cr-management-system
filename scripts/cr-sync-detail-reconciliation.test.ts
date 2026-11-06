@@ -53,3 +53,15 @@ test("incremental sync refreshes a parent when only its child task changed in th
     }
   ]);
 });
+
+test("monitoring accepts only TRSTDEV and rejects all-owner or other-owner overrides", () => {
+  assert.equal(syncRunner.resolveMonitoringOwner(), "TRSTDEV");
+  assert.equal(syncRunner.resolveMonitoringOwner(" trstdev "), "TRSTDEV");
+  assert.throws(() => syncRunner.resolveMonitoringOwner("*"), /restricted/);
+  assert.throws(() => syncRunner.resolveMonitoringOwner("OTHER_USER"), /restricted/);
+  const rows = syncRunner.resolveScopedParentRequests([
+    { trkorr: "A", owner: "TRSTDEV", statusGroup: "outstanding" },
+    { trkorr: "B", owner: "OTHER_USER", statusGroup: "outstanding" }
+  ], "TRSTDEV");
+  assert.deepEqual(rows.map(row => row.trkorr), ["A"]);
+});
