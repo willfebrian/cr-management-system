@@ -95,7 +95,7 @@ async function callNineRouter(
   model: string,
   apiKey: string,
   messages: Array<{ role: string; content: string }>,
-  timeoutMs = 30000
+  timeoutMs = 120000
 ): Promise<string> {
   const endpoint = normalizeChatEndpoint(baseUrl || "http://192.168.88.83:20128/v1");
   const headers: Record<string, string> = {
@@ -156,7 +156,7 @@ async function callLocalLlm(
   model: string,
   apiKey: string,
   messages: Array<{ role: string; content: string }>,
-  timeoutMs = 60000
+  timeoutMs = 120000
 ): Promise<string> {
   const endpoint = normalizeChatEndpoint(baseUrl || "http://192.168.1.166:11434/v1");
   const headers: Record<string, string> = {
@@ -217,7 +217,7 @@ async function callOpenRouter(
   model: string,
   fallbackModel: string,
   messages: Array<{ role: string; content: string }>,
-  timeoutMs = 45000
+  timeoutMs = 120000
 ): Promise<{ content: string; modelUsed: string }> {
   if (!apiKey || !apiKey.trim()) {
     throw new Error("OpenRouter API Key is missing. Please configure OpenRouter API Key in Settings.");
@@ -322,7 +322,7 @@ export async function testAiProviderConnection(params: TestProviderParams): Prom
     const baseUrl = params.baseUrl || "http://192.168.1.166:11434/v1";
     const model = params.model || "qwen3.8:latest";
     const apiKey = params.apiKey || "";
-    const timeout = params.timeoutMs || 20000;
+    const timeout = params.timeoutMs || 120000;
 
     const raw = await callLocalLlm(baseUrl, model, apiKey, testMessages, timeout);
     return {
@@ -398,7 +398,7 @@ export async function generateAnalysisFromEmail(
   const localLlmBaseUrl = settingsMap.local_llm_base_url || process.env.LOCAL_LLM_BASE_URL || "http://192.168.1.166:11434/v1";
   const localLlmModel = settingsMap.local_llm_model || process.env.LOCAL_LLM_MODEL || "qwen3.8:latest";
   const localLlmApiKey = settingsMap.local_llm_api_key || process.env.LOCAL_LLM_API_KEY || "";
-  const localLlmTimeout = Number(settingsMap.local_llm_timeout) || 60000;
+  const localLlmTimeout = Number(settingsMap.local_llm_timeout) || 120000;
 
   const openrouterEnabled = settingsMap.openrouter_enabled !== "false";
   const openrouterApiKey = settingsMap.openrouter_api_key || process.env.OPENROUTER_API_KEY || "";
